@@ -1,15 +1,15 @@
-import { cleanup, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterAll, afterEach, describe, expect, it, vi } from 'vitest';
 import { axe } from 'vitest-axe';
 import AdminLayout from '@/app/(admin)/layout';
-import KpmRequestsPage from './(admin)/admin/kpm-requests/page';
-import LeaderLimitRequestsPage from './(admin)/admin/leader-limit-requests/page';
+import ApprovalsPage from './(admin)/admin/approvals/page';
 import TenantAdminsPage from './(admin)/admin/tenant-admins/page';
 import NotificationsPage from './notifications/page';
 import TenantLayout from '@/app/(tenant)/layout';
 import AgentLayout from '@/app/(agent)/layout';
 import { atWidth, InLanguage, makeMe, renderInLayout, renderWithSession, routeParams, stubFetch } from '@test/harness';
+import { budi as peopleBudi, KPM_TREE as PEOPLE_TREE, row as peopleRow } from '@test/people-fixtures';
 import { englishShown, everyAreasEnglish } from '@test/english-left';
 import { watchKeptTerms } from '@/i18n/kept-lang';
 import LoginPage from './(auth)/login/page';
@@ -22,6 +22,7 @@ import ActivityTypesPage from './(tenant)/kpm/settings/activity-types/page';
 import RatioBenchmarksPage from './(tenant)/kpm/settings/ratio-benchmarks/page';
 import LeadStatusesPage from './(tenant)/kpm/settings/lead-statuses/page';
 import BranchInfoPage from './(tenant)/kpm/settings/branch-info/page';
+import SettingsHubPage from './(tenant)/kpm/settings/page';
 import TrainingSettingsPage from './(tenant)/kpm/settings/training/page';
 import TrainingModulePage from './(tenant)/kpm/settings/training/[moduleId]/page';
 import KpmProductsPage from './(tenant)/kpm/settings/products/page';
@@ -35,22 +36,21 @@ import CompanySettingsPage from './(admin)/admin/companies/[companyId]/settings/
 import TemplateChecklistPage from './(admin)/admin/companies/[companyId]/templates/[templateId]/page';
 import TemplateSectionPage from './(admin)/admin/companies/[companyId]/templates/[templateId]/[section]/page';
 import OldTemplateAddress from './(admin)/admin/companies/[companyId]/template/page';
-import AdminOverviewPage from './(admin)/admin/page';
-import TenantsPage from './(admin)/admin/tenants/page';
-import NewTenantPage from './(admin)/admin/tenants/new/page';
 import CompaniesPage from './(admin)/admin/companies/page';
-import AuditPage from './(admin)/admin/audit/page';
+// P19.23-T6 (ADR-0279): the audit log moved under *Platform*; `/admin/audit` only redirects there.
+import AuditPage from './(admin)/admin/platform/audit/page';
+import PlatformTeamPage from './(admin)/admin/platform/team/page';
+import PlatformSettingsPage from './(admin)/admin/platform/settings/page';
+import PlatformAnnouncementsPage from './(admin)/admin/platform/announcements/page';
 import AllMembersPage from './(admin)/admin/members/page';
-import PlatformAnalyticsPage from './(admin)/admin/analytics/page';
 import MembersPage from './(tenant)/people/members/page';
 import MemberPage from './(tenant)/people/members/[membershipId]/page';
 import AdminsPage from './(tenant)/people/admins/page';
 import RegisterKpmPage from './(agent)/user-management/kpm/page';
 import KpmOverviewPage from './(tenant)/kpm/overview/page';
 import {
-  EMPTY as OVERVIEW_EMPTY, KAIZEN as OVERVIEW_KAIZEN, NOBODY as OVERVIEW_NOBODY, NOT_LOGGED as OVERVIEW_NOT_LOGGED,
-  noTeam as overviewNoTeam,
-  overviewView as overviewFixture,
+  complianceView as overviewCompliance, overviewView as overviewFixture, performanceView as overviewPerformance,
+  trainingSelected as overviewTraining,
 } from './(tenant)/kpm/overview/overview-fixtures';
 import DataUploadPage from './(tenant)/kpm/data-upload/page';
 import UnitDashboardPage from './(agent)/unit/dashboard/page';
@@ -133,16 +133,6 @@ import {
 } from '@test/recruitment-plan-fixtures';
 import RecruitmentPitchPage from './(tenant)/kpm/settings/recruitment-pitch/page';
 import PitchMaterialsPage from './(agent)/recruitment/pitch-materials/page';
-import KpmAnalyticsLayout from './kpm/analytics/layout';
-import KpmAnalyticsPage from './kpm/analytics/page';
-import KpmAnalyticsCompliancePage from './kpm/analytics/compliance/page';
-import {
-  analyticsView, CORE_LEADER_ME as ANALYTICS_CORE_LEADER, NO_AB as ANALYTICS_NO_AB, OWNER_ME as ANALYTICS_OWNER,
-  SHELL_STUBS as ANALYTICS_SHELL,
-} from '@test/kpm-analytics-fixtures';
-import {
-  complianceView, EMPTY_CATALOG as COMPLIANCE_EMPTY_CATALOG, NO_AB as COMPLIANCE_NO_AB,
-} from '@test/kpm-compliance-fixtures';
 import LeaderMeetingsPage from './leader-meetings/page';
 import LeaderMeetingPage from './leader-meetings/[meetingId]/page';
 import SharedLeaderMeetingPage from './leader-meetings/shared/[token]/page';
@@ -173,16 +163,12 @@ import { SliderWithValue } from '@/components/ui/slider-with-value';
 import { StatTile } from '@/components/ui/stat-tile';
 import { StepperRow } from '@/components/ui/stepper-row';
 import { TonePill } from '@/components/ui/tone-pill';
-import { cellsOf, configOf, statusOf, V1_COLUMNS, V1_FILE_COLUMNS, viewOf } from '@test/data-upload-fixtures';
+import { cellsOf, statusOf, V1_FILE_COLUMNS, viewOf } from '@test/data-upload-fixtures';
 
 /**
  * Where the screen is, for the one shell that reads it: the coaching person shell's archive (P11-T10),
  * and the address the archive's page reads its ids from (`useParams()`, F5 of P11's final walk).
  */
-/** A month read in the shape Data upload's tests describe it, as the server answers it since P19.5-T2 (`viewOf`). */
-const asView = (v: { month: string; withData: number; state: unknown; rows: Parameters<typeof viewOf>[0] }) =>
-  viewOf(v.rows, v.withData, v.month, v.state);
-
 const nav = vi.hoisted(() => ({ pathname: '/admin', params: {} as Record<string, string>, search: '' }));
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn(), back: vi.fn() }),
@@ -241,13 +227,6 @@ const AUDIT_PAGE = {
   facets: { actions: ['kpm.created'], actors: [{ userId: 'u-root', name: 'Root Operator' }] },
 };
 
-/** A member's four tiles (P19.3-T4, ADR-0205 §1): what `GET /members/:membershipId/performance` answers. */
-const MEMBER_PERFORMANCE = {
-  membershipId: 'mem-1', today: '2026-11-05', activity: { from: '2026-10-30', to: '2026-11-05', count: 14 },
-  production: { year: '2026', actualMinor: 310_000_000_000, targetMinor: 500_000_000_000, attainmentPct: 62, goalSet: true },
-  lastOneOnOne: { date: '2026-10-21' }, leads: { month: '2026-11', open: 9, closing: 2 },
-};
-
 /** One open lead in `GET /leads`' row shape — the Summary's leads since P19.11-T5, drawn on the shared lead card. */
 const summaryLead = (over: Record<string, unknown>) => ({
   id: 'l-1', ownerMembershipId: 'mem-1', owner: { membershipId: 'mem-1', name: 'Rina Wijaya' }, type: 'sales', name: 'Pak Hendro',
@@ -279,10 +258,11 @@ const treeNode = (over: Record<string, unknown>) => ({
  * What these fixtures type that a message also writes in English: an office's or a company's words, shown as typed in
  * both languages — the library company named *Template*, a request's branch *Surabaya Branch* (the register form's
  * English example), the training category an office named *Product* (`test/training-fixtures.ts`; the Super Admin's
- * product list writes *Product* as its column since P19.2-T2) — and the roster file's month column, `YYYY-MM`, a
- * machine format and not a word.
+ * product list writes *Product* as its column since P19.2-T2), the activity section an office named *Selling* (the
+ * published configuration's label; the surveys' analytics write *Selling* as an area's English since P19.22-T6) — and
+ * the roster file's month column, `YYYY-MM`, a machine format and not a word.
  */
-const TYPED_LIKE_A_MESSAGE = new Set(['Template', 'Surabaya Branch', 'Product', 'YYYY-MM']);
+const TYPED_LIKE_A_MESSAGE = new Set(['Template', 'Surabaya Branch', 'Product', 'Selling', 'YYYY-MM']);
 
 /** Every area's English-only words: what no screen in ID mode may show (P18.10-T7 AC-1). */
 const EVERY_ENGLISH = (await everyAreasEnglish()).filter((word) => !TYPED_LIKE_A_MESSAGE.has(word));
@@ -334,27 +314,9 @@ const GOAL_CASCADE_CONFIG = [
   },
 ];
 
-const OVERVIEW = {
-  tiles: { companies: 1, kpms: 8, totalMembers: 1340, agencyBuilders: 61 },
-  attention: [{
-    tag: 'KPM owner', severity: 'structural' as const,
-    title: '2 offices have no Owner',
-    detail: 'Nobody can administer an office until an Owner is assigned, and only the platform can assign one.',
-    href: '/admin/tenants', actionLabel: 'Review',
-  }],
-  companies: [
-    { companyId: 'co-1', name: 'Prudential', initials: 'PR', kpmCount: 8, memberCount: 1340,
-      ladder: ['Agent', 'AAB', 'AB'] },
-  ],
-};
-
-/**
- * *Agenda* and *Action Items* load after the first paint (`meeting-tabs.tsx`; the bundle, 2026-11-06): axe reads a
- * panel once it is drawn, not its placeholder.
- */
-const meetingPanel = async (tab: 'Agenda' | 'Action Items') => {
-  const panel = within(screen.getByRole('tabpanel', { name: tab }));
-  await (tab === 'Agenda' ? panel.findAllByRole('heading', { level: 3 }) : panel.findByRole('table'));
+/** A forum's tab, once drawn (P19.22-T8): its agenda's checklist or its action items. */
+const forumPanel = async (tab: 'agenda' | 'actions') => {
+  await waitFor(() => expect(document.querySelector(tab === 'agenda' ? '[data-forum-agenda]' : '[data-forum-actions]')).not.toBeNull());
 };
 
 describe('screens have no axe violations', () => {
@@ -432,28 +394,14 @@ describe('screens have no axe violations', () => {
     await expectClean('profile');
   });
 
-  it('admin overview, with the unowned-office warning showing', async () => {
-    stubFetch({ '/admin/overview': { body: OVERVIEW } });
-    renderInLayout(AdminLayout, <AdminOverviewPage />, { me: SUPER_ADMIN });
-    await screen.findByText('2 offices have no Owner');
-    await expectClean('admin');
-  });
-
-  it('admin overview with the sidebar account menu open', async () => {
+  it('the console with the sidebar account menu open', async () => {
     // Closed, the menu contributes nothing to check. The open state is the one that
     // can get aria-expanded, focus order or labelling wrong.
-    stubFetch({ '/admin/overview': { body: OVERVIEW } });
-    renderInLayout(AdminLayout, <AdminOverviewPage />, { me: SUPER_ADMIN });
+    stubFetch({});
+    renderInLayout(AdminLayout, <p>Console</p>, { me: SUPER_ADMIN });
     await userEvent.click(await screen.findByRole('button', { name: /Root/ }));
     expect(screen.getByRole('button', { name: 'Sign out' })).toBeInTheDocument();
     await expectClean('admin (account menu open)');
-  });
-
-  it('tenants, populated', async () => {
-    stubFetch({ '/admin/tenants': { body: [KPM] }, '/admin/companies': { body: [COMPANY] } });
-    renderInLayout(AdminLayout, <TenantsPage />, { me: SUPER_ADMIN });
-    await screen.findByRole('table');
-    await expectClean('admin/tenants');
   });
 
   // P19.12-T2 AC-2 (ADR-0245 §1): *All members* › *Akun terdaftar*, every registered account, a KPM or none.
@@ -485,22 +433,19 @@ describe('screens have no axe violations', () => {
     await expectClean('admin/members?tab=accounts');
   });
 
-  it('new tenant', async () => {
-    stubFetch({ '/admin/companies': { body: [COMPANY] } });
-    renderInLayout(AdminLayout, <NewTenantPage />, { me: SUPER_ADMIN });
-    await screen.findByLabelText('Office code');
-    await expectClean('admin/tenants/new');
-  });
-
   // *Changed 2026-11-06 (P19.2-T2 AC-3; UI-133):* no form until *+* is pressed — the list, then its add sheet open.
+  // *Changed 2026-11-20 (P19.23-T4 AC-1; ADR-0278):* the company cards, then *New company*'s dialog open.
   it('companies, the list and then the add sheet open', async () => {
     atWidth(1280);
-    stubFetch({ '/admin/companies': { body: [COMPANY] }, '/product-data/intakes': { body: { aiReading: true, intakes: [] } } });
+    stubFetch({
+      '/admin/companies': { body: [COMPANY] }, '/product-data/intakes': { body: { aiReading: true, intakes: [] } },
+      '/publication?summary=true': { body: { companyId: COMPANY._id, changes: 1, templateEmpty: false, kpms: 1 } },
+    });
     renderInLayout(AdminLayout, <CompaniesPage />, { me: SUPER_ADMIN });
-    await screen.findByRole('table');
+    await screen.findByText('1 change not yet published');
     await expectClean('admin/companies');
-    await userEvent.click(screen.getByRole('button', { name: 'Add company' }));
-    await screen.findByRole('dialog', { name: 'Add a company' });
+    await userEvent.click(screen.getByRole('button', { name: 'New company' }));
+    await screen.findByRole('dialog', { name: 'New company' });
     await expectClean('admin/companies (add sheet)');
   });
 
@@ -531,28 +476,6 @@ describe('screens have no axe violations', () => {
     renderInLayout(TenantLayout, <MembersPage />, { me: owner });
     await screen.findByRole('table');
     await expectClean('people/members');
-  });
-
-  /*
-   * *Changed 2026-11-05 (P19.2-T1; ADR-0197 §3, §4):* the office's tablet is the one shell's — no rail below 1024px, the
-   * floating bar and *Lainnya* instead — so the screen is checked with the bar it has, and on the 64px rail at 1024px.
-   */
-  it('P19.2-T1 the office roster on a tablet: the bar, not a rail, the tabs one row (P18.9-T6 AC-4)', async () => {
-    const owner = makeMe({
-      membership: {
-        membershipId: 'mem-owner', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab',
-        isKpmOwner: true, isKpmAdmin: false, status: 'active', directCount: 0,
-      },
-      permissions: ['member:read_profile'],
-    });
-    window.localStorage.clear();
-    atWidth(768);
-    stubFetch({ '/members': { body: { members: [], nextCursor: null, counts: { directory: 28, pending: 2, removed: 2 } } } });
-    renderInLayout(TenantLayout, <MembersPage />, { me: owner });
-    await screen.findByRole('button', { name: 'Directory (28)' });
-    expect(screen.queryByRole('button', { name: 'Expand the sidebar' })).not.toBeInTheDocument();
-    expect(document.querySelector('[data-tab-bar]')).not.toBeNull();
-    await expectClean('people/members (tablet, the bar)');
   });
 
   it('register KPM, with the directory listed and the leader tab locked', async () => {
@@ -604,111 +527,15 @@ describe('screens have no axe violations', () => {
     await expectClean('user-management/leader');
   });
 
-  it('the month table: every member a row, a dash where nothing has been reported (P9-T1)', async () => {
-    const owner = makeMe({
-      membership: {
-        membershipId: 'mem-owner', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab', status: 'active',
-        isKpmOwner: true, isKpmAdmin: false, directCount: 2,
-      },
-      permissions: ['member:read_profile', 'data_upload:read', 'data_upload:download_template'],
-    });
-    const empty = { value: null, provenance: null };
-    const metrics = Object.fromEntries(
-      ['ape', 'persistency', 'recruitment', 'newActiveAgents', 'fyp', 'policyCount']
-        .map((m) => [m, { monthly: empty, ytd: empty }]),
-    );
-    stubFetch({
-      '/kpm/data-upload/': {
-        body: asView({
-          month: '2026-09', withData: 1,
-          state: { month: '2026-09', revision: 3, locked: false, reason: 'open', editableUntil: '2026-10-07', changedAt: null, changedBy: null },
-          rows: [
-            // All three Active (MAA) marks, so axe reads each one's name (ADR-0054).
-            { membershipId: 'mem-rina', agentCode: 'PRU-001', name: 'Rina Wijaya', monthlyActiveAgent: true,
-              metrics: { ...metrics, ape: { monthly: { value: 15000000000, provenance: 'imported' }, ytd: empty } } },
-            { membershipId: 'mem-budi', agentCode: 'PRU-002', name: 'Budi Santoso', metrics, monthlyActiveAgent: null },
-            { membershipId: 'mem-sari', agentCode: 'PRU-003', name: 'Sari Dewi', monthlyActiveAgent: false,
-              metrics: { ...metrics, ape: { monthly: { value: 0, provenance: 'imported' }, ytd: empty },
-                policyCount: { monthly: { value: 0, provenance: 'imported' }, ytd: empty } } },
-          ],
-        }),
-      },
-      // The download link is a control axe should see, so the template arrives too (P9-T2).
-      '/kpm/data-upload/template': {
-        body: {
-          month: '2026-09', version: 1, filename: 'KPM0417-agent-data-Sep-2026.csv',
-          header: ['Agent Code', 'Agent Name'], file: 'Agent Code,Agent Name\nPRU-001,"Rina Wijaya"', rowCount: 1,
-        },
-      },
-    });
-    renderInLayout(TenantLayout, <DataUploadPage />, { me: owner });
-    await screen.findByText('Budi Santoso');
-    await screen.findByRole('button', { name: 'Download template' });
-    await expectClean('kpm/data-upload');
-  });
-
-  it('P18.10-T4 the month table in Indonesian: its lock, legend, marks and history, the headings kept', async () => {
-    const owner = makeMe({
-      membership: {
-        membershipId: 'mem-owner', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab', status: 'active',
-        isKpmOwner: true, isKpmAdmin: false, directCount: 2,
-      },
-      permissions: [
-        'member:read_profile', 'data_upload:read', 'data_upload:download_template', 'data_upload:upload_and_preview',
-        'data_upload:correct_cell', 'data_upload:read_history', 'data_upload:revert_batch', 'data_upload:lock_month',
-      ],
-    });
-    const empty = { value: null, provenance: null };
-    const metrics = Object.fromEntries(
-      ['ape', 'persistency', 'recruitment', 'newActiveAgents', 'fyp', 'policyCount'].map((m) => [m, { monthly: empty, ytd: empty }]),
-    );
-    stubFetch({
-      '/kpm/data-upload/': {
-        body: asView({
-          month: '2026-09', withData: 1,
-          state: { month: '2026-09', revision: 3, locked: false, reason: 'open', editableUntil: '2026-10-07', changedAt: null, changedBy: null },
-          rows: [
-            { membershipId: 'mem-rina', agentCode: 'PRU-001', name: 'Rina Wijaya', monthlyActiveAgent: true,
-              metrics: { ...metrics, ape: { monthly: { value: 15000000000, provenance: 'imported' }, ytd: empty } } },
-            { membershipId: 'mem-budi', agentCode: 'PRU-002', name: 'Budi Santoso', metrics, monthlyActiveAgent: null },
-          ],
-        }),
-      },
-      '/kpm/data-upload/template': {
-        body: {
-          month: '2026-09', version: 1, filename: 'KPM0417-agent-data-Sep-2026.csv',
-          header: ['Agent Code', 'Agent Name'], file: 'Agent Code,Agent Name\nPRU-001,"Rina Wijaya"', rowCount: 1,
-        },
-      },
-      '/kpm/data-upload/history': {
-        body: {
-          month: '2026-09',
-          batches: [{
-            id: 'b-1', month: '2026-09', filename: 'KPM0417-agent-data-Sep-2026.csv', status: 'committed', templateVersion: 1,
-            rowCount: 2, writtenRowCount: 2, cellCount: 24, issueCount: 0, committedAt: '2026-09-26T07:00:00.000Z',
-            committedBy: 'Wilson Tanoto', revertedAt: null, revertedBy: null, restoredCellCount: 0, keptCellCount: 0,
-            keptCorrectionCount: 0, replacedCorrectionCount: 0, canRevert: true,
-          }],
-        },
-      },
-    });
-    renderWithSession(<InLanguage language="id"><TenantLayout><DataUploadPage /></TenantLayout></InLanguage>, { me: owner });
-    await screen.findByRole('table', { name: 'Data untuk Sep 2026' });
-    await screen.findByRole('button', { name: 'Unduh template' });
-    await screen.findByRole('heading', { name: 'Impor untuk Sep 2026' });
-    await expectClean('kpm/data-upload, in Indonesian');
-  });
-
   /*
-   * **P19.5-T2 — Data upload from the template** (ADR-0214 §5, §8, §10 to §12): every new state at once — a column before
-   * its start, a year to date *Belum lengkap* and its banner, a value *Di luar batas sejak v2*, a *Belum terdaftar* row,
-   * the month grid open, and a preview with its column notes, a held row and the current month's *as of* day — at a
-   * phone's width and a laptop's, in Indonesian, as the Owner reads it.
+   * **P19.21-T1 — Data upload as the client drew it on 19 November** (ADR-0274): *Pilih bulan*, the navy month card, the
+   * table with a corrected cell and two *Belum jadi anggota* rows, *Riwayat unggah*, then the *Koreksi* and *Unggah data*
+   * dialogs open — at a phone's width and a laptop's, in Indonesian, as the Owner reads it.
    */
-  it.each([375, 1280])('P19.5-T2 AC-1, AC-3, AC-5, AC-7, AC-8, AC-9, AC-11 kpm/data-upload from the template at %ipx, in Indonesian', async (px) => {
+  it.each([375, 1280])('P19.21-T1 AC-1 to AC-7 kpm/data-upload at %ipx, in Indonesian, and its two dialogs', async (px) => {
     atWidth(px);
     vi.useFakeTimers({ toFake: ['Date'] });
-    vi.setSystemTime(new Date('2026-11-05T03:00:00Z'));
+    vi.setSystemTime(new Date('2026-11-20T03:00:00Z'));
     try {
       const owner = makeMe({
         membership: {
@@ -716,311 +543,149 @@ describe('screens have no axe violations', () => {
           isKpmOwner: true, isKpmAdmin: false, directCount: 2,
         },
         permissions: [
-          'member:read_profile', 'data_upload:read', 'data_upload:download_template', 'data_upload:upload_and_preview',
-          'data_upload:commit_import', 'data_upload:correct_cell', 'data_upload:read_history', 'data_upload:lock_month',
+          'member:read_profile', 'kpm:read_profile', 'data_upload:read', 'data_upload:download_template',
+          'data_upload:upload_and_preview', 'data_upload:commit_import', 'data_upload:correct_cell', 'data_upload:read_history',
+          'data_upload:lock_month', 'data_upload:reopen_month', 'data_upload:revert_batch',
         ],
       });
-      const fyc = { ...V1_COLUMNS[4], kode: 'FYC', label: { id: 'Komisi tahun pertama', en: 'First-year commission' }, effectiveFrom: '2026-12', inForce: false };
-      const columns = [...V1_COLUMNS.map((c) => (c.ytd === 'sum' ? { ...c, ytdMissingMonths: ['2026-03'] } : c)), fyc];
       const imported = (value: number) => ({ value, provenance: 'imported' as const, correction: null });
       const view = viewOf([
-        { membershipId: 'mem-rina', agentCode: 'PRU-001', name: 'Rina Wijaya', monthlyActiveAgent: true,
-          metrics: { ape: { monthly: imported(150_000_000), ytd: imported(900_000_000) } } },
-        { membershipId: 'mem-agus', agentCode: 'PRU-010', name: 'Agus Prasetyo', leader: true, monthlyActiveAgent: null,
-          unitPersistency: { ...imported(105), outOfBounds: { sinceVersion: 2 } } },
+        { membershipId: 'mem-wilson', agentCode: '80003', name: 'Wilson Tanoto', role: 'ab', orgLevelCode: 'AB', leader: true,
+          monthlyActiveAgent: true, metrics: { ape: { monthly: imported(213_540_000) } } },
+        { membershipId: 'mem-dewi', agentCode: '80007', name: 'Dewi Lestari', role: 'aab', orgLevelCode: 'AAB', leader: true,
+          monthlyActiveAgent: true,
+          metrics: { ape: { monthly: { value: 71_830_000, provenance: 'corrected', correction: { by: 'Wilson Tanoto', at: '2026-11-19T03:42:00.000Z', reason: 'Polis susulan', fileValue: 61_830_000 } } } } },
+        { membershipId: 'mem-rina', agentCode: '80104', name: 'Rina Wijaya', role: 'agent', orgLevelCode: 'AGENT', monthlyActiveAgent: null },
       ], 2, '2026-11', {
-        month: '2026-11', revision: 3, locked: false, reason: 'open', editableUntil: '2026-12-07', changedAt: null, changedBy: null, asOf: '2026-11-03',
+        month: '2026-11', revision: 3, locked: false, reason: 'open', editableUntil: '2026-12-07', changedAt: null, changedBy: null,
       }, {
-        config: configOf({ columns, historyFrom: '2026-03' }),
-        ytdMissingMonths: ['2026-03'],
-        months: [statusOf('2026-03', 'missing'), statusOf('2026-04', 'incomplete'), statusOf('2026-10'), statusOf('2026-11', 'missing')],
-        unregistered: [{ agentCode: '70019999', fileName: 'Calon Baru', values: { APE: imported(50_000_000) }, ytd: {} }],
+        months: [statusOf('2025-03', 'missing'), statusOf('2026-10'), statusOf('2026-11')],
+        unregistered: [
+          { agentCode: '91200451', fileName: 'Rudi Hartono', values: { APE: imported(124_000_000) }, ytd: {} },
+          { agentCode: '91200452', fileName: 'Lina Marpaung', values: { APE: imported(61_580_000) }, ytd: {} },
+        ],
       });
       stubFetch({
+        '/kpm/settings/branch-info': { body: { timezone: 'Asia/Jakarta' } },
         '/kpm/data-upload/': { body: view },
-        '/kpm/data-upload/template': {
-          body: { month: '2026-11', version: 1, filename: '0417-agent-data-2026-11.csv', header: ['Agent Code'], file: 'Agent Code', rowCount: 0 },
+        '/kpm/data-upload/history': {
+          body: {
+            month: '2026-11',
+            batches: [{
+              id: 'b-1', month: '2026-11', filename: 'template_nov_2026.xlsx', status: 'committed', templateVersion: 1, asOf: null,
+              heldRowCount: 2, memberRowCount: 28, rowCount: 30, writtenRowCount: 30, cellCount: 90, issueCount: 0,
+              committedAt: '2026-11-19T03:42:00.000Z', committedBy: 'Wilson Tanoto', revertedAt: null, revertedBy: null,
+              restoredCellCount: 0, keptCellCount: 0, keptCorrectionCount: 0, replacedCorrectionCount: 0, canRevert: true,
+            }],
+          },
         },
-        '/kpm/data-upload/history': { body: { month: '2026-11', batches: [] } },
         '/kpm/data-upload/preview': {
           body: {
-            month: '2026-11', filename: 'filled.csv', templateVersion: 1, encoding: 'utf-8', delimiter: ',', revision: 3,
-            columns: V1_FILE_COLUMNS,
-            notes: [
-              { code: 'column_missing', kode: 'UNIT_PERSISTENCY', header: null, message: 'Kolom Unit persistency kosong di file ini. Baris tetap diimpor.' },
-              { code: 'column_retired', kode: 'APE', header: 'APE (Rp M) — YTD', message: 'Kolom APE YTD tidak dipakai lagi' },
-            ],
-            summary: { rows: 2, ready: 1, refused: 0, held: 1, newCells: 2, changedCells: 0, unchangedCells: 0, notProvidedCells: 10, refusedCells: 0, correctionCells: 0, notInFile: 1 },
+            month: '2026-11', filename: 'template_nov_2026.xlsx', templateVersion: 1, format: 'xlsx', encoding: 'utf-8', delimiter: ',', revision: 3,
+            columns: V1_FILE_COLUMNS, notes: [],
+            summary: { rows: 2, ready: 1, refused: 0, held: 1, newCells: 2, changedCells: 0, unchangedCells: 0, notProvidedCells: 10, refusedCells: 0, correctionCells: 0, notInFile: 2 },
             rows: [
-              {
-                line: 2, agentCode: 'PRU-001', membershipId: 'mem-rina', resolvedAgentCode: 'PRU-001', name: 'Rina Wijaya', fileName: 'Rina Wijaya',
-                nameDiffers: false, codeRecovered: false, status: 'ready', issues: [], cells: cellsOf({ ape: { status: 'new', after: 160_000_000, raw: '1.6' } }),
-              },
-              {
-                line: 3, agentCode: '70019999', membershipId: null, resolvedAgentCode: null, name: null, fileName: 'Calon Baru',
-                nameDiffers: false, codeRecovered: false, status: 'held', issues: [], cells: cellsOf({ ape: { status: 'new', after: 50_000_000, raw: '0.5' } }),
-              },
+              { line: 2, agentCode: '80003', membershipId: 'mem-wilson', resolvedAgentCode: '80003', name: 'Wilson Tanoto', fileName: 'Wilson Tanoto',
+                nameDiffers: false, codeRecovered: false, status: 'ready', issues: [], cells: cellsOf({ ape: { status: 'new', after: 160_000_000, raw: '1.6' } }) },
+              { line: 3, agentCode: '91200451', membershipId: null, resolvedAgentCode: null, name: null, fileName: 'Rudi Hartono',
+                nameDiffers: false, codeRecovered: false, status: 'held', issues: [], cells: cellsOf({ ape: { status: 'new', after: 124_000_000, raw: '1.24' } }) },
             ],
           },
         },
       });
       renderWithSession(<InLanguage language="id"><TenantLayout><DataUploadPage /></TenantLayout></InLanguage>, { me: owner });
-      await screen.findByText('YTD belum lengkap: Mar 2026 belum diunggah.');
-      await screen.findByRole('button', { name: 'Unduh template' });
-      // The month grid open, so its pills are read too.
-      (document.querySelector('[data-month-status]') as HTMLDetailsElement).open = true;
-      await expectClean(`kpm/data-upload from the template at ${px}px, in Indonesian`);
-      if (px >= 1024) {
-        await userEvent.click(screen.getByRole('button', { name: 'YTD' }));
-        await expectClean(`kpm/data-upload, its YTD side Belum lengkap at ${px}px, in Indonesian`);
-      }
-      await userEvent.upload(screen.getByLabelText('+ Unggah template yang sudah diisi'), new File(['x'], 'filled.csv', { type: 'text/csv' }));
-      await screen.findByLabelText('Data per tanggal');
-      await expectClean(`kpm/data-upload, a preview with notes, a held row and its as of day at ${px}px, in Indonesian`);
+      await screen.findByRole('table', { name: 'Angka November 2026' });
+      await screen.findByRole('heading', { name: 'Pilih bulan' });
+      await screen.findByText('28 ke anggota');
+      await expectClean(`kpm/data-upload at ${px}px, in Indonesian`);
+      const dewi = document.querySelector('tr[data-member="mem-dewi"] td[data-kode="APE"] button') as HTMLButtonElement;
+      await userEvent.click(dewi);
+      await screen.findByRole('dialog', { name: 'Koreksi APE · Dewi Lestari' });
+      await expectClean(`kpm/data-upload, Koreksi open at ${px}px, in Indonesian`);
+      await userEvent.click(screen.getAllByRole('button', { name: 'Batal' })[0]);
+      await userEvent.click(screen.getByRole('button', { name: 'Unggah data' }));
+      const dialog = await screen.findByRole('dialog', { name: 'Unggah data November 2026' });
+      fireEvent.change(dialog.ownerDocument.querySelector('input[type="file"]')!, { target: { files: [new File(['x'], 'template_nov_2026.xlsx')] } });
+      await userEvent.click(within(dialog).getByRole('button', { name: 'Lanjut' }));
+      await within(dialog).findByText('semua disimpan');
+      await expectClean(`kpm/data-upload, Unggah data with its tiles at ${px}px, in Indonesian`);
     } finally {
       vi.useRealTimers();
     }
   });
 
-  it('the month with a figure being corrected, and a refusal on it (P9-T5)', async () => {
+  describe('the KPM Overview, second version (P19.19)', () => {
     const owner = makeMe({
       membership: {
         membershipId: 'mem-owner', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab', status: 'active',
         isKpmOwner: true, isKpmAdmin: false, directCount: 2,
       },
-      permissions: ['member:read_profile', 'data_upload:read', 'data_upload:correct_cell'],
+      permissions: ['member:read_profile', 'kpm_overview:read', 'ab_group_target:read', 'ab_group_target:write', 'member:tag_group'],
     });
-    const empty = { value: null, provenance: null };
-    const metrics: Record<string, unknown> = Object.fromEntries(
-      ['ape', 'persistency', 'recruitment', 'newActiveAgents', 'fyp', 'policyCount'].map((m) => [m, { monthly: empty, ytd: empty }]),
-    );
-    metrics.ape = {
-      monthly: { value: 150000000, provenance: 'imported', correction: null },
-      ytd: { value: 900000000, provenance: 'corrected', correction: { by: 'Maya Halim', at: '2026-09-26T03:00:00.000Z', reason: 'Carrier restated it' } },
+    const overviewRoutes = (view: unknown = overviewFixture()) => ({
+      '/kpm/overview/performance': { body: overviewPerformance() },
+      '/kpm/overview/compliance?category=training': { body: overviewTraining() },
+      '/kpm/overview/compliance': { body: overviewCompliance() },
+      '/kpm/overview': { body: view },
+    });
+    const loaded = async () => {
+      await within(screen.getByRole('main')).findByText('Total KPM');
+      await waitFor(() => expect(document.querySelectorAll('[data-card]')).toHaveLength(7));
     };
-    stubFetch({
-      '/kpm/data-upload/': {
-        body: asView({
-          month: '2026-09', withData: 1,
-          state: { month: '2026-09', revision: 3, locked: false, reason: 'open', editableUntil: '2026-10-07', changedAt: null, changedBy: null },
-          rows: [{ membershipId: 'mem-rina', agentCode: 'PRU-001', name: 'Rina Wijaya', metrics }],
-        }),
-      },
-      '/kpm/data-upload/cell': {
-        status: 422,
-        body: { error: { code: 'UPLOAD_VALUE_OUT_OF_RANGE', message: 'APE this month is negative.', requestId: 'r' } },
-      },
-    });
-    renderInLayout(TenantLayout, <DataUploadPage />, { me: owner });
-    await userEvent.click(await screen.findByRole('button', { name: 'Correct APE this month for Rina Wijaya, now IDR 1,500,000' }));
-    await userEvent.type(screen.getByLabelText('Why is it being corrected?'), 'Carrier restated it');
-    await userEvent.click(screen.getByRole('button', { name: 'Save correction' }));
-    await screen.findByText('APE this month is negative.');
-    await expectClean('kpm/data-upload with a correction refused');
-  });
 
-  it('the month with its lock and its imports, one reverted and one standing (P9-T4)', async () => {
-    const owner = makeMe({
-      membership: {
-        membershipId: 'mem-owner', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab', status: 'active',
-        isKpmOwner: true, isKpmAdmin: false, directCount: 2,
-      },
-      permissions: [
-        'member:read_profile', 'data_upload:read', 'data_upload:read_history', 'data_upload:revert_batch',
-        'data_upload:lock_month', 'data_upload:reopen_month',
-      ],
-    });
-    const empty = { value: null, provenance: null };
-    const metrics = Object.fromEntries(
-      ['ape', 'persistency', 'recruitment', 'newActiveAgents', 'fyp', 'policyCount'].map((m) => [m, { monthly: empty, ytd: empty }]),
-    );
-    const batch = {
-      id: 'b-2', month: '2026-09', filename: 'KPM0417-agent-data-Sep-2026-corrected.csv', status: 'committed',
-      templateVersion: 1, rowCount: 6, writtenRowCount: 6, cellCount: 72, issueCount: 0,
-      committedAt: '2026-09-26T07:00:00.000Z', committedBy: 'Wilson Tanoto', revertedAt: null, revertedBy: null,
-      restoredCellCount: 0, keptCellCount: 0, canRevert: true,
-    };
-    stubFetch({
-      '/kpm/data-upload/': {
-        body: asView({
-          month: '2026-09', withData: 0,
-          state: { month: '2026-09', revision: 3, locked: false, reason: 'reopened', editableUntil: '2026-10-07', changedAt: '2026-09-21T03:00:00.000Z', changedBy: 'Maya Halim' },
-          rows: [{ membershipId: 'mem-rina', agentCode: 'PRU-001', name: 'Rina Wijaya', metrics }],
-        }),
-      },
-      '/kpm/data-upload/history': {
-        body: {
-          month: '2026-09',
-          batches: [batch, { ...batch, id: 'b-1', status: 'reverted', canRevert: false, revertedAt: '2026-09-25T07:00:00.000Z', revertedBy: 'Maya Halim', restoredCellCount: 96 }],
-        },
-      },
-    });
-    renderInLayout(TenantLayout, <DataUploadPage />, { me: owner });
-    await screen.findByRole('button', { name: 'Revert' });
-    await screen.findByRole('button', { name: 'Lock month' });
-    await expectClean('kpm/data-upload with its lock and history');
-  });
-
-  it('the preview of a filled file: summary, what is not taken, and the diff (P9-T3)', async () => {
-    const owner = makeMe({
-      membership: {
-        membershipId: 'mem-owner', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab', status: 'active',
-        isKpmOwner: true, isKpmAdmin: false, directCount: 2,
-      },
-      permissions: ['member:read_profile', 'data_upload:read', 'data_upload:upload_and_preview'],
-    });
-    const empty = { value: null, provenance: null };
-    const metrics = Object.fromEntries(
-      ['ape', 'persistency', 'recruitment', 'newActiveAgents', 'fyp', 'policyCount'].map((m) => [m, { monthly: empty, ytd: empty }]),
-    );
-    // P19.5-T2: the cells by kode, one per column a version 1 file is read for (`cellsOf`).
-    const cells = cellsOf({
-      ape: { status: 'new', after: 150000000, raw: '1.5' },
-      persistency: { status: 'refused', raw: '140' },
-      // A correction the file would change, with its choice (ADR-0053).
-      fyp: {
-        status: 'changed', before: 70000000, after: 60000000, raw: '0.6',
-        correction: { by: 'Maya Halim', at: '2026-09-26T03:00:00.000Z', reason: 'Carrier restated it', replacedValue: 60000000 },
-      },
-    });
-    stubFetch({
-      '/kpm/data-upload/': {
-        body: asView({ month: '2026-09', withData: 0, state: { month: '2026-09', revision: 3, locked: false, reason: 'open', editableUntil: '2026-10-07', changedAt: null, changedBy: null }, rows: [{ membershipId: 'mem-rina', agentCode: 'PRU-001', name: 'Rina Wijaya', metrics }] }),
-      },
-      '/kpm/data-upload/preview': {
-        body: {
-          month: '2026-09', filename: 'filled.csv', templateVersion: 1, encoding: 'utf-8', delimiter: ',',
-          columns: V1_FILE_COLUMNS,
-          // P19.5-T2 (AA UI-013): what the header says about the file's columns.
-          notes: [
-            { code: 'column_missing', kode: 'UNIT_PERSISTENCY', header: null, message: 'Column Unit persistency is empty in this file. The rows still import.' },
-            { code: 'column_retired', kode: 'APE', header: 'APE (Rp M) — YTD', message: 'Column APE YTD is no longer used. It is not stored.' },
-          ],
-          summary: { rows: 2, ready: 1, refused: 1, held: 0, newCells: 1, changedCells: 0, unchangedCells: 0, notProvidedCells: 10, refusedCells: 1, notInFile: 0 },
-          rows: [
-            {
-              line: 2, agentCode: 'PRU-001', membershipId: 'mem-rina', resolvedAgentCode: 'PRU-001', name: 'Rina Wijaya',
-              fileName: 'Rina Wijaya', nameDiffers: false, codeRecovered: false, status: 'ready', cells,
-              issues: [{ code: 'UPLOAD_VALUE_OUT_OF_RANGE', kode: 'PERSISTENCY', ytd: false, message: 'Rolling persistency (%) [PERSISTENCY]: “140” is above 100.' }],
-            },
-            {
-              line: 3, agentCode: 'PRU-999', membershipId: null, resolvedAgentCode: null, name: null, fileName: 'X',
-              nameDiffers: false, codeRecovered: false, status: 'refused', cells: [],
-              issues: [{ code: 'UPLOAD_UNKNOWN_AGENT_CODE', kode: null, ytd: null, message: 'No active member of this office has this code.' }],
-            },
-          ],
-        },
-      },
-    });
-    renderInLayout(TenantLayout, <DataUploadPage />, { me: owner });
-    const input = await screen.findByLabelText('+ Upload filled template');
-    await userEvent.upload(input, new File(['x'], 'filled.csv', { type: 'text/csv' }));
-    await screen.findByRole('table', { name: 'What “filled.csv” would change' });
-    await screen.findByRole('checkbox', { name: 'FYP this month for Rina Wijaya: Replace with the file’s figure' });
-    await expectClean('kpm/data-upload with a preview');
-  });
-
-  describe('the KPM Overview (P18-T1 AC-10)', () => {
-    // The sign went (P18-T1): the page reads the Overview, and the reveal reads its list when opened.
-    const owner = makeMe({
-      membership: {
-        membershipId: 'mem-owner', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab', status: 'active',
-        isKpmOwner: true, isKpmAdmin: false, directCount: 2,
-      },
-      permissions: ['member:read_profile', 'kpm_overview:read', 'kpm_overview:set_recruit_target'],
-    });
-    // Four tiles, the lists and the cards since P19.2-T3 (UI-143) and P19.3-T2 (UI-148): the first list stands for the page.
-    const overviewRegion = () => within(screen.getByRole('main')).findByRole('region', { name: 'AB coaching frequency' });
-    /** A page with nothing to rank (P19.3-T2 AC-6): its tiles stand for it. */
-    const overviewTiles = () => within(screen.getByRole('main')).findByText('Total members');
-    const overviewRoutes = (view: unknown) => ({ '/kpm/overview/not-logged': { body: OVERVIEW_NOT_LOGGED }, '/kpm/overview': { body: view } });
-
-    it('filled, the Target a value with Edit (P18.9-T3 AC-7), Belum mencatat the third card (P19.3-T2)', async () => {
-      stubFetch(overviewRoutes(overviewFixture()));
+    it.each([1280, 1024, 390])('P19.19-T5 filled, the six sections at %ipx', async (width) => {
+      atWidth(width);
+      stubFetch(overviewRoutes());
       renderInLayout(TenantLayout, <KpmOverviewPage />, { me: owner });
-      await overviewRegion();
-      await screen.findByText('69 of 187');
-      await expectClean('kpm/overview');
+      await loaded();
+      await expectClean(`kpm/overview (${width}px)`);
     });
 
-    it('P18.10-T4, P19.3-T2 filled, in Indonesian, the not-logged card read and the full ranking open', async () => {
-      stubFetch(overviewRoutes(overviewFixture()));
+    it('P19.19-T1 filled, in Indonesian, a long list open', async () => {
+      stubFetch(overviewRoutes());
       renderWithSession(<InLanguage language="id"><TenantLayout><KpmOverviewPage /></TenantLayout></InLanguage>, { me: owner });
-      await overviewRegion();
-      await within(screen.getByRole('region', { name: 'Belum mencatat · 7 hari' })).findAllByRole('listitem');
-      await userEvent.click(screen.getAllByRole('button', { name: /^Semua \d+ ›$/ })[0]);
+      await within(screen.getByRole('main')).findByText('Total KPM');
       await expectClean('kpm/overview, in Indonesian');
     });
 
-    it('P18.9-T3 AC-5, AC-7, P19.3-T2: an AB who leads nobody on the full board, No team, and the Target’s box open', async () => {
-      const view = overviewFixture();
-      const leaderboard = [...view.coaching.leaderboard, overviewNoTeam('mem-maya-h', 'Maya Halim')];
-      stubFetch(overviewRoutes({ ...view, coaching: { ...view.coaching, leaderboard } }));
+    it('P19.19-T3 AC-3 the Training card’s list open', async () => {
+      stubFetch(overviewRoutes());
       renderInLayout(TenantLayout, <KpmOverviewPage />, { me: owner });
-      await overviewRegion();
-      await userEvent.click(screen.getAllByRole('button', { name: /^All \d+ ›$/ })[0]);
-      await screen.findByText('No team');
-      await userEvent.click(screen.getByRole('button', { name: 'Edit target' }));
-      await screen.findByRole('spinbutton', { name: 'Target' });
-      await expectClean('kpm/overview (No team, the Target open)');
+      await loaded();
+      await userEvent.click(screen.getByRole('button', { name: /^Training/ }));
+      await screen.findByRole('dialog', { name: 'Training · 3 of 5 done' });
+      await expectClean('kpm/overview (a compliance list)');
     });
 
-    it('P19.3-T2: the settings list open, its amber pills and Ratio benchmarks under Activity types', async () => {
-      stubFetch(overviewRoutes(overviewFixture()));
-      renderInLayout(TenantLayout, <KpmOverviewPage />, { me: owner });
-      await overviewRegion();
-      for (const more of screen.getAllByRole('button', { name: /^All \d+ ›$/ })) await userEvent.click(more);
-      await userEvent.click(screen.getByRole('button', { name: 'KPM settings' }));
-      await screen.findByRole('dialog', { name: 'KPM settings' });
-      await expectClean('kpm/overview (the settings list)');
-    });
-
-    it('P19.3-T2: the target sheet open, from the pipeline’s ›', async () => {
-      stubFetch(overviewRoutes(overviewFixture()));
-      renderInLayout(TenantLayout, <KpmOverviewPage />, { me: owner });
-      await overviewRegion();
-      await userEvent.click(screen.getByRole('button', { name: 'Recruitment target this month' }));
-      await screen.findByRole('dialog', { name: 'Recruitment target this month' });
-      await expectClean('kpm/overview (the target sheet)');
-    });
-
-    it('P19.3-T2 Overview case 1: KaiZen, a new KPM — Siapkan KPM, four tiles and Pengaturan KPM', async () => {
-      stubFetch(overviewRoutes(OVERVIEW_KAIZEN));
+    it('P19.3-T2 a new KPM: Siapkan KPM above the columns', async () => {
+      stubFetch(overviewRoutes(overviewFixture({
+        setup: {
+          done: 2, steps: ['branch-info', 'activity-types', 'activation-checklist', 'products', 'import', 'upload', 'recruit-target']
+            .map((key, i) => ({ key: key as never, done: i < 2 })),
+          branchFilled: true, members: 5, openMonth: { month: '2026-11', closesOn: '2026-12-07' }, target: null,
+        },
+      })));
       renderInLayout(TenantLayout, <KpmOverviewPage />, { me: owner });
       await within(screen.getByRole('main')).findByRole('region', { name: 'Set up your KPM' });
       await expectClean('kpm/overview (setting up)');
     });
 
-    it('P19.3-T2 at 375px: the not-logged sheet open, its WhatsApp reminders', async () => {
-      atWidth(375);
-      stubFetch(overviewRoutes(overviewFixture()));
+    it('empty: a KPM with nobody yet', async () => {
+      stubFetch(overviewRoutes(overviewFixture({
+        people: [], groups: [],
+        usage: { total: { used: 0, of: 0, pct: null }, leaders: { used: 0, of: 0, pct: null }, agents: { used: 0, of: 0, pct: null }, byGroup: [] },
+      })));
       renderInLayout(TenantLayout, <KpmOverviewPage />, { me: owner });
-      await overviewRegion();
-      await userEvent.click(screen.getByRole('button', { name: /^App users/ }));
-      await within(await screen.findByRole('dialog', { name: 'Not logged · 7 days' })).findAllByRole('listitem');
-      await expectClean('kpm/overview (the not-logged sheet)');
-    });
-
-    it('empty: 0701, with no file, no session, no lead and no target — nothing to rank', async () => {
-      stubFetch(overviewRoutes(OVERVIEW_EMPTY));
-      renderInLayout(TenantLayout, <KpmOverviewPage />, { me: owner });
-      await overviewTiles();
+      await within(screen.getByRole('main')).findByText('No data yet');
       await expectClean('kpm/overview (empty)');
     });
 
-    it('an office with nobody in it, every rate a dash', async () => {
-      stubFetch(overviewRoutes(OVERVIEW_NOBODY));
-      renderInLayout(TenantLayout, <KpmOverviewPage />, { me: owner });
-      await overviewTiles();
-      await expectClean('kpm/overview (nobody)');
-    });
-
-    it('loading, the five sections in outline', async () => {
+    it('loading, the two columns in outline', async () => {
       vi.stubGlobal('fetch', vi.fn((url: string) => (String(url).includes('/kpm/overview')
         ? new Promise(() => undefined)
         : Promise.resolve({ ok: false, status: 404, json: async () => null }))));
       renderInLayout(TenantLayout, <KpmOverviewPage />, { me: owner });
-      await within(screen.getByRole('main')).findByText('Loading the overview…');
+      await within(screen.getByRole('main')).findByText('Loading the Overview…');
       await expectClean('kpm/overview (loading)');
     });
 
@@ -1042,7 +707,8 @@ describe('screens have no axe violations', () => {
         },
       });
       renderInLayout(TenantLayout, <MembersPage />, { me: owner });
-      await within(await screen.findByRole('table')).findByRole('columnheader', { name: 'Last coached' });
+      // P19.20-T1 (ADR-0273 §2): *Coaching terakhir*, its English *Last coaching*.
+      await within(await screen.findByRole('table')).findByRole('columnheader', { name: 'Last coaching' });
       await expectClean('people/members (last activity, last coached)');
     });
   });
@@ -1055,19 +721,22 @@ describe('screens have no axe violations', () => {
     };
     const page = () => <UnitDashboardPage />;
 
-    it('filled: the tiles, every group and total, a unit nested two deep, every status and mark', async () => {
-      // Row groups headed by `rowgroup` headers, each person their row's header, the ⌄ column named for a
-      // screen reader, and every tooltip on a button: the ✓, the pills, the marks and the Status rules.
+    /*
+     * *Changed 2026-11-20 (P19.18-T1; ADR-0271 §3–§6):* the Overview was redrawn — one orange panel, the roster as unit
+     * cards in a region named by its title, a team line inside a unit, no wide table, no accordion, no status chips. The
+     * cases read that screen: each unit's header, every person row, the panel's ⓘ and the sheets' buttons.
+     */
+    it('filled: the panel, every unit and team line, every person row and mark (P19.18-T1)', async () => {
       stubFetch({ ...shell, 'GET /unit/dashboard': { body: unitDashboard() } });
       renderInLayout(AgentLayout, page(), { me: UNIT_READER });
-      await screen.findByRole('table', { name: 'Your team’s roster' });
+      await screen.findByRole('region', { name: /^Your team’s roster/ });
       await expectClean('unit/dashboard');
     });
 
     it('a new hire before a first sale: the New hire tag, and the ⓘ of the totals and tiles that leave her out (P18.8-T5)', async () => {
       stubFetch({ ...shell, 'GET /unit/dashboard': { body: UNIT_NEW_HIRE } });
       renderInLayout(AgentLayout, page(), { me: UNIT_READER });
-      await screen.findByRole('table', { name: 'Your team’s roster' });
+      await screen.findByRole('region', { name: /^Your team’s roster/ });
       await expectClean('unit/dashboard with a new hire');
     });
 
@@ -1135,24 +804,20 @@ describe('screens have no axe violations', () => {
       await expectClean('unit/dashboard potensi sheet');
     });
 
-    it('UI V1 (Phase 18.11 T4, UI-002): on a phone, the accordion — Your Unit open, a unit opened, the chips filtering', async () => {
-      vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
-        media: query, matches: query === PHONE_QUERY, addEventListener: vi.fn(), removeEventListener: vi.fn(),
-      })));
+    it('P19.18-T1 AC-6 on a phone: Your Unit open, every other unit closed, and one opened', async () => {
+      atWidth(375);
       stubFetch({ ...shell, 'GET /unit/dashboard': { body: unitDashboard() } });
       renderInLayout(AgentLayout, page(), { me: UNIT_READER });
-      await screen.findByRole('button', { name: /^Your Unit · 4/ });
+      expect(await screen.findByRole('button', { name: /^Your Unit/ })).toHaveAttribute('aria-expanded', 'true');
       await expectClean('unit/dashboard (phone)');
-      await userEvent.click(screen.getByRole('button', { name: /^Sari Wulandari’s Unit/ }));
-      // The count tiles since P19.8-T4 (AC-3, MOB UI-178); Siti's month not uploaded, in no status (AC-2).
-      await userEvent.click(screen.getByRole('button', { name: '3 Needs attention' }));
-      await expectClean('unit/dashboard (phone, opened and filtered)');
+      await userEvent.click(screen.getByRole('button', { name: /^SARI WULANDARI’s Unit/ }));
+      await expectClean('unit/dashboard (phone, a unit opened)');
     });
 
     it('with Update production open', async () => {
       stubFetch({ ...shell, 'GET /unit/dashboard': { body: unitDashboard() } });
       renderInLayout(AgentLayout, page(), { me: UNIT_READER });
-      await screen.findByRole('table', { name: 'Your team’s roster' });
+      await screen.findByRole('region', { name: /^Your team’s roster/ });
       await userEvent.click(screen.getByRole('button', { name: 'Update production' }));
       await screen.findByRole('dialog', { name: 'Update production' });
       await expectClean('unit/dashboard with Update production');
@@ -1164,7 +829,7 @@ describe('screens have no axe violations', () => {
         'GET /unit/dashboard': { body: unitDashboard({ production: { month: '2026-10', revision: 7, locked: true, canUpdate: true } }) },
       });
       renderInLayout(AgentLayout, page(), { me: UNIT_READER });
-      await screen.findByRole('table', { name: 'Your team’s roster' });
+      await screen.findByRole('region', { name: /^Your team’s roster/ });
       await expectClean('unit/dashboard locked');
     });
 
@@ -1213,19 +878,38 @@ describe('screens have no axe violations', () => {
     const row = (membershipId: string, name: string, over: Record<string, unknown> = {}) => ({
       membershipId, name, rung: { code: 'AGENT', label: 'Agent' }, depth: 1,
       lastOneOnOne: { days: 9, date: '2026-09-23', overdue: true, coach: { membershipId: 'mem-ab', name: 'Jordan Pratama' } },
-      status: 'watch_closely', ...over,
+      status: 'watch_closely',
+      coaching: { status: 'recent', days: 9, coach: { membershipId: 'mem-ab', name: 'Jordan Pratama' } },
+      phone: '+6281211002200', isReader: false, opens: true, ...over,
     });
+    // P19.18-T5 (ADR-0271 §9): grouped by unit — *Unit Anda*, then an AAB's unit with a team line in it.
     const roster = {
       today: '2026-10-02',
       overdueAfterDays: 7,
-      directAgents: [row('mem-rina', 'Rina Wijaya'), row('mem-melati', 'Melati Putri', { lastOneOnOne: null, status: 'no_goal_set' })],
-      units: [{
-        head: row('mem-dimas', 'Dimas Aditya', { rung: { code: 'AAB', label: 'Associate Agency Builder' }, status: 'on_track' }),
-        members: [
-          row('mem-wulan', 'Wulan Sari', { depth: 2, rung: { code: 'AAB', label: 'Associate Agency Builder' }, status: 'needs_attention' }),
-          row('mem-tono', 'Tono Saputra', { depth: 3, lastOneOnOne: { days: 0, date: '2026-10-02', overdue: false, coach: null } }),
-        ],
-      }],
+      scope: 'direct',
+      scopes: { offered: ['unit', 'direct'], default: 'direct' },
+      total: 6,
+      sections: [
+        {
+          key: 'own', kind: 'own', leader: { membershipId: 'mem-ab', name: 'Jordan Pratama', photoUrl: null }, count: 3, teams: [],
+          rows: [
+            row('mem-ab', 'Jordan Pratama', { rung: { code: 'AB', label: 'AB' }, depth: 0, isReader: true, phone: null }),
+            row('mem-rina', 'Rina Wijaya'),
+            row('mem-melati', 'Melati Putri', { lastOneOnOne: null, status: 'no_goal_set', coaching: { status: 'never', days: null, coach: null } }),
+          ],
+        },
+        {
+          key: 'mem-dimas', kind: 'unit', leader: { membershipId: 'mem-dimas', name: 'Dimas Aditya', photoUrl: null }, count: 3,
+          rows: [row('mem-dimas', 'Dimas Aditya', { rung: { code: 'AAB', label: 'Associate Agency Builder' }, status: 'on_track' })],
+          teams: [{
+            key: 'mem-wulan', leader: { membershipId: 'mem-wulan', name: 'Wulan Sari', photoUrl: null }, count: 2,
+            rows: [
+              row('mem-wulan', 'Wulan Sari', { depth: 2, rung: { code: 'AAB', label: 'Associate Agency Builder' }, coaching: { status: 'lapsed', days: 20, coach: null } }),
+              row('mem-tono', 'Tono Saputra', { depth: 3 }),
+            ],
+          }],
+        },
+      ],
     };
     const shell = {
       '/kpm/config': { body: { activity: [], ratios: [], leadPipelines: [], version: 1 } },
@@ -1248,18 +932,17 @@ describe('screens have no axe violations', () => {
       ],
     };
 
-    it('UI-033, UI-034 the roster, populated: the groups, the rows, a unit as a tree with one nested in it, and every status', async () => {
-      // One row per person at every size (UI V1): the name the row's link, the groups as headed sections, the tree
-      // as nested named lists.
+    it('P19.18-T5 the roster, populated: the unit lines, a team line, the rows with their coaching status tiles', async () => {
+      // One row per person at every size: the name the row's link, each unit a headed section with its toggle.
       stubFetch({ ...shell, '/coaching/coachees': { body: roster } });
       renderInLayout(AgentLayout, <CoachingRosterPage />, { me: leader });
-      await screen.findByRole('heading', { level: 2, name: 'Everyone you coach' });
+      await screen.findByRole('heading', { level: 2, name: /Everyone/ });
       await screen.findAllByRole('link', { name: /.+/ });
       await expectClean('coaching (UI V1)');
     });
 
     it('the roster with nobody to coach', async () => {
-      stubFetch({ ...shell, '/coaching/coachees': { body: { ...roster, directAgents: [], units: [] } } });
+      stubFetch({ ...shell, '/coaching/coachees': { body: { ...roster, total: 0, sections: [] } } });
       renderInLayout(AgentLayout, <CoachingRosterPage />, { me: leader });
       await screen.findByText('No data yet');
       await expectClean('coaching (empty)');
@@ -1759,8 +1442,8 @@ describe('screens have no axe violations', () => {
       })));
       stubFetch({ ...shell, '/coaching/coachees': { body: roster } });
       renderInLayout(AgentLayout, <CoachingRosterPage />, { me: leader });
-      // A phone draws the roster as cards (P18.7-T3 AC-3), headed by the table's caption.
-      await screen.findByRole('heading', { name: 'Everyone you coach' });
+      // P19.18-T5: the roster's card is headed *Everyone · n* at every size.
+      await screen.findByRole('heading', { name: /Everyone/ });
       expect(document.querySelector('[data-tab-bar]')).not.toBeNull();
       expect(screen.getByRole('link', { name: 'Your profile' })).toHaveAttribute('href', '/profile');
       await expectClean('coaching (the field shell on a phone)');
@@ -2537,119 +2220,6 @@ describe('screens have no axe violations', () => {
     await expectClean('user-management/add (a move asked of the office)');
   });
 
-  it('the removed list, populated', async () => {
-    const owner = makeMe({
-      membership: {
-        membershipId: 'mem-owner', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab',
-        isKpmOwner: true, isKpmAdmin: false, status: 'active', directCount: 0,
-      },
-      permissions: ['member:read_profile'],
-    });
-    stubFetch({
-      '/members': {
-        body: {
-          members: [{
-            membershipId: 'mem-1', agentCode: 'KPM0417-001', role: 'agent', status: 'removed',
-            fullName: 'Rina Wijaya', preferredName: 'Rina', email: 'rina@kpm0417.test',
-            initials: 'RW', leaderId: null, leaderName: 'Wilson Tanoto', depth: 1,
-            directCount: 0, directCounts: { ab: 0, aab: 0, agent: 0, total: 0 }, subtreeCount: 0, isLeader: false, isKpmOwner: false,
-            isKpmAdmin: false, joinedAt: '2026-03-01T00:00:00.000Z',
-            removedAt: '2026-07-19T04:00:00.000Z',
-          }],
-          nextCursor: null,
-        },
-      },
-    });
-    renderInLayout(TenantLayout, <MembersPage />, { me: owner });
-    await userEvent.click(await screen.findByRole('button', { name: 'Removed' }));
-    await screen.findByRole('table');
-    await expectClean('people/members (removed)');
-  });
-
-  it('the Pending tab’s transfer requests, populated (P18.8-T3 AC-3)', async () => {
-    const owner = makeMe({
-      membership: {
-        membershipId: 'mem-owner', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab',
-        isKpmOwner: true, isKpmAdmin: false, status: 'active', directCount: 0,
-      },
-      permissions: ['member:read_profile', 'member:transfer_approve'],
-    });
-    stubFetch({
-      '/join/requests': { body: [] },
-      '/members/leader-limit-requests': { body: [] },
-      '/members': { body: { members: [], nextCursor: null, counts: { directory: 8, pending: 0, removed: 1 } } },
-      '/transfer-requests': { body: [transfer()] },
-    });
-    renderInLayout(TenantLayout, <MembersPage />, { me: owner });
-    await userEvent.click(await screen.findByRole('button', { name: /^Pending/ }));
-    await screen.findByRole('table', { name: 'Transfer requests, oldest first' });
-    await expectClean('people/members (transfer requests)');
-  });
-
-  it('the Pending queue, populated', async () => {
-    const owner = makeMe({
-      membership: {
-        membershipId: 'mem-owner', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab',
-        isKpmOwner: true, isKpmAdmin: false, status: 'active', directCount: 0,
-      },
-      permissions: ['member:read_profile'],
-    });
-    stubFetch({
-      '/join/requests': {
-        body: [{
-          requestId: 'req-1', membershipId: 'mem-9', fullName: 'Putri Anggraini', initials: 'PA',
-          email: 'putri@kpm0417.test', agentCode: 'KPM0417-009', role: 'agent',
-          requestedAt: '2026-09-01T00:00:00.000Z', routedFromName: null,
-        }],
-      },
-      '/members': {
-        body: {
-          members: [{
-            membershipId: 'mem-9', agentCode: 'KPM0417-009', role: 'agent', status: 'pending',
-            fullName: 'Putri Anggraini', preferredName: null, email: 'putri@kpm0417.test',
-            initials: 'PA', leaderId: null, leaderName: null, depth: 0, directCount: 0,
-            subtreeCount: 0, isLeader: false, isKpmOwner: false, isKpmAdmin: false,
-            joinedAt: null, removedAt: null,
-          }],
-          nextCursor: null,
-          counts: { directory: 8, pending: 1, removed: 0 },
-        },
-      },
-    });
-    renderInLayout(TenantLayout, <MembersPage />, { me: owner });
-    await userEvent.click(await screen.findByRole('button', { name: 'Pending (1)' }));
-    await screen.findByRole('table');
-    await expectClean('people/members (pending)');
-    // P18.8-T7 G1: *Approve* opens the row's *Join date*, the shared field, before it sends.
-    await userEvent.click(screen.getByRole('button', { name: 'Approve' }));
-    await screen.findByLabelText('Join date');
-    await expectClean('people/members (pending, the join date asked)');
-  });
-
-  it('the role change log, populated', async () => {
-    const owner = makeMe({
-      membership: {
-        membershipId: 'mem-owner', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab',
-        isKpmOwner: true, isKpmAdmin: false, status: 'active', directCount: 0,
-      },
-      permissions: ['member:read_profile'],
-    });
-    stubFetch({
-      '/members/role-changes': {
-        body: [{
-          membershipId: 'mem-1', fullName: 'Rina Wijaya', agentCode: 'KPM0417-001',
-          fromRole: 'agent', toRole: 'aab', reason: 'Ready to lead a unit',
-          actorName: 'Wilson Tanoto', changedAt: '2026-08-14T03:20:00.000Z',
-        }],
-      },
-      '/members': { body: { members: [], nextCursor: null } },
-    });
-    renderInLayout(TenantLayout, <MembersPage />, { me: owner });
-    await userEvent.click(await screen.findByRole('button', { name: 'Role change log' }));
-    await screen.findByRole('table');
-    await expectClean('people/members (role change log)');
-  });
-
   it('the approval inbox, with a request and somewhere to route it', async () => {
     const ab = makeMe({
       membership: {
@@ -2709,188 +2279,6 @@ describe('screens have no axe violations', () => {
     await expectClean('group-tree');
   });
 
-  it('the org tree, populated, with a second root', async () => {
-    const owner = makeMe({
-      membership: {
-        membershipId: 'mem-owner', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab',
-        isKpmOwner: true, isKpmAdmin: false, status: 'active', directCount: 1,
-      },
-      permissions: ['member:read_profile', 'org_tree:read'],
-    });
-    stubFetch({
-      '/members/tree': {
-        body: {
-          nodes: [
-            treeNode({ membershipId: 'mem-owner', fullName: 'Wilson Tanoto', initials: 'WT',
-                       role: 'ab', layer: 1, isLeader: true, directCount: 1, isSelf: true }),
-            treeNode({ membershipId: 'mem-ab', fullName: 'Agus Prasetyo', initials: 'AP',
-                       role: 'ab', layer: 2, leaderId: 'mem-owner' }),
-            treeNode({ membershipId: 'mem-orphan', fullName: 'Sari Puspita', initials: 'SP',
-                       role: 'aab', layer: 1 }),
-          ],
-          leader: null,
-          rootIds: ['mem-owner', 'mem-orphan'],
-          selfId: 'mem-owner',
-          counts: { ab: 1, aab: 1, agent: 0, total: 2 },
-        },
-      },
-    });
-    renderInLayout(TenantLayout, <OrgTreePage />, { me: owner });
-    await screen.findByText('Layer 1');
-    await expectClean('people/org-tree');
-  });
-
-  it('the Groups tab with a create form open', async () => {
-    const owner = makeMe({
-      membership: {
-        membershipId: 'mem-owner', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab',
-        isKpmOwner: true, isKpmAdmin: false, status: 'active', directCount: 0,
-      },
-      permissions: ['member:read_profile'],
-    });
-    stubFetch({
-      '/members/groups': {
-        body: [{
-          groupId: 'grp-1', name: 'New Agent Mentoring Circle', ownerMembershipId: 'mem-1',
-          ownerName: 'Rina Wijaya', ownerHasLeft: false, memberCount: 2,
-        }],
-      },
-      '/members/tree': {
-        body: {
-          nodes: [treeNode({ membershipId: 'mem-1', fullName: 'Rina Wijaya', initials: 'RW' })],
-          leader: null, rootIds: ['mem-1'], selfId: null,
-          counts: { ab: 0, aab: 0, agent: 1, total: 1 },
-        },
-      },
-      '/members': { body: { members: [], nextCursor: null } },
-    });
-    renderInLayout(TenantLayout, <MembersPage />, { me: owner });
-    await userEvent.click(await screen.findByRole('button', { name: 'Groups' }));
-    await screen.findByRole('table');
-    // The form is where a label, a legend or a select can be got wrong.
-    await userEvent.click(screen.getByRole('button', { name: 'Create group' }));
-    await screen.findByLabelText('Group name');
-    await expectClean('people/members (groups)');
-  });
-
-  it('the person page with its data opened and the informal groups’ form open (P19.12-T5)', async () => {
-    const owner = makeMe({
-      membership: {
-        membershipId: 'mem-owner', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab',
-        isKpmOwner: true, isKpmAdmin: false, status: 'active', directCount: 0,
-      },
-      permissions: ['member:read_profile', 'member:complete_personal'],
-    });
-    stubFetch({
-      '/members/mem-1/reports': { body: [] },
-      '/members/mem-1/performance': { body: MEMBER_PERFORMANCE },
-      '/members/mem-1/tags': {
-        body: { membershipId: 'mem-1', fullName: 'Rina Wijaya', groupIds: ['grp-1'], isCoreLeader: true },
-      },
-      '/members/groups': {
-        body: [{
-          groupId: 'grp-1', name: 'New Agent Mentoring Circle', ownerMembershipId: 'mem-9',
-          ownerName: 'Wilson Tanoto', ownerHasLeft: false, memberCount: 1,
-        }],
-      },
-      '/members/mem-1': {
-        body: {
-          membershipId: 'mem-1', agentCode: 'KPM0417-001', role: 'agent', status: 'active',
-          fullName: 'Rina Wijaya', preferredName: 'Rina', email: 'rina@kpm0417.test',
-          initials: 'RW', leaderId: null, leaderName: 'Wilson Tanoto', depth: 1,
-          directCount: 0, directCounts: { ab: 0, aab: 0, agent: 0, total: 0 }, subtreeCount: 0, isLeader: false, isKpmOwner: false,
-          isKpmAdmin: false, joinedAt: '2026-03-01T00:00:00.000Z', removedAt: null,
-          canChangeRole: true, canPromoteToAb: true, canRemove: true, canChangeLeader: true, invitation: 'invited',
-          // P18.5-T4: what the person records, one of them not recorded; P19.12-T5: their WhatsApp number.
-          personal: {
-            dateOfBirth: '1990-03-15', gender: 'female', companyJoinMonth: null, workStatus: 'full_time',
-            phone: '+6281211002200', companyName: 'Prudential',
-          },
-        },
-      },
-    });
-    renderInLayout(TenantLayout, <MemberPage params={routeParams({ membershipId: 'mem-1' })} />, { me: owner });
-    const data = await screen.findByRole('heading', { name: 'Personal data' });
-    await userEvent.click(data.closest('summary')!);
-    await screen.findByRole('link', { name: '+6281211002200' });
-    await expectClean('people/members/[id] (populated, its data opened)');
-    await userEvent.click(screen.getByRole('button', { name: 'Edit informal groups' }));
-    await screen.findByLabelText('Core Leader');
-    await expectClean('people/members/[id] (informal groups)');
-    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Complete details' }));
-    await screen.findByRole('dialog', { name: 'Complete Rina’s details' });
-    await expectClean('people/members/[id] (complete details)');
-  });
-
-  it('the person page with its role change and removal open (P3.1-T13)', async () => {
-    // Both controls are new states, and the removal one is a `fieldset` of radios that
-    // only appears for a leader with reports — the shape most likely to be got wrong.
-    const owner = makeMe({
-      membership: {
-        membershipId: 'mem-owner', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab',
-        isKpmOwner: true, isKpmAdmin: false, status: 'active', directCount: 0,
-      },
-      permissions: ['member:read_profile', 'member:change_role', 'member:remove_from_team'],
-    });
-    stubFetch({
-      '/members/mem-1/reports': { body: [] },
-      '/members/mem-1/performance': { body: MEMBER_PERFORMANCE },
-      '/members/mem-1/tags': { body: { groupIds: [], isCoreLeader: false } },
-      '/members/groups': { body: [] },
-      '/members/mem-1': {
-        body: {
-          membershipId: 'mem-1', agentCode: 'KPM0417-001', role: 'aab', status: 'active',
-          fullName: 'Rina Wijaya', preferredName: 'Rina', email: 'rina@kpm0417.test',
-          initials: 'RW', leaderId: 'mem-ab', leaderName: 'Wilson Tanoto', depth: 1,
-          directCount: 3, subtreeCount: 5, isLeader: true, isKpmOwner: false,
-          isKpmAdmin: false, joinedAt: '2026-03-01T00:00:00.000Z', removedAt: null,
-          canChangeRole: true, canPromoteToAb: true, canRemove: true,
-        },
-      },
-    });
-    renderInLayout(TenantLayout, <MemberPage params={routeParams({ membershipId: 'mem-1' })} />, { me: owner });
-
-    // P19.12-T5: each in its own form, opened from the card and from the foot of the page.
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit role' }));
-    await userEvent.selectOptions(screen.getByLabelText('New role'), 'ab');
-    await expectClean('people/members/[id] (role change)');
-    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Remove from the office' }));
-    await screen.findByLabelText('Type REMOVE to confirm');
-    await expectClean('people/members/[id] (removal)');
-  });
-
-  it('manage KPM admins, populated and with a revoke waiting', async () => {
-    const owner = makeMe({
-      membership: {
-        membershipId: 'mem-owner', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab',
-        isKpmOwner: true, isKpmAdmin: false, status: 'active', directCount: 1,
-      },
-      permissions: ['member:read_profile', 'kpm_admin:grant', 'kpm_admin:revoke', 'kpm_admin:list'],
-    });
-    stubFetch({
-      '/members/admins': {
-        body: [{
-          membershipId: 'mem-admin', fullName: 'Maya Halim', initials: 'MH',
-          agentCode: 'KPM0417-002', role: 'ab', grantedAt: '2026-01-14T00:00:00.000Z',
-          grantedByName: 'Wilson Tanoto', canRevoke: true,
-        }],
-      },
-      '/members/tree': {
-        body: {
-          nodes: [treeNode({ membershipId: 'mem-agus', fullName: 'Agus Prasetyo', role: 'ab' })],
-          leader: null, rootIds: ['mem-agus'], selfId: null,
-          counts: { ab: 1, aab: 0, agent: 0, total: 1 },
-        },
-      },
-    });
-    renderInLayout(TenantLayout, <AdminsPage />, { me: owner });
-    await userEvent.click(await screen.findByRole('button', { name: 'Revoke' }));
-    await screen.findByRole('button', { name: 'Revoke access' });
-    await expectClean('people/admins');
-  });
-
   /**
    * The sweep deliberately tests populated screens, which leaves the state every one of
    * them opens in untested. A skeleton is a grid of `aria-hidden` bars inside a live
@@ -2947,91 +2335,75 @@ describe('screens have no axe violations', () => {
   it('audit log', async () => {
     stubFetch({ '/admin/audit': { body: AUDIT_PAGE }, '/admin/tenants': { body: [KPM] } });
     renderInLayout(AdminLayout, <AuditPage />, { me: SUPER_ADMIN });
-    await screen.findByRole('table');
-    await expectClean('admin/audit');
+    await screen.findByRole('list', { name: 'Audit entries, newest first' });
+    await expectClean('admin/platform/audit');
   });
 
-  describe('Cross-platform analytics (P18-T8 AC-4)', () => {
-    const ANALYST = { ...SUPER_ADMIN, permissions: [...SUPER_ADMIN.permissions, 'platform_analytics:read'] };
-    const rungs = (agent: number, aab: number, ab: number) => [
-      { code: 'AGENT', label: 'Agent', count: agent },
-      { code: 'AAB', label: 'AAB', count: aab },
-      { code: 'AB', label: 'AB', count: ab },
-    ];
-    const figures = (members: number, agent: number, aab: number, ab: number) => ({
-      members, byRung: rungs(agent, aab, ab), joinedThisMonth: 2, leftThisMonth: 1, signedIn7d: 3, signedIn30d: members,
+  // P19.23-T6 (ADR-0279; frames f53–f55): *Platform*'s other three sections, each in its populated state.
+  it('platform: Tim Super Admin, Pengaturan platform and Pengumuman', async () => {
+    const ROOT = { ...SUPER_ADMIN, permissions: [...SUPER_ADMIN.permissions, 'super_admin:read', 'platform_settings:read', 'announcement:read'] };
+    stubFetch({
+      '/admin/platform/team': { body: [
+        { userId: 'u-root', fullName: 'PLATFORM OPERATOR', email: 'superadmin@agencyboost.id', status: 'active', isYou: true },
+        { userId: 'u-dina', fullName: 'DINA KUSUMA', email: 'dina@agencyboost.id', status: 'active', isYou: false },
+      ] },
+      '/admin/platform/settings': { body: {
+        whatsappNumber: '+628112000300', aiReadingKey: 'set', defaultLook: { systemName: 'AgencyBoost', editable: false }, updatedAt: null,
+      } },
+      '/admin/platform/announcements/preview': { body: { audience: 'owners', recipients: 8 } },
+      '/admin/platform/announcements': { body: [{
+        announcementId: 'an-1', message: 'Fitur proposal baru sudah tersedia di menu Leads.', audience: 'owners', chosen: [],
+        recipientCount: 8, sentBy: { userId: 'u-root', fullName: 'PLATFORM OPERATOR' }, sentAt: '2026-11-19T03:00:00.000Z',
+      }] },
+      '/admin/tenants': { body: [KPM] },
     });
-    const VIEW = {
-      offices: [
-        { kpmId: 'kpm-1', code: '0417', branch: 'BSD City Branch', company: { id: 'co-1', name: 'Prudential' }, state: 'active', ...figures(40, 34, 4, 2) },
-        { kpmId: 'kpm-2', code: '0555', branch: 'Kelapa Gading Branch', company: { id: 'co-1', name: 'Prudential' }, state: 'suspended', ...figures(10, 8, 1, 1) },
-      ],
-      companies: [{ id: 'co-1', name: 'Prudential', offices: 2, ...figures(50, 42, 5, 3) }],
-      platform: { offices: 2, companies: 1, ...figures(50, 42, 5, 3) },
-    };
-
-    it('the table, with its office rows, the company’s total and the platform’s', async () => {
-      nav.pathname = '/admin/analytics';
-      stubFetch({ '/admin/analytics': { body: VIEW } });
-      renderInLayout(AdminLayout, <PlatformAnalyticsPage />, { me: ANALYST });
-      await screen.findByRole('table', { name: 'Adoption by KPM and company' });
-      await expectClean('admin/analytics');
-    });
-
-    it('empty and error', async () => {
-      nav.pathname = '/admin/analytics';
-      stubFetch({ '/admin/analytics': { body: { ...VIEW, offices: [], companies: [] } } });
-      renderInLayout(AdminLayout, <PlatformAnalyticsPage />, { me: ANALYST });
-      await screen.findByText('No KPMs on the platform yet.');
-      await expectClean('admin/analytics (empty)');
-      cleanup();
-      stubFetch({
-        '/admin/analytics': { status: 500, body: { error: { code: 'INTERNAL', message: 'Something went wrong.', requestId: 'req-1' } } },
-      });
-      renderInLayout(AdminLayout, <PlatformAnalyticsPage />, { me: ANALYST });
-      await screen.findByRole('button', { name: 'Try again' });
-      await expectClean('admin/analytics (error)');
-    });
+    const team = renderInLayout(AdminLayout, <PlatformTeamPage />, { me: ROOT });
+    await screen.findByText('DINA KUSUMA');
+    await expectClean('admin/platform/team');
+    team.unmount();
+    const settings = renderInLayout(AdminLayout, <PlatformSettingsPage />, { me: ROOT });
+    await screen.findByText('•••• stored');
+    await expectClean('admin/platform/settings');
+    settings.unmount();
+    renderInLayout(AdminLayout, <PlatformAnnouncementsPage />, { me: ROOT });
+    await screen.findByText('Fitur proposal baru sudah tersedia di menu Leads.');
+    await expectClean('admin/platform/announcements');
   });
 
   // Three screens the sweep had never seen. It covered 23 of 31 when route groups landed,
   // and the gap was invisible because nothing counts the file against the route tree.
 
-  it('KPM registration requests, with one waiting to be decided', async () => {
-    stubFetch({
-      '/admin/kpm-requests': {
-        body: [{
-          requestId: 'req-1', branchName: 'Surabaya Branch', companyId: 'co-1',
-          companyName: 'Prudential', requestedByName: 'Rangga Wibisono',
-          requestedByEmail: 'rangga@example.test', note: 'Twelve agents already here.',
-          status: 'pending', requestedAt: '2026-09-01T00:00:00.000Z',
-          decidedAt: null, reason: null, createdKpmId: null,
-        }],
-      },
-    });
-    renderInLayout(AdminLayout, <KpmRequestsPage />, { me: SUPER_ADMIN });
-    await screen.findByLabelText('KPM code');
-    await expectClean('admin/kpm-requests');
-  });
-
-  it('P18.5-T2: leaders past the limit, one waiting and one decided', async () => {
-    const row = {
-      requestId: 'llr-1', kpmId: 'kpm-1', kpmCode: '0603', kpmBranchName: 'Tangerang Branch',
+  // P19.23-T3 AC-2 (ADR-0277): *Persetujuan*, both queues — the old two addresses redirect here.
+  it('approvals, one of each kind waiting and one decided', async () => {
+    const kpmRow = {
+      requestId: 'req-1', branchName: 'Surabaya Branch', companyId: 'co-1', companyName: 'Prudential',
+      requestedByName: 'Rangga Wibisono', requestedByEmail: 'rangga@example.test', note: null, status: 'pending',
+      requestedAt: '2026-09-01T00:00:00.000Z', decidedAt: null, decidedByName: null, reason: null, createdKpmId: null,
+      requestedByPhone: null, requesterCompanyId: 'co-1', requesterCompanyName: 'Prudential', requesterEmailVerified: true,
+      createdKpm: null,
+    };
+    const limitRow = {
+      requestId: 'llr-1', kpmId: 'kpm-1', kpmCode: '0603', kpmBranchName: 'Tangerang Branch', companyName: 'Prudential',
       subjectMembershipId: 'mem-1', subjectName: 'Rizky Ramadhan', subjectAgentCode: '86114', action: 'promote',
-      fromOrgLevelCode: 'AGENT', toOrgLevelCode: 'AAB', reason: 'Ready to bring on his own agents',
-      requestedByMembershipId: 'mem-owner', requestedByName: 'Hendra Gunawan', status: 'pending',
-      requestedAt: '2026-10-25T00:00:00.000Z', decidedAt: null, declineReason: null, maxLeaders: 10, leadersUsed: 13,
+      fromOrgLevelCode: 'AGENT', toOrgLevelCode: 'AAB', reason: null, requestedByMembershipId: 'mem-owner',
+      requestedByName: 'Hendra Gunawan', status: 'pending', requestedAt: '2026-10-25T00:00:00.000Z', decidedAt: null,
+      decidedByName: null, declineReason: null, maxLeaders: 10, leadersUsed: 11,
     };
     stubFetch({
+      '/admin/kpm-requests': { body: [kpmRow] },
       '/admin/leader-limit-requests': {
-        body: [row, { ...row, requestId: 'llr-2', subjectName: 'Irfan Hakim', status: 'approved', decidedAt: '2026-09-16T00:00:00.000Z' }],
+        body: [limitRow, { ...limitRow, requestId: 'llr-2', status: 'approved', decidedAt: '2026-09-16T00:00:00.000Z', decidedByName: 'Dina Kusuma' }],
       },
+      '/companies': { body: [] },
     });
-    renderInLayout(AdminLayout, <LeaderLimitRequestsPage />, {
-      me: makeMe({ ...SUPER_ADMIN, permissions: [...SUPER_ADMIN.permissions, 'leader_limit_request:read', 'leader_limit_request:decide'] }),
+    renderInLayout(AdminLayout, <ApprovalsPage />, {
+      me: makeMe({
+        ...SUPER_ADMIN,
+        permissions: [...SUPER_ADMIN.permissions, 'kpm_request:read', 'kpm_request:decide', 'leader_limit_request:read', 'leader_limit_request:decide'],
+      }),
     });
-    await screen.findByLabelText('Why not?');
-    await expectClean('admin/leader-limit-requests');
+    await screen.findByText('New KPM · Surabaya Branch');
+    await expectClean('admin/approvals');
   });
 
   it('the office administrators roster, populated', async () => {
@@ -3047,73 +2419,6 @@ describe('screens have no axe violations', () => {
     renderInLayout(AdminLayout, <TenantAdminsPage />, { me: SUPER_ADMIN });
     await screen.findByRole('table');
     await expectClean('admin/tenant-admins');
-  });
-
-  it('the roster import, the Owner’s, with the paste box and its worked examples (P19.4-T2: not the console’s)', async () => {
-    // P19.12-T7 (ADR-0250 §2–§4): a row's warnings in the warning tone, and a row invited on WhatsApp.
-    const ROSTER_ROWS = [
-      { line: 2, agentCode: '88001', fullName: 'Agus Prasetyo', role: 'AB', leaderAgentCode: '', email: 'agus@example.test', outcome: 'imported', messages: [],
-        warnings: ['Tanggal lahir: A date of birth must be at least 18 years ago. Left empty; the rest of the row is imported.'] },
-      { line: 3, agentCode: '88002', fullName: 'Sari', role: 'AAB', leaderAgentCode: '88001', email: '', outcome: 'updated', messages: ['Already here; details updated.'],
-        warnings: ['Incomplete: no Jenis kelamin. Import the row again with them to fill them in.'] },
-      { line: 4, agentCode: '88003', fullName: 'Rina', role: 'Agen Senior', leaderAgentCode: '88002', email: '', outcome: 'skipped', messages: ['Role "Agen Senior" does not exist. Use: Agent, AAB, AB.'], warnings: [] },
-      { line: 5, agentCode: '88004', fullName: 'Tono', role: 'Agent', leaderAgentCode: '88001', email: '', outcome: 'invited',
-        messages: ['No email: invited on WhatsApp instead. They register through the link with their own email and password.'], warnings: [] },
-    ];
-    // The placeholder is three lines of tab-separated text in a `font-mono` box — worth
-    // running axe over precisely because it is doing more than a placeholder usually does.
-    stubFetch({
-      '/admin/tenants/roster-template': {
-        body: {
-          header: 'Kode agen,Nama,Peran,Kode upline,No. WhatsApp,Email',
-          columns: [],
-          template: 'Kode agen,Nama,Peran,Kode upline,No. WhatsApp,Email\n',
-          examples: [
-            ['88001', 'Agus Prasetyo', 'AB', '', '0812 1100 8801', 'agus@example.test'],
-            ['88002', 'Puspita, Sari', 'AAB', '88001', '', 'sari@example.test'],
-            ['88003', 'Rina Wijaya', 'Agent', '88002', '', 'rina@example.test'],
-          ],
-        },
-      },
-      // P19.3-T4: the check's result per row (A3), the invitation, the skipped rows' download.
-      '/admin/tenants/kpm-1/roster/preview': {
-        body: {
-          issues: [], header: ['Kode agen', 'Nama', 'Peran'], counts: { imported: 1, updated: 1, invited: 1, skipped: 1 },
-          rows: ROSTER_ROWS,
-          skippedCsv: 'Kode agen,Nama,Peran,Alasan\n',
-        },
-      },
-      // P19.12-T7 (ADR-0250 §4): the import's answer, the invited row's WhatsApp button on it.
-      'POST /admin/tenants/kpm-1/roster': {
-        body: {
-          issues: [], header: ['Kode agen', 'Nama', 'Peran'], counts: { imported: 1, updated: 1, invited: 1, skipped: 1 },
-          rows: ROSTER_ROWS.map((row) => (row.outcome === 'invited'
-            ? { ...row, invite: { link: 'https://app.agencyboost.test/register?invite=kpm-1.s', phone: '+6281211003300' } } : row)),
-          skippedCsv: 'Kode agen,Nama,Peran,Alasan\n', invited: 1,
-        },
-      },
-    });
-    const owner = makeMe({
-      membership: {
-        membershipId: 'mem-owner', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab',
-        isKpmOwner: true, isKpmAdmin: false, status: 'active', directCount: 0,
-      },
-      permissions: ['member:read_profile', 'kpm:import_roster'],
-    });
-    renderInLayout(TenantLayout, <PeopleImportPage />, { me: owner });
-    // ADR-0184: the three parts, the filled file first; then the paste, whose box shows the worked examples.
-    await screen.findByRole('button', { name: 'Download Excel (.xlsx)' });
-    await expectClean('people/import');
-    await userEvent.click(screen.getByLabelText('Paste from a spreadsheet'));
-    await screen.findByLabelText('Rows from your spreadsheet');
-    await expectClean('people/import (paste)');
-    await userEvent.type(screen.getByLabelText('Rows from your spreadsheet'), '88001,Agus,AB');
-    await userEvent.click(screen.getByRole('button', { name: 'Check the file' }));
-    await screen.findByRole('table', { name: 'Each row of the file, and what it comes to' });
-    await expectClean('people/import (checked)');
-    await userEvent.click(screen.getByRole('button', { name: 'Import 3 people' }));
-    await screen.findByRole('link', { name: 'Send Tono their invitation on WhatsApp' });
-    await expectClean('people/import (done, an invitation on WhatsApp)');
   });
 
   it('choosing your own password, which wears no chrome at all', async () => {
@@ -3175,9 +2480,9 @@ describe('screens have no axe violations', () => {
     });
 
     it('the bell’s popover, open in the platform console', async () => {
-      stubFetch({ '/admin/overview': { body: OVERVIEW }, '/notifications': { body: { ...NOTICES, pageSize: 8 } } });
-      renderInLayout(AdminLayout, <AdminOverviewPage />, { me: SUPER_ADMIN });
-      await screen.findByText('2 offices have no Owner');
+      stubFetch({ '/notifications': { body: { ...NOTICES, pageSize: 8 } } });
+      renderInLayout(AdminLayout, <p>Console</p>, { me: SUPER_ADMIN });
+      await screen.findByRole('button', { name: 'Notifications, 1 unread' });
       await userEvent.click(screen.getByRole('button', { name: 'Notifications, 1 unread' }));
       // The popover's module loads on the bell's first tap (`notification-popover.tsx`, the bundle).
       const popover = await screen.findByRole('dialog', { name: 'Notifications' });
@@ -3188,12 +2493,11 @@ describe('screens have no axe violations', () => {
 
     it('the bell’s popover, with a row’s modal open over it', async () => {
       stubFetch({
-        '/admin/overview': { body: OVERVIEW },
         'POST /notifications/n-1/read': READ,
         '/notifications': { body: { ...NOTICES, pageSize: 8 } },
       });
-      renderInLayout(AdminLayout, <AdminOverviewPage />, { me: SUPER_ADMIN });
-      await screen.findByText('2 offices have no Owner');
+      renderInLayout(AdminLayout, <p>Console</p>, { me: SUPER_ADMIN });
+      await screen.findByRole('button', { name: 'Notifications, 1 unread' });
       await userEvent.click(screen.getByRole('button', { name: 'Notifications, 1 unread' }));
       await userEvent.click(await within(await screen.findByRole('dialog', { name: 'Notifications' }))
         .findByRole('button', { name: 'Unread: You are in' }));
@@ -3912,7 +3216,8 @@ describe('screens have no axe violations', () => {
       renderList();
       await screen.findByRole('region', { name: 'Running' });
       await userEvent.click(screen.getByRole('tab', { name: 'Structural' }));
-      await screen.findByRole('region', { name: 'Promotion Criteria' });
+      // One section since P19.25-T5 (ADR-0282 §4): no *Promotion Criteria* / *Production Clubs*.
+      await screen.findByRole('region', { name: 'Structural' });
       await expectClean('campaigns (structural)');
     });
 
@@ -4028,7 +3333,8 @@ describe('screens have no axe violations', () => {
       nav.pathname = '/kpm/settings/recruitment-pitch';
       stubFetch({ ...PITCH_SHELL, 'GET /recruitment/pitch-materials': { body: PITCH[state] } });
       renderInLayout(TenantLayout, <RecruitmentPitchPage />, { me: PITCH_OWNER });
-      await screen.findByRole('article', { name: 'Agency Profile' });
+      // P19.21-T3 AC-6: one list of the six (frame 22).
+      await screen.findByText('Agency Profile', { selector: 'p' });
       await expectClean(`kpm/settings/recruitment-pitch (${state})`);
     });
 
@@ -4036,8 +3342,8 @@ describe('screens have no axe violations', () => {
       nav.pathname = '/kpm/settings/recruitment-pitch';
       stubFetch({ ...PITCH_SHELL, 'GET /recruitment/pitch-materials': { body: PITCH['partly confirmed'] } });
       renderInLayout(TenantLayout, <RecruitmentPitchPage />, { me: PITCH_SUPPORT });
-      await screen.findByRole('article', { name: 'Agency Profile' });
-      expect(screen.getAllByRole('checkbox')[0]).toBeDisabled();
+      await screen.findByText('Agency Profile', { selector: 'p' });
+      expect(document.querySelectorAll('input[type=file]')).toHaveLength(0);
       await expectClean('kpm/settings/recruitment-pitch (read-only support session)');
     });
 
@@ -4051,15 +3357,18 @@ describe('screens have no axe violations', () => {
         },
       });
       renderInLayout(TenantLayout, <RecruitmentPitchPage />, { me: PITCH_OWNER });
+      // P19.21-T3 AC-6: a format no pitch takes, refused in its row; the ticks are behind *View*, in the sheet.
+      await screen.findByText('FAQ', { selector: 'p' });
+      await userEvent.upload(
+        screen.getByText('FAQ', { selector: 'p' }).closest('li')!.querySelector('input[type=file]') as HTMLInputElement,
+        new File(['x'], 'setup.exe', { type: 'application/x-msdownload' }),
+        { applyAccept: false },
+      );
+      await screen.findByText(/is not a pitch format/);
+      await userEvent.click(screen.getByRole('button', { name: /^View Opportunity Overview/ }));
       const opportunity = await screen.findByRole('article', { name: 'Opportunity Overview' });
       await userEvent.click(within(opportunity).getByRole('checkbox', { name: ITEMS[1][1] }));
       await within(opportunity).findByText(/This PDF was replaced while the page was open/);
-      // Named like a PDF, so the picker's own filter lets it through to the card's check.
-      await userEvent.upload(
-        screen.getByRole('article', { name: 'FAQ' }).querySelector('input[type=file]') as HTMLInputElement,
-        new File(['x'], 'scan.pdf', { type: 'image/png' }),
-      );
-      await screen.findByText(/is not a PDF/);
       await expectClean('kpm/settings/recruitment-pitch (refusals)');
     });
 
@@ -4177,7 +3486,9 @@ describe('screens have no axe violations', () => {
         <ActivityTypesPage />,
         { me: settingsOwner },
       );
-      await userEvent.click(await screen.findByRole('button', { name: 'Rename' }));
+      // P19.21-T3 AC-1: *Ganti nama* is the category's ⋯'s first item.
+      await userEvent.click(await screen.findByRole('button', { name: 'Actions for Selling' }));
+      await userEvent.click(screen.getByRole('menuitem', { name: 'Rename' }));
       expect(screen.getByLabelText('Summary tile')).toHaveValue('Selling');
       await expectClean('kpm/settings/activity-types, section edit');
     });
@@ -4228,7 +3539,8 @@ describe('screens have no axe violations', () => {
         },
       });
       renderInLayout(TenantLayout, <LeadStatusesPage />, { me: settingsOwner });
-      await screen.findByText('Paid and issued');
+      // P19.21-T3 AC-2: the stage drawn numbered, *"1. Paid and issued"*.
+      await screen.findByText('1. Paid and issued');
       await expectClean('kpm/settings/lead-statuses');
     });
 
@@ -4237,6 +3549,32 @@ describe('screens have no axe violations', () => {
       renderInLayout(TenantLayout, <BranchInfoPage />, { me: settingsOwner });
       await screen.findByDisplayValue('BSD City Branch');
       await expectClean('kpm/settings/branch-info');
+    });
+
+    // P19.21-T2 AC-1, AC-2: the Pengaturan hub, its bar and a status on four rows.
+    it('the settings hub, with its bar and the statuses that ask for action', async () => {
+      const none = {
+        activities: null, categories: null, skills: null, modules: null, windowDays: null, version: null, stages: null,
+        skillGroups: null, products: null, sold: null, materials: null, kpmCode: null, fiscalYearStartMonth: null,
+      };
+      const status: Record<string, unknown> = {
+        activity_types: { kind: 'unpublished' }, products: { kind: 'waiting', count: 2 },
+        recruitment_pitch: { kind: 'missing', count: 3 }, branding: { kind: 'no_logo' },
+      };
+      stubFetch({
+        ...configStubs,
+        '/kpm/settings/overview': {
+          body: {
+            settings: ['activity_types', 'lead_statuses', 'activation_checklist', 'training', 'capability_mapping', 'events',
+              'campaigns', 'products', 'recruitment_pitch', 'branch_info', 'branding']
+              .map((setting) => ({ setting, status: status[setting] ?? null, counts: { ...none, activities: 12, categories: 5 } })),
+            unpublished: ['activity_types'],
+          },
+        },
+      });
+      renderInLayout(TenantLayout, <SettingsHubPage />, { me: settingsOwner });
+      await screen.findByText('Not published');
+      await expectClean('kpm/settings');
     });
 
     const TRAINING = [{
@@ -4262,14 +3600,13 @@ describe('screens have no axe violations', () => {
      * P5-T1. Modules is the subtab with the most on it — two filters, a badge and three controls a
      * row — and the add panel opened over it, where a suggested code sits beside its label.
      */
-    it('training, on Modules with the add panel open', async () => {
-      window.history.replaceState(null, '', '/kpm/settings/training#modules');
+    // P19.25-T4 (ADR-0282): one tree, opened on its first skill, with the add form under it.
+    it('training, the tree with the add form open', async () => {
       stubFetch({ ...configStubs, '/kpm/settings/training': { body: TRAINING } });
       renderInLayout(TenantLayout, <TrainingSettingsPage />, { me: settingsOwner });
       await screen.findByText('Building Your Prospect List');
-      await userEvent.click(screen.getByRole('button', { name: '+ Add module' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Add module' }));
       await expectClean('kpm/settings/training');
-      window.history.replaceState(null, '', '/');
     });
 
     it('the office’s Capability Mapping (P5-T8)', async () => {
@@ -4295,44 +3632,22 @@ describe('screens have no axe violations', () => {
       });
       renderInLayout(TenantLayout, <CapabilityMappingPage />, { me: settingsOwner });
 
-      // Two halves now, the same two the Company template has. Both are walked.
-      await screen.findByRole('heading', { name: 'The ladder' });
-      await expectClean('kpm/settings/capability-mapping#ladder');
-
-      await userEvent.click(screen.getByRole('link', { name: 'Skills' }));
+      // P19.21-T3 AC-4 (frame 18): the two cards side by side, a skill group open and a stage being added.
+      await screen.findByRole('heading', { name: 'Ladder' });
       await screen.findByText('Approach & appointment setting');
-      await expectClean('kpm/settings/capability-mapping#skills');
+      await expectClean('kpm/settings/capability-mapping');
+      await userEvent.click(screen.getByRole('button', { name: 'Add a stage' }));
+      await expectClean('kpm/settings/capability-mapping (adding a stage)');
     });
 
-    it('the office’s Campaigns, on the carrier-rules tab (P5-T7)', async () => {
+    // P19.25-T5 (ADR-0282): Semua · Struktural · Musiman and the list; no carrier-rules tab.
+    it('the office’s Campaigns, the filter and the list (P5-T7, P19.25-T5)', async () => {
       const money = (value: number) => ({
         metricKey: 'APE_ACHIEVED', metricName: 'APE achieved', comparator: 'gte',
         value, unit: 'idr_minor',
       });
       stubFetch({
         ...configStubs,
-        '/kpm/settings/campaigns/rules': {
-          body: [
-            {
-              id: 't1', kind: 'production_club', code: 'STAR_CLUB', name: 'Star Club',
-              appliesToOrgLevelCodes: [],
-              criteriaGroups: [{ mode: 'all', criteria: [money(120_000_000_000)] }],
-              groupMode: 'all', reward: 'Promotion bonus', rank: 1, waitingOnMetrics: [],
-            },
-            {
-              id: 'm1', kind: 'moc', code: 'MOC_AB', name: 'Maintenance of Contract — AB',
-              appliesToOrgLevelCodes: ['AB'],
-              criteriaGroups: [{
-                mode: 'all',
-                criteria: [{
-                  metricKey: 'NET_APE', metricName: 'NET_APE', comparator: 'gte',
-                  value: 60_000_000_000, unit: 'idr_minor',
-                }],
-              }],
-              groupMode: 'any', reward: '', rank: 1, waitingOnMetrics: ['NET_APE'],
-            },
-          ],
-        },
         '/kpm/settings/campaigns': {
           body: [{
             id: 'c1', code: 'YEAR_END_DRIVE', title: 'Year-End Star Club Drive',
@@ -4346,16 +3661,13 @@ describe('screens have no axe violations', () => {
         },
       });
       renderInLayout(TenantLayout, <CampaignsSettingsPage />, { me: settingsOwner });
-      await screen.findByRole('checkbox', { name: 'Show archived' });
-      await userEvent.click(screen.getByRole('link', { name: 'Production club tiers' }));
-      await screen.findByText('Star Club');
+      await screen.findByText('Year-End Star Club Drive');
       await expectClean('kpm/settings/campaigns');
     });
 
     it('the office’s Campaigns, the form open on a structural campaign with every D-field (P18.2-T7 AC-9)', async () => {
       stubFetch({
         ...configStubs,
-        '/kpm/settings/campaigns/rules': { body: [] },
         '/kpm/settings/campaigns': { body: [] },
         '/metrics': { body: [{ key: 'APE_ACHIEVED', name: 'APE achieved', unit: 'idr_minor', phase: '9', computed: true, campaign: true }] },
       });
@@ -4364,7 +3676,8 @@ describe('screens have no axe violations', () => {
       await userEvent.selectOptions(screen.getByLabelText('Kind'), 'structural');
       await userEvent.click(screen.getByRole('button', { name: '+ Add requirement' }));
       await userEvent.selectOptions(screen.getByLabelText('Requirement 1'), 'APE_ACHIEVED');
-      await screen.findByLabelText('Section');
+      // No *Section* since P19.25-T5 (ADR-0282 §5): a structural campaign is *Struktural*, read over its window.
+      await screen.findByLabelText('Read over');
       await expectClean('kpm/settings/campaigns (form)');
     });
 
@@ -4390,7 +3703,8 @@ describe('screens have no axe violations', () => {
       });
       // The list reads under `event_settings:read` since P18.2-T5 AC-2.
       renderInLayout(TenantLayout, <EventsSettingsPage />, { me: eventsOwner });
-      await userEvent.click(await screen.findByRole('button', { name: 'Add an event' }));
+      // P19.25-T3 (ADR-0281 §6): *+ Tambah event* at the list's foot.
+      await userEvent.click(await screen.findByRole('button', { name: '+ Add event' }));
       await expectClean('kpm/settings/events');
     });
 
@@ -4423,7 +3737,9 @@ describe('screens have no axe violations', () => {
     it('the office’s Events, View feedback open: the roll call and the Feedback Summary (P18.2-T5 AC-7, T6 AC-5)', async () => {
       stubFetch(eventsStubs);
       renderInLayout(TenantLayout, <EventsSettingsPage />, { me: eventsOwner });
-      await userEvent.click(await screen.findByRole('button', { name: 'View feedback' }));
+      // P19.25-T3 (ADR-0281 §6): the dialog is the past row's ⋯ › *Catat kehadiran*.
+      await userEvent.click(await screen.findByRole('button', { name: 'Actions for PRULink briefing' }));
+      await userEvent.click(await screen.findByRole('menuitem', { name: 'Record attendance' }));
       await screen.findByRole('table');
       await expectClean('kpm/settings/events (View feedback, Roll call)');
       // Tabs since P18.5-T13 (ADR-0161 §6): each part is checked in its own panel.
@@ -4435,7 +3751,8 @@ describe('screens have no axe violations', () => {
     it('the office’s Events, editing a chosen audience with the picker (P18.2-T5 AC-10)', async () => {
       stubFetch(eventsStubs);
       renderInLayout(TenantLayout, <EventsSettingsPage />, { me: eventsOwner });
-      await userEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+      await userEvent.click(await screen.findByRole('button', { name: 'Actions for PRULink briefing' }));
+      await userEvent.click(await screen.findByRole('menuitem', { name: 'Edit' }));
       await screen.findByRole('searchbox', { name: 'Search people' });
       await expectClean('kpm/settings/events (picker)');
     });
@@ -4469,6 +3786,9 @@ describe('screens have no axe violations', () => {
         },
       });
       renderInLayout(TenantLayout, <KpmProductsPage />, { me: settingsOwner });
+      // P19.21-T3 AC-5: the list, then a product's sheet from its ⋯ with its words open.
+      await expectClean('kpm/settings/products (the list)');
+      await userEvent.click(await screen.findByRole('button', { name: 'More for PRUMapan' }));
       await userEvent.click(await screen.findByRole('button', { name: 'Customize' }));
       await expectClean('kpm/settings/products');
     });
@@ -4505,7 +3825,7 @@ describe('screens have no axe violations', () => {
         },
       });
       renderInLayout(TenantLayout, <KpmProductsPage />, { me: settingsApprover });
-      await userEvent.click(await screen.findByRole('link', { name: 'Script approvals' }));
+      await userEvent.click(await screen.findByRole('link', { name: 'Scripts to approve' }));
       // Opened: the reason box is the one control that appears only on the way to a decision.
       await userEvent.click(await screen.findByRole('button', { name: 'Send back' }));
       await expectClean('kpm/settings/products#approvals');
@@ -4598,7 +3918,8 @@ describe('screens have no axe violations', () => {
       });
       renderInLayout(TenantLayout, <ActivationChecklistPage />, { me: settingsOwner });
       await screen.findByText('Learn insurance basics');
-      await userEvent.click(screen.getByRole('button', { name: '+ Add item' }));
+      // P19.21-T3 AC-3: *+ Tambah item* at the aspect card's foot, named for its aspect; it opens the add sheet.
+      await userEvent.click(screen.getByRole('button', { name: 'Add item to 1. Introduction' }));
       await expectClean('kpm/settings/activation-checklist');
     });
 
@@ -4644,16 +3965,18 @@ describe('screens have no axe violations', () => {
       },
     };
 
-    it('admin/companies/[companyId]: the template cards, and New template copying', async () => {
-      stubFetch(templateRoutes);
+    // *Changed 2026-11-20 (P19.23-T4 AC-2; ADR-0278 §1):* the company page is its *Jenjang* tab.
+    it('admin/companies/[companyId]: the Ladder tab, its rungs', async () => {
+      stubFetch({
+        ...templateRoutes,
+        '/admin/org-levels': {
+          body: [{ orgLevelId: 'r1', companyId: 'c1', code: 'AGENT', label: 'Agent', displayOrder: 1, leaderTier: null, status: 'active', archivedAt: null, version: 0 }],
+        },
+      });
       nav.pathname = '/admin/companies/c1';
       renderInLayout(AdminLayout, <CompanyPage params={routeParams({ companyId: 'c1' })} />, { me: ROOT });
-      await screen.findByRole('list', { name: 'Templates' });
+      await screen.findByText('1. Agent');
       await expectClean('admin/companies/[companyId]');
-      await userEvent.click(screen.getByRole('button', { name: 'New template' }));
-      await userEvent.click(screen.getByRole('radio', { name: /^Copy from/ }));
-      await screen.findByLabelText('Source template');
-      await expectClean('admin/companies/[companyId] (New template)');
     });
 
     it('admin/companies/[companyId]/templates/[templateId]: the checklist, Publish all asked, the offices behind', async () => {
@@ -4756,16 +4079,11 @@ describe('screens have no axe violations', () => {
           }],
         },
       });
+      // *Changed 2026-11-20 (P19.23-T4 AC-4; ADR-0278 §1):* *Pengaturan template*, the owner hub's groups.
       nav.pathname = '/admin/companies/c1/settings';
       renderInLayout(AdminLayout, <CompanySettingsPage params={routeParams({ companyId: 'c1' })} />, { me: ROOT });
-      // The product opened from its row, in its side panel (P19.2-T2 AC-2; UI-131); Escape closes it.
-      await userEvent.click(await screen.findByRole('button', { name: 'PRUMapan' }));
-      await screen.findByRole('dialog', { name: 'PRUMapan' });
-      await expectClean('admin/companies/[companyId]/settings#products');
-      await userEvent.keyboard('{Escape}');
-      await userEvent.click(screen.getByRole('link', { name: 'Campaigns' }));
-      await screen.findByText('Star Club');
-      await expectClean('admin/companies/[companyId]/settings#campaigns');
+      await screen.findByRole('link', { name: 'Campaigns' });
+      await expectClean('admin/companies/[companyId]/settings');
     });
   });
 
@@ -4820,7 +4138,8 @@ describe('screens have no axe violations', () => {
       });
       inIndonesian('/kpm/settings/activity-types', <ActivityTypesPage />);
       await screen.findByText('Dihitung sebagai: Submission polis');
-      await screen.findByText('Agent Anda belum melihat perubahan ini.');
+      // The per-setting bar (P19.21-T2 AC-3), found by its button rather than its sentence, which is the frame's.
+      await screen.findByRole('button', { name: 'Terbitkan ke agent' });
       await expectClean('kpm/settings/activity-types (id)');
     });
 
@@ -4854,7 +4173,8 @@ describe('screens have no axe violations', () => {
         },
       });
       inIndonesian('/kpm/settings/lead-statuses', <LeadStatusesPage />);
-      await screen.findByText('Menutup pipeline');
+      // P19.21-T3 AC-2: the stage that closes the pipeline tagged *Penutup*.
+      await screen.findByText('Penutup');
       await expectClean('kpm/settings/lead-statuses (id)');
     });
 
@@ -4865,6 +4185,10 @@ describe('screens have no axe violations', () => {
       await expectClean('kpm/settings/branch-info (id)');
     });
 
+    /*
+     * *Changed 2026-11-20 (P19.21-T3 AC-4):* the ladder and the skill tracker are two cards on one page — no tabs to
+     * move between — so both halves are read at once.
+     */
     it('capability mapping, both halves', async () => {
       const e = (code: string, label: string) => ({ code, label, displayOrder: 1, status: 'active' });
       stubFetch({
@@ -4879,12 +4203,10 @@ describe('screens have no axe violations', () => {
         },
       });
       inIndonesian('/kpm/settings/capability-mapping', <CapabilityMappingPage />);
-      await screen.findByText('Perlu 1 milestone');
-      await expectClean('kpm/settings/capability-mapping#ladder (id)');
-      await userEvent.click(screen.getByRole('link', { name: 'Skills' }));
-      await screen.findByText('Hanya untuk yang memiliki downline');
-      await expectClean('kpm/settings/capability-mapping#skills (id)');
-      window.location.hash = '';
+      await screen.findByText('Produsen kompeten');
+      await screen.findByRole('region', { name: 'Skill tracker' });
+      await screen.findByText('Pendekatan');
+      await expectClean('kpm/settings/capability-mapping (id)');
     });
 
     it('activation checklist, an item being added', async () => {
@@ -4907,11 +4229,16 @@ describe('screens have no axe violations', () => {
       });
       inIndonesian('/kpm/settings/activation-checklist', <ActivationChecklistPage />);
       await screen.findByText('Pelajari dasar-dasar asuransi');
-      await userEvent.click(screen.getByRole('button', { name: '+ Tambah item' }));
+      // P19.21-T3 AC-3: *+ Tambah item* at the aspect card's foot, named for its aspect.
+      await userEvent.click(screen.getByRole('button', { name: 'Tambah item ke 1. Pengenalan' }));
       await expectClean('kpm/settings/activation-checklist (id)');
     });
 
-    it('recruitment pitch, partly confirmed, with a refusal said in its card', async () => {
+    /*
+     * *Changed 2026-11-20 (P19.21-T3 AC-6):* the six materials are a list, any format; a refusal is said in its row,
+     * and the ticks are behind *Lihat*, in the material's sheet.
+     */
+    it('recruitment pitch, partly confirmed, with a refusal said in its row', async () => {
       const ticked = (code: string, label: string, on: boolean) => ({ code, label, ticked: on });
       const slot = (s: string, title: string, over: Record<string, unknown> = {}) => ({
         slot: s, title, line: `${title}'s line`, required: s !== 'company' && s !== 'agency', state: 'missing', file: null,
@@ -4934,12 +4261,13 @@ describe('screens have no axe violations', () => {
         },
       });
       inIndonesian('/kpm/settings/recruitment-pitch', <RecruitmentPitchPage />);
-      await screen.findByText('Recruitment Pitch belum lengkap');
+      const faq = (await screen.findByText('FAQ', { selector: 'p' })).closest('li') as HTMLElement;
       await userEvent.upload(
-        screen.getByRole('article', { name: 'FAQ' }).querySelector('input[type=file]') as HTMLInputElement,
-        new File(['x'], 'scan.pdf', { type: 'image/png' }),
+        faq.querySelector('input[type=file]') as HTMLInputElement,
+        new File(['x'], 'data.xlsx', { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
+        { applyAccept: false },
       );
-      await screen.findByText(/bukan PDF/);
+      await within(faq).findByText(/bukan format materi pitch/);
       await expectClean('kpm/settings/recruitment-pitch (id)');
     });
   });
@@ -5008,87 +4336,26 @@ describe('screens have no axe violations', () => {
     });
   });
 
-  describe('KPM analytics (P18-T2 AC-10; P19.3-T3, every leader)', () => {
-    // The layout wears the reader's own shell (`RoleShell`, P18.5-T5), so it is the layout a page renders in.
-    const analyticsPage = (query: Record<string, string> = {}) => {
-      nav.search = new URLSearchParams(query).toString();
-      return <KpmAnalyticsPage />;
-    };
-
-    it.each([375, 768, 1280])('P19.3-T3 filled at %ipx: the totals, every leader, the chart', async (width) => {
-      atWidth(width);
-      nav.pathname = '/kpm/analytics';
-      stubFetch({ ...ANALYTICS_SHELL, 'GET /kpm/analytics': { body: analyticsView() } });
-      renderInLayout(KpmAnalyticsLayout, analyticsPage(), { me: ANALYTICS_OWNER });
-      await screen.findByRole('region', { name: 'Leader' });
-      await expectClean(`kpm/analytics (${width}px)`);
-    });
-
-    it('P19.3-T3 the leader sheet, the side panel, the group filter and the MOC dialog', async () => {
-      atWidth(1280);
-      nav.pathname = '/kpm/analytics';
-      stubFetch({ ...ANALYTICS_SHELL, 'GET /kpm/analytics': { body: analyticsView() } });
-      renderInLayout(KpmAnalyticsLayout, analyticsPage(), { me: ANALYTICS_OWNER });
-      await screen.findByRole('region', { name: 'Leader' });
-      await userEvent.click(screen.getAllByRole('button', { name: 'Hendra Wibowo' })[0]);
-      await screen.findByRole('dialog', { name: 'HENDRA WIBOWO' });
-      await expectClean('kpm/analytics (the leader’s side panel)');
-      await userEvent.click(screen.getByRole('button', { name: 'Close' }));
-      await userEvent.click(screen.getByRole('button', { name: 'View for: Whole KPM' }));
-      await screen.findByRole('dialog', { name: 'View for' });
-      await expectClean('kpm/analytics (Lihat untuk)');
-      await userEvent.click(screen.getByRole('button', { name: 'Close' }));
-      await userEvent.click(screen.getByRole('button', { name: 'MOC requirements met for Hendra Wibowo' }));
-      await screen.findByRole('dialog', { name: 'Hendra Wibowo — Maintenance of Contract' });
-      await expectClean('kpm/analytics (MOC dialog)');
-    });
-
-    it('P19.3-T3 filled, in Indonesian: the list, and a leader’s sheet on a phone', async () => {
-      atWidth(375);
-      nav.pathname = '/kpm/analytics';
-      stubFetch({ ...ANALYTICS_SHELL, 'GET /kpm/analytics': { body: analyticsView() } });
-      renderWithSession(
-        <InLanguage language="id"><KpmAnalyticsLayout>{analyticsPage()}</KpmAnalyticsLayout></InLanguage>,
-        { me: ANALYTICS_OWNER },
-      );
-      await screen.findByRole('region', { name: 'Leader' });
-      await expectClean('kpm/analytics, in Indonesian');
-      await userEvent.click(screen.getByRole('button', { name: 'Hendra Wibowo' }));
-      await screen.findByRole('dialog', { name: 'HENDRA WIBOWO' });
-      await expectClean('kpm/analytics (the leader’s sheet), in Indonesian');
-    });
-
-    it('no leader yet, and the error with its retry', async () => {
-      atWidth(1280);
-      nav.pathname = '/kpm/analytics';
-      stubFetch({ ...ANALYTICS_SHELL, 'GET /kpm/analytics': { body: ANALYTICS_NO_AB } });
-      renderInLayout(KpmAnalyticsLayout, analyticsPage(), { me: ANALYTICS_OWNER });
-      await screen.findByText('No AB or AAB yet.');
-      await expectClean('kpm/analytics (no leader)');
-
-      cleanup();
-      vi.unstubAllGlobals();
-      atWidth(1280);
-      stubFetch({
-        ...ANALYTICS_SHELL,
-        'GET /kpm/analytics': { status: 500, body: { error: { code: 'INTERNAL', message: 'Something went wrong.', requestId: 'r-1' } } },
-      });
-      renderInLayout(KpmAnalyticsLayout, analyticsPage(), { me: ANALYTICS_OWNER });
-      await screen.findByRole('button', { name: 'Try again' });
-      await expectClean('kpm/analytics (error)');
-    });
-
-    it('P18.5-T5 a Core Leader’s: the office’s leaders in the field shell, its Core leader group open', async () => {
-      atWidth(1280);
-      nav.pathname = '/kpm/analytics';
-      stubFetch({ ...ANALYTICS_SHELL, 'GET /kpm/analytics': { body: analyticsView() } });
-      renderInLayout(KpmAnalyticsLayout, analyticsPage(), { me: ANALYTICS_CORE_LEADER });
-      await screen.findByRole('region', { name: 'Leader' });
-      await expectClean('kpm/analytics (a Core Leader)');
-    });
-  });
+  // `KPM analytics` was here: removed for everyone by P19.19-T4 (ADR-0272 §1).
 
   describe('a leader’s Group Tree, read-only (P19.3-T3)', () => {
+    // The tenant shell's reads, and the Owner who opens a leader's tree (moved here from the KPM analytics fixtures, P19.19).
+    const OFFICE_SHELL = {
+      '/kpm/config': { body: { activity: [], ratios: [], leadPipelines: [], version: 1 } },
+      '/kpm/org-levels': { body: [] },
+      '/notifications': { body: { items: [], unread: 0 } },
+    };
+    const OFFICE_OWNER = makeMe({
+      user: {
+        id: 'u-owner', email: 'wilson@kpm0417.test', fullName: 'Wilson Tanoto', preferredName: 'Wilson',
+        pronoun: 'they', initials: 'WT', platformRole: 'none',
+      },
+      membership: {
+        membershipId: 'mem-owner', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab', status: 'active',
+        isKpmOwner: true, isKpmAdmin: false, directCount: 3,
+      },
+      permissions: ['member:read_profile', 'kpm_overview:read', 'org_tree:read'],
+    });
     const leaderTree = {
       nodes: [
         treeNode({ membershipId: 'mem-sari', fullName: 'Sari Puspita', initials: 'SP', role: 'aab', layer: 1, leaderId: 'mem-agus',
@@ -5102,235 +4369,96 @@ describe('screens have no axe violations', () => {
     };
 
     it.each(['en', 'id'] as const)('P19.3-T3 group-tree/[membershipId] (%s), as the Owner reads it', async (language) => {
-      stubFetch({ ...ANALYTICS_SHELL, 'GET /members/tree': { body: leaderTree } });
+      stubFetch({ ...OFFICE_SHELL, 'GET /members/tree': { body: leaderTree } });
       const page = <LeaderGroupTreePage params={routeParams({ membershipId: 'mem-sari' })} />;
       if (language === 'id') {
-        renderWithSession(<InLanguage language="id"><AgentLayout>{page}</AgentLayout></InLanguage>, { me: ANALYTICS_OWNER });
+        renderWithSession(<InLanguage language="id"><AgentLayout>{page}</AgentLayout></InLanguage>, { me: OFFICE_OWNER });
       } else {
-        renderInLayout(AgentLayout, page, { me: ANALYTICS_OWNER });
+        renderInLayout(AgentLayout, page, { me: OFFICE_OWNER });
       }
       await screen.findByTestId('group-tree-list');
       await expectClean(language === 'id' ? 'group-tree/[membershipId], in Indonesian' : 'group-tree/[membershipId]');
     });
 
     it('P19.3-T3 group-tree/[membershipId] (not found)', async () => {
-      stubFetch({ ...ANALYTICS_SHELL, 'GET /members/tree': { status: 404, body: { error: { code: 'NOT_FOUND', message: 'Member not found.', requestId: 'r' } } } });
-      renderInLayout(AgentLayout, <LeaderGroupTreePage params={routeParams({ membershipId: 'mem-gone' })} />, { me: ANALYTICS_OWNER });
+      stubFetch({ ...OFFICE_SHELL, 'GET /members/tree': { status: 404, body: { error: { code: 'NOT_FOUND', message: 'Member not found.', requestId: 'r' } } } });
+      renderInLayout(AgentLayout, <LeaderGroupTreePage params={routeParams({ membershipId: 'mem-gone' })} />, { me: OFFICE_OWNER });
       await screen.findByText('This Group Tree is not one you can open.');
       await expectClean('group-tree/[membershipId] (not found)');
     });
   });
 
-  describe('KPM analytics › Compliance, Events, and Campaigns (P18.3-T1 AC-10, P18.3-T2)', () => {
-    const compliancePage = (query: Record<string, string> = {}) => {
-      nav.search = new URLSearchParams(query).toString();
-      return <KpmAnalyticsCompliancePage />;
-    };
-    const openCompliance = async (body: unknown, query: Record<string, string> = {}) => {
-      // The laptop's tree (P19.3-T3: below 1024px every reader reads UI-109's layout, checked in its own cases).
-      atWidth(1280);
-      nav.pathname = '/kpm/analytics/compliance';
-      stubFetch({
-        ...ANALYTICS_SHELL,
-        'GET /kpm/analytics/compliance': { body },
-        'GET /kpm/settings/events/': { body: eventFeedbackSummary() },
-      });
-      renderInLayout(KpmAnalyticsLayout, compliancePage(query), { me: ANALYTICS_OWNER });
-    };
+  // `KPM analytics › Compliance` was here: its cards are the KPM Overview's since P19.19-T3 (ADR-0272 §6).
 
-    it('filled: Training’s module picker and the tree, the chips above (UI-098)', async () => {
-      await openCompliance(complianceView('training'));
-      await screen.findAllByRole('region');
-      await expectClean('kpm/analytics/compliance');
-    });
-
-    it('filled: Activation, an expired one’s Overdue with its tooltip shown', async () => {
-      await openCompliance(complianceView('activation'), { category: 'activation' });
-      await screen.findAllByRole('region');
-      await userEvent.click(screen.getByRole('button', { name: /^Overdue: ended on/ }));
-      await expectClean('kpm/analytics/compliance?category=activation');
-    });
-
-    it('filled: a past event with its Feedback Summary, and an ended campaign’s Achieved cells', async () => {
-      await openCompliance(complianceView('events', 'ev-townhall'), { category: 'events', item: 'ev-townhall' });
-      await screen.findByRole('heading', { name: /Feedback Summary$/ });
-      await expectClean('kpm/analytics/compliance?category=events');
-
-      cleanup();
-      vi.unstubAllGlobals();
-      await openCompliance(complianceView('campaigns', 'PERSISTENCY_PUSH'), { category: 'campaigns', item: 'PERSISTENCY_PUSH' });
-      await screen.findAllByRole('region');
-      await expectClean('kpm/analytics/compliance?category=campaigns');
-    });
-
-    it('searched, and searched to nothing', async () => {
-      await openCompliance(complianceView('training'));
-      await screen.findAllByRole('region');
-      await userEvent.type(screen.getByRole('searchbox', { name: 'Search agent or leader name' }), 'sinta');
-      await expectClean('kpm/analytics/compliance (searched)');
-      await userEvent.type(screen.getByRole('searchbox'), 'zzz');
-      await screen.findByText('No one matches this search.');
-      await expectClean('kpm/analytics/compliance (searched to nothing)');
-    });
-
-    it('P18.10-T4 in Indonesian: Training’s tree, and a campaign’s with its override controls', async () => {
-      atWidth(1280);
-      nav.pathname = '/kpm/analytics/compliance';
-      stubFetch({
-        ...ANALYTICS_SHELL,
-        'GET /kpm/analytics/compliance': { body: complianceView('training') },
-        'GET /kpm/settings/events/': { body: eventFeedbackSummary() },
-      });
-      const { unmount } = renderWithSession(
-        <InLanguage language="id"><KpmAnalyticsLayout>{compliancePage()}</KpmAnalyticsLayout></InLanguage>,
-        { me: ANALYTICS_OWNER },
-      );
-      await screen.findByRole('button', { name: /^Modul Training/ });
-      await expectClean('kpm/analytics/compliance, in Indonesian');
-      unmount();
-      vi.unstubAllGlobals();
-      atWidth(1280);
-
-      stubFetch({
-        ...ANALYTICS_SHELL,
-        'GET /kpm/analytics/compliance': { body: complianceView('campaigns', 'PERSISTENCY_PUSH') },
-        'GET /kpm/settings/events/': { body: eventFeedbackSummary() },
-      });
-      renderWithSession(
-        <InLanguage language="id">
-          <KpmAnalyticsLayout>{compliancePage({ category: 'campaigns', item: 'PERSISTENCY_PUSH' })}</KpmAnalyticsLayout>
-        </InLanguage>,
-        { me: ANALYTICS_OWNER },
-      );
-      await screen.findByRole('combobox', { name: 'Campaign' });
-      await screen.findAllByRole('button', { name: /Ubah hasil .* untuk / });
-      await expectClean('kpm/analytics/compliance?category=campaigns, in Indonesian');
-    });
-
-    it('empty: no AB yet, and a category with nothing to show', async () => {
-      await openCompliance(COMPLIANCE_NO_AB);
-      await screen.findByText('There are no ABs yet.');
-      await expectClean('kpm/analytics/compliance (no AB)');
-
-      cleanup();
-      vi.unstubAllGlobals();
-      await openCompliance(COMPLIANCE_EMPTY_CATALOG('events'), { category: 'events' });
-      await screen.findByText('There are no events this year.');
-      await expectClean('kpm/analytics/compliance (no events)');
-    });
-  });
-
-  describe('the Strategic Leader Forum (P18.1-T2 AC-8, P18.1-T3)', () => {
+  describe('the Strategic Leader Forum (P19.22-T8)', () => {
     const meetingPage = <LeaderMeetingPage params={routeParams({ meetingId: 'm-14' })} />;
-    const meetingTitle = () => screen.findByRole('heading', { level: 2, name: 'Strategic Check-in — #14' });
+    const forumTitle = () => screen.findByRole('heading', { level: 2, name: 'Forum #14' });
 
-    it('the list, populated and filtered to nothing, and empty', async () => {
+    it('the list with its next forum, and empty', async () => {
       nav.pathname = '/leader-meetings';
       stubFetch({ ...FORUM_SHELL, 'GET /leader-meetings': { body: forumList() } });
       renderWithSession(<LeaderMeetingsPage />, { me: FORUM_OWNER });
-      await screen.findByText('Strategic Check-in — #14');
+      await screen.findByText('Next forum');
       await expectClean('leader-meetings');
 
       cleanup();
       vi.unstubAllGlobals();
-      stubFetch({ ...FORUM_SHELL, 'GET /leader-meetings': { body: forumList({ meetings: [] }) } });
+      stubFetch({ ...FORUM_SHELL, 'GET /leader-meetings': { body: forumList({ meetings: [], nextId: null }) } });
       renderWithSession(<LeaderMeetingsPage />, { me: FORUM_OWNER });
-      await screen.findByText('No meetings yet.');
+      await screen.findByText('No forum yet.');
       await expectClean('leader-meetings (empty)');
     });
 
-    it('New meeting, with a refusal under its field', async () => {
+    it('New forum, with a refusal under its field', async () => {
       nav.pathname = '/leader-meetings';
       stubFetch({ ...FORUM_SHELL, 'GET /leader-meetings': { body: forumList() } });
       renderWithSession(<LeaderMeetingsPage />, { me: FORUM_OWNER });
-      await userEvent.click(await screen.findByRole('button', { name: '+ New meeting' }));
-      // The dialog's module is fetched on its first opening (P18.11-T16).
-      await userEvent.click(await screen.findByRole('button', { name: 'Create meeting' }));
-      await screen.findByText('Pick a date.');
-      await expectClean('leader-meetings (New meeting)');
+      await userEvent.click(await screen.findByRole('button', { name: 'New forum' }));
+      const time = await screen.findByLabelText('Time');
+      await userEvent.clear(time);
+      await userEvent.click(screen.getByRole('button', { name: 'Create forum' }));
+      await screen.findByText('Pick a time.');
+      await expectClean('leader-meetings (New forum)');
     });
 
-    it('a meeting on each of its three tabs', async () => {
+    it('a forum on its agenda and its action items, a menu open, and the delete asked', async () => {
       nav.pathname = '/leader-meetings/m-14';
       stubFetch({ ...FORUM_SHELL, 'GET /leader-meetings/m-14': { body: forumMeeting() } });
       renderWithSession(meetingPage, { me: FORUM_OWNER });
-      await meetingTitle();
-      await expectClean('leader-meetings/[meetingId] (Overview & Stats)');
-      await userEvent.click(screen.getByRole('tab', { name: 'Agenda' }));
-      await meetingPanel('Agenda');
+      await forumTitle();
+      await forumPanel('agenda');
       await expectClean('leader-meetings/[meetingId] (Agenda)');
-      await userEvent.click(screen.getByRole('tab', { name: 'Action Items' }));
-      await meetingPanel('Action Items');
-      await expectClean('leader-meetings/[meetingId] (Action Items)');
+      await userEvent.click(screen.getByRole('tab', { name: 'Action items' }));
+      await forumPanel('actions');
+      await expectClean('leader-meetings/[meetingId] (Action items)');
+      await userEvent.click(screen.getAllByRole('button', { name: /^Status / })[0]);
+      await expectClean('leader-meetings/[meetingId] (a status menu)');
+      await userEvent.keyboard('{Escape}');
+      await userEvent.click(screen.getAllByRole('button', { name: /^Delete: / })[0]);
+      await screen.findByRole('dialog', { name: 'Delete action item?' });
+      await expectClean('leader-meetings/[meetingId] (Delete action item?)');
     });
 
-    it('Meeting details, asking before a delete', async () => {
-      nav.pathname = '/leader-meetings/m-14';
-      const fresh = forumMeeting({ writtenIn: false, can: { ...forumMeeting().can, delete: true } });
-      stubFetch({ ...FORUM_SHELL, 'GET /leader-meetings/m-14': { body: fresh } });
-      renderWithSession(meetingPage, { me: FORUM_OWNER });
-      await userEvent.click(await screen.findByRole('button', { name: /^Change the date of/ }));
-      await screen.findByRole('dialog', { name: 'Meeting details' });
-      await expectClean('leader-meetings/[meetingId] (Meeting details)');
-      await userEvent.click(screen.getByRole('button', { name: 'Delete meeting' }));
-      await expectClean('leader-meetings/[meetingId] (Delete meeting?)');
-    });
-
-    it('Share these minutes, with its link', async () => {
-      nav.pathname = '/leader-meetings/m-14';
-      stubFetch({
-        ...FORUM_SHELL,
-        'GET /leader-meetings/m-14': { body: forumMeeting() },
-        'POST /leader-meetings/m-14/share-links': { status: 201, body: { token: 'tok_abc', expiresAt: '2026-10-24T03:00:00.000Z' } },
-      });
-      renderWithSession(meetingPage, { me: FORUM_OWNER });
-      await userEvent.click(await screen.findByRole('button', { name: 'Share' }));
-      await screen.findByRole('button', { name: 'Copy link' });
-      await expectClean('leader-meetings/[meetingId] (Share these minutes)');
-    });
-
-    it('P18.9-T1 AC-17, AC-19, P18.9-T8 F1, F2 the stats on a phone, one card per metric; and a scorecard kept before the reference slide', async () => {
+    it('a forum to come: its date and time, asking before a delete; on a phone', async () => {
       atWidth(375);
       nav.pathname = '/leader-meetings/m-14';
-      stubFetch({ ...FORUM_SHELL, 'GET /leader-meetings/m-14': { body: forumMeeting() } });
+      const fresh = forumMeeting({ state: 'upcoming', writtenIn: false, can: { edit: true, share: true, reschedule: true, delete: true, print: true } });
+      stubFetch({ ...FORUM_SHELL, 'GET /leader-meetings/m-14': { body: fresh } });
       renderWithSession(meetingPage, { me: FORUM_OWNER });
-      await meetingTitle();
-      await screen.findByRole('heading', { level: 4, name: 'Manpower' });
-      // F1: 3M new agent %'s change in percentage points; F2: each editor's target field on a line of its own.
-      expect(screen.getByText('0 points')).toBeInTheDocument();
-      expect(screen.getByRole('textbox', { name: 'Monthly Target per unit, FLC (avg. monthly)' }).closest('dl')).not.toHaveClass('grid');
-      await expectClean('leader-meetings/[meetingId] (Overview & Stats, phone)');
-
-      cleanup();
-      vi.unstubAllGlobals();
-      const kept = forumMeeting();
-      const unrecorded = { kind: 'unrecorded' } as const;
-      stubFetch({
-        ...FORUM_SHELL,
-        'GET /leader-meetings/m-14': {
-          body: {
-            ...kept,
-            state: 'completed',
-            scorecard: {
-              ...kept.scorecard,
-              asOf: unrecorded,
-              rows: kept.scorecard.rows.map((r) => ({ ...r, cells: { ...r.cells, ytdLastYear: unrecorded } })),
-            },
-          },
-        },
-      });
-      renderWithSession(meetingPage, { me: FORUM_OWNER });
-      await meetingTitle();
-      // The tab's and the print layout's.
-      await screen.findAllByText('AS OF —');
-      await expectClean('leader-meetings/[meetingId] (Overview & Stats, kept before the slide)');
+      await forumTitle();
+      await expectClean('leader-meetings/[meetingId] (phone)');
+      await userEvent.click(screen.getByRole('button', { name: 'Change date and time' }));
+      await screen.findByRole('dialog', { name: 'Forum date and time' });
+      await expectClean('leader-meetings/[meetingId] (Forum date and time)');
+      await userEvent.click(screen.getByRole('button', { name: 'Delete forum' }));
+      await expectClean('leader-meetings/[meetingId] (Delete forum?)');
     });
 
     it('the shared view, read-only, and the not-found states', async () => {
       nav.pathname = '/leader-meetings/shared/tok_abc';
       stubFetch({ ...FORUM_SHELL, 'GET /leader-meetings/shared/tok_abc': { body: forumMeeting({ via: 'link', can: FORUM_LINK_CAN }) } });
       renderWithSession(<SharedLeaderMeetingPage params={routeParams({ token: 'tok_abc' })} />, { me: FORUM_FIELD });
-      await meetingTitle();
+      await forumTitle();
       await expectClean('leader-meetings/shared/[token]');
 
       cleanup();
@@ -5345,7 +4473,7 @@ describe('screens have no axe violations', () => {
       nav.pathname = '/leader-meetings/m-14';
       stubFetch({ ...FORUM_SHELL, 'GET /leader-meetings/m-14': FORUM_NOT_FOUND });
       renderWithSession(meetingPage, { me: FORUM_OWNER });
-      await screen.findByText("This meeting can't be found.");
+      await screen.findByText("This forum can't be found.");
       await expectClean('leader-meetings/[meetingId] (not found)');
     });
   });
@@ -5377,127 +4505,6 @@ describe('P18.9-T7 the Owner’s screens on a phone have no axe violations', () 
       'data_upload:correct_cell', 'data_upload:lock_month', 'data_upload:read_history',
     ],
   });
-  const member = (over: Record<string, unknown>) => ({
-    membershipId: 'mem-1', agentCode: 'PRU-80001', role: 'agent', status: 'active', fullName: 'Rina Wijaya', preferredName: null,
-    email: 'rina@kpm0417.test', initials: 'RW', leaderId: null, leaderName: 'Maya Halim', depth: 0, directCount: 0, subtreeCount: 0,
-    isLeader: false, isKpmOwner: false, isKpmAdmin: false, joinedAt: '2026-03-01T00:00:00.000Z', lastActivityDays: 2,
-    lastActivityOn: '2026-10-26', lastCoachedDays: null, ...over,
-  });
-
-  it('P18.9-T7 AC-1, P19.3-T3 kpm/analytics on a phone: the Leader list as rows, a leader’s sheet open', async () => {
-    atWidth(375);
-    nav.pathname = '/kpm/analytics';
-    stubFetch({ ...ANALYTICS_SHELL, 'GET /kpm/analytics': { body: analyticsView() } });
-    renderInLayout(KpmAnalyticsLayout, <KpmAnalyticsPage />, { me: ANALYTICS_OWNER });
-    await screen.findByRole('region', { name: 'Leader' });
-    await userEvent.click(screen.getByRole('button', { name: 'Hendra Wibowo' }));
-    await screen.findByRole('dialog', { name: 'HENDRA WIBOWO' });
-    await expectClean('kpm/analytics (phone)');
-  });
-
-  it('P18.9-T7 AC-1 people/members: the directory and Removed as cards', async () => {
-    atWidth(375);
-    const counts = { directory: 3, pending: 0, removed: 1 };
-    stubFetch({
-      '/members': [
-        {
-          body: {
-            members: [
-              member({ membershipId: 'mem-owner', fullName: 'Wilson Tanoto', role: 'ab', isKpmOwner: true, isLeader: true,
-                directCount: 3, subtreeCount: 27, leaderName: null, isCoreLeader: true, canTagCoreLeader: true }),
-              member({ membershipId: 'mem-maya', fullName: 'Maya Halim', role: 'ab', isKpmAdmin: true, canTagCoreLeader: true, lastCoachedDays: 12 }),
-              member({ membershipId: 'mem-yanti', fullName: 'Yanti Kusuma', agentCode: 'PRU-80003', rejoinedOn: '2026-09-30' }),
-            ],
-            nextCursor: null,
-            counts,
-          },
-        },
-        {
-          body: {
-            members: [member({ membershipId: 'mem-yanti-1', fullName: 'Yanti Kusuma', agentCode: 'PRU-80003', status: 'removed',
-              removedAt: '2026-09-10T04:00:00.000Z', rejoinedOn: '2026-09-30' })],
-            nextCursor: null,
-            counts,
-          },
-        },
-      ],
-    });
-    renderInLayout(TenantLayout, <MembersPage />, { me: owner });
-    await screen.findByRole('list', { name: 'Office roster' });
-    await expectClean('people/members (phone)');
-    await userEvent.click(screen.getByRole('button', { name: /^Removed/ }));
-    await screen.findByRole('list', { name: 'Removed members' });
-    await expectClean('people/members, Removed (phone)');
-  });
-
-  it('P18.9-T7 AC-1 people/admins: the admins as cards, a revoke waiting', async () => {
-    atWidth(375);
-    stubFetch({
-      '/members/admins': {
-        body: [
-          { membershipId: 'mem-owner', fullName: 'Wilson Tanoto', initials: 'WT', agentCode: 'KPM0417-001', role: 'ab',
-            grantedAt: null, grantedByName: null, canRevoke: false },
-          { membershipId: 'mem-admin', fullName: 'Maya Halim', initials: 'MH', agentCode: 'KPM0417-002', role: 'ab',
-            grantedAt: '2026-01-14T00:00:00.000Z', grantedByName: 'Wilson Tanoto', canRevoke: true },
-        ],
-      },
-      '/members/tree': {
-        body: {
-          nodes: [treeNode({ membershipId: 'mem-agus', fullName: 'Agus Prasetyo', role: 'ab' })],
-          leader: null, rootIds: ['mem-agus'], selfId: null, counts: { ab: 1, aab: 0, agent: 0, total: 1 },
-        },
-      },
-    });
-    renderInLayout(TenantLayout, <AdminsPage />, { me: owner });
-    await screen.findByRole('list', { name: 'KPM Admins' });
-    await expectClean('people/admins (phone)');
-    await userEvent.click(screen.getByRole('button', { name: /^Revoke Maya Halim/ }));
-    await screen.findByRole('button', { name: 'Revoke access' });
-    await expectClean('people/admins (phone, revoke waiting)');
-  });
-
-  it('P18.9-T7 AC-2 kpm/data-upload: a card per agent, then an agent’s sheet open with a refusal on a figure', async () => {
-    atWidth(375);
-    const empty = { value: null, provenance: null };
-    const metrics = Object.fromEntries(['ape', 'persistency', 'recruitment', 'newActiveAgents', 'fyp', 'policyCount']
-      .map((m) => [m, { monthly: empty, ytd: empty }]));
-    stubFetch({
-      '/kpm/data-upload/': {
-        body: asView({
-          month: '2026-09', withData: 1,
-          state: { month: '2026-09', revision: 3, locked: false, reason: 'open', editableUntil: '2026-10-07', changedAt: null, changedBy: null },
-          rows: [
-            { membershipId: 'mem-rina', agentCode: 'PRU-001', name: 'Rina Wijaya', monthlyActiveAgent: true,
-              metrics: { ...metrics,
-                ape: { monthly: { value: 150_000_000, provenance: 'imported' }, ytd: { value: 900_000_000, provenance: 'imported' } },
-                policyCount: { monthly: { value: 2, provenance: 'imported' }, ytd: { value: 11, provenance: 'corrected',
-                  correction: { by: 'Maya Halim', at: '2026-09-18T03:00:00Z', reason: 'Carrier restated it' } } } } },
-            { membershipId: 'mem-budi', agentCode: 'PRU-002', name: 'Budi Santoso', metrics, monthlyActiveAgent: null },
-          ],
-        }),
-      },
-      '/kpm/data-upload/template': {
-        body: { month: '2026-09', version: 1, filename: 'KPM0417-agent-data-Sep-2026.csv', header: ['Agent Code'], file: 'Agent Code', rowCount: 0 },
-      },
-      '/kpm/data-upload/history': { body: { month: '2026-09', batches: [] } },
-      'PATCH /kpm/data-upload/cell': {
-        status: 422,
-        body: { error: { code: 'UPLOAD_VALUE_OUT_OF_RANGE', message: 'APE this month would be more than the year to date already held. Correct the year to date first.', requestId: 'r' } },
-      },
-    });
-    renderInLayout(TenantLayout, <DataUploadPage />, { me: owner });
-    await screen.findByRole('list', { name: 'Data for Sep 2026' });
-    await screen.findByRole('button', { name: 'Download template' });
-    await expectClean('kpm/data-upload (phone)');
-    await userEvent.click(screen.getByRole('button', { name: 'Correct figures for Rina Wijaya' }));
-    const sheet = screen.getByRole('dialog', { name: 'Correct figures for Rina Wijaya' });
-    await userEvent.clear(within(sheet).getByLabelText('APE this month'));
-    await userEvent.type(within(sheet).getByLabelText('APE this month'), '99000000');
-    await userEvent.type(within(sheet).getByLabelText('Why is it being corrected?'), 'Carrier restated it');
-    await userEvent.click(screen.getByRole('button', { name: 'Save corrections' }));
-    await within(sheet).findByText(/would be more than the year to date already held/);
-    await expectClean('kpm/data-upload (phone, sheet with a refusal)');
-  });
 
   it('P18.9-T7 AC-3 kpm/settings/lead-statuses: a stage’s ⋮ open, the switch on its own line', async () => {
     atWidth(375);
@@ -5516,34 +4523,14 @@ describe('P18.9-T7 the Owner’s screens on a phone have no axe violations', () 
       },
     });
     renderInLayout(TenantLayout, <LeadStatusesPage />, { me: owner });
-    await screen.findByText('Paid and issued');
+    // P19.21-T3 AC-2: numbered rows, one ⋯ each.
+    await screen.findByText('2. Paid and issued');
     await expectClean('kpm/settings/lead-statuses (phone)');
     await userEvent.click(screen.getByRole('button', { name: 'Actions for Paid and issued' }));
     await screen.findByRole('menu');
     // P18.9-T8 F3: Move up and Move down first, the last stage's Move down held.
     expect(screen.getByRole('menuitem', { name: 'Move down' })).toHaveAttribute('aria-disabled', 'true');
     await expectClean('kpm/settings/lead-statuses (phone, ⋮ open)');
-  });
-
-  it('P18.9-T7 AC-4 people/org-tree: the indented list, a unit opened', async () => {
-    atWidth(375);
-    stubFetch({
-      '/members/tree': {
-        body: {
-          nodes: [
-            treeNode({ membershipId: 'mem-owner', fullName: 'Wilson Tanoto', initials: 'WT', role: 'ab', layer: 1, isLeader: true, directCount: 1, isSelf: true }),
-            treeNode({ membershipId: 'mem-ab', fullName: 'Agus Prasetyo', initials: 'AP', role: 'ab', layer: 2, leaderId: 'mem-owner', isLeader: true, directCount: 1 }),
-            treeNode({ membershipId: 'mem-agent', fullName: 'Dimas Pratama', initials: 'DP', layer: 3, leaderId: 'mem-ab' }),
-            treeNode({ membershipId: 'mem-orphan', fullName: 'Sari Puspita', initials: 'SP', role: 'aab', layer: 1 }),
-          ],
-          leader: null, rootIds: ['mem-owner', 'mem-orphan'], selfId: 'mem-owner',
-          counts: { ab: 1, aab: 1, agent: 1, total: 3 },
-        },
-      },
-    });
-    renderInLayout(TenantLayout, <OrgTreePage />, { me: owner });
-    await userEvent.click(await screen.findByRole('button', { name: 'Show who reports to Agus Prasetyo' }));
-    await expectClean('people/org-tree (phone)');
   });
 
   it('P18.9-T7 AC-6 kpm/settings/activation-checklist: 44px controls and ↑ ↓, an item moved', async () => {
@@ -5573,8 +4560,9 @@ describe('P18.9-T7 the Owner’s screens on a phone have no axe violations', () 
     renderInLayout(TenantLayout, <ActivationChecklistPage />, { me: owner });
     await screen.findByText('Learn insurance basics');
     // *Changed 2026-11-05 (P19.2-T3 AC-3; UI-141):* an accordion of one-line items, an item moved from its sheet.
+    // *Changed 2026-11-20 (P19.21-T3 AC-3):* the aspects as cards; an item's row opens its sheet.
     await expectClean('kpm/settings/activation-checklist (phone, the accordion)');
-    await userEvent.click(screen.getByRole('button', { name: 'Learn insurance basics' }));
+    await userEvent.click(screen.getByRole('button', { name: /^Learn insurance basics/ }));
     await userEvent.click(await screen.findByRole('button', { name: 'Move Learn insurance basics down' }));
     await expectClean('kpm/settings/activation-checklist (phone, an item’s sheet)');
   });
@@ -5602,7 +4590,7 @@ describe('P18.9-T7 the Owner’s screens on a phone have no axe violations', () 
     renderInLayout(TenantLayout, <KpmProductsPage />, { me: owner });
     // *Changed 2026-11-05 (P19.2-T3 AC-3; UI-141):* one row per product, its switch and *Customize* in its sheet.
     await expectClean('kpm/settings/products (phone, the rows)');
-    await userEvent.click(await screen.findByRole('button', { name: 'PRUMapan' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'More for PRUMapan' }));
     await userEvent.click(await screen.findByRole('button', { name: 'Customize' }));
     await expectClean('kpm/settings/products (phone, a product’s sheet)');
   });
@@ -5632,156 +4620,42 @@ describe('P18.10-T4 the forum and the people screens in Indonesian', () => {
     nav.pathname = path;
     return renderWithSession(<InLanguage language="id">{page}</InLanguage>, { me });
   };
-  const person = (over: Record<string, unknown> = {}) => ({
-    membershipId: 'mem-1', agentCode: 'KPM0417-001', role: 'agent', status: 'active',
-    fullName: 'Rina Wijaya', preferredName: 'Rina', email: 'rina@kpm0417.test', initials: 'RW',
-    leaderId: 'mem-owner', leaderName: 'Wilson Tanoto', depth: 1, directCount: 0, subtreeCount: 0, isLeader: false,
-    isKpmOwner: false, isKpmAdmin: false, joinedAt: '2026-03-01T00:00:00.000Z', ...over,
-  });
-  const roster = (members: unknown[]) => ({ body: { members, nextCursor: null, counts: { directory: 2, pending: 1, removed: 0 } } });
 
-  it('the forum’s list, and New meeting with a refusal under its field', async () => {
+  it('P19.22-T8 the forum’s list, and Forum baru with a refusal under its field', async () => {
     stubFetch({ ...FORUM_SHELL, 'GET /leader-meetings': { body: forumList() } });
     inIndonesian('/leader-meetings', <LeaderMeetingsPage />, FORUM_OWNER);
-    await screen.findByRole('button', { name: '+ Rapat baru' });
+    await screen.findByText('Forum berikutnya');
+    expect(screen.getByText('Pertemuan core leader tiap 2 minggu · 60–90 menit')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Siapkan agenda' })).toBeInTheDocument();
     await expectClean('leader-meetings (id)');
-    await userEvent.click(screen.getByRole('button', { name: '+ Rapat baru' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Buat rapat' }));
-    await screen.findByText('Pilih tanggal.');
-    await expectClean('leader-meetings (id, New meeting)');
+    await userEvent.click(screen.getByRole('button', { name: 'Forum baru' }));
+    const time = await screen.findByLabelText('Jam');
+    await userEvent.clear(time);
+    await userEvent.click(screen.getByRole('button', { name: 'Buat forum' }));
+    await screen.findByText('Pilih jam.');
+    await expectClean('leader-meetings (id, Forum baru)');
   });
 
-  it('a meeting on each of its three tabs, and Share these minutes', async () => {
-    stubFetch({
-      ...FORUM_SHELL,
-      'GET /leader-meetings/m-14': { body: forumMeeting() },
-      'POST /leader-meetings/m-14/share-links': { status: 201, body: { token: 'tok_abc', expiresAt: '2026-10-24T03:00:00.000Z' } },
-    });
-    inIndonesian('/leader-meetings/m-14', <LeaderMeetingPage params={routeParams({ meetingId: 'm-14' })} />, FORUM_OWNER);
-    await screen.findByText('Dapat mengubah notulen ini');
-    await expectClean('leader-meetings/[meetingId] (id, Overview & Stats)');
-    await userEvent.click(screen.getByRole('tab', { name: 'Agenda' }));
-    await meetingPanel('Agenda');
-    await expectClean('leader-meetings/[meetingId] (id, Agenda)');
-    await userEvent.click(screen.getByRole('tab', { name: 'Action Items' }));
-    await meetingPanel('Action Items');
-    await expectClean('leader-meetings/[meetingId] (id, Action Items)');
-    await userEvent.click(screen.getByRole('button', { name: 'Bagikan' }));
-    await screen.findByRole('button', { name: 'Salin tautan' });
-    await expectClean('leader-meetings/[meetingId] (id, Share these minutes)');
-  });
-
-  it('the stats on a phone, one card per metric', async () => {
-    atWidth(375);
+  it('P19.22-T8 a forum on its agenda and its action items, in the mockup’s words', async () => {
     stubFetch({ ...FORUM_SHELL, 'GET /leader-meetings/m-14': { body: forumMeeting() } });
     inIndonesian('/leader-meetings/m-14', <LeaderMeetingPage params={routeParams({ meetingId: 'm-14' })} />, FORUM_OWNER);
-    await screen.findByRole('heading', { level: 4, name: 'Manpower' });
-    expect(screen.getAllByText('Perubahan').length).toBeGreaterThan(0);
-    await expectClean('leader-meetings/[meetingId] (id, Overview & Stats, phone)');
+    await screen.findByText('3 core leader · semua bisa mengedit');
+    expect(screen.getByRole('button', { name: 'Bagikan' })).toBeInTheDocument();
+    await forumPanel('agenda');
+    expect(screen.getByRole('button', { name: 'Tambah agenda' })).toBeInTheDocument();
+    await expectClean('leader-meetings/[meetingId] (id, Agenda)');
+    await userEvent.click(screen.getByRole('tab', { name: 'Action items' }));
+    await forumPanel('actions');
+    expect(screen.getAllByText('dari forum #13')).toHaveLength(2);
+    expect(screen.getByText('Action item yang belum selesai otomatis pindah ke forum berikutnya')).toBeInTheDocument();
+    expect(screen.getByText('Ketuk status untuk mengubah · ketuk teks untuk mengedit')).toBeInTheDocument();
+    await expectClean('leader-meetings/[meetingId] (id, Action items)');
+    await userEvent.click(screen.getAllByRole('button', { name: /^Hapus: / })[0]);
+    await screen.findByRole('dialog', { name: 'Hapus action item?' });
+    expect(screen.getByText('Juga hilang dari forum berikutnya. Tidak bisa dibatalkan.')).toBeInTheDocument();
+    await expectClean('leader-meetings/[meetingId] (id, Hapus action item?)');
   });
 
-  it('people/members: the directory, Pending with a transfer, and Groups', async () => {
-    stubFetch({
-      '/members': [
-        roster([person({ membershipId: 'mem-owner', fullName: 'Wilson Tanoto', preferredName: null, role: 'ab', isKpmOwner: true, isLeader: true, directCount: 1, subtreeCount: 1, canTagCoreLeader: true, leaderId: null, leaderName: null })]),
-        roster([person({ status: 'pending' })]),
-      ],
-      '/join/requests': { body: [{ requestId: 'req-1', membershipId: 'mem-1', fullName: 'Rina Wijaya', initials: 'RW', email: 'rina@kpm0417.test', agentCode: 'KPM0417-001', role: 'agent', requestedAt: '2026-10-01T00:00:00.000Z', routedFromName: null }] },
-      '/members/leader-limit-requests': { body: [] },
-      '/transfer-requests': {
-        body: [{
-          transferId: 'tr-1', member: { membershipId: 'mem-raka', name: 'Raka Aditama', agentCode: '87014' },
-          from: { membershipId: 'mem-satria', name: 'Satria Nugraha' }, to: { membershipId: 'mem-agus', name: 'Agus Prasetyo' },
-          requestedBy: { membershipId: 'mem-agus', name: 'Agus Prasetyo' }, requestedAt: '2026-10-26T03:00:00.000Z', requestedName: null,
-        }],
-      },
-      '/members/groups': { body: [{ groupId: 'g1', name: 'Top Producers Circle', ownerMembershipId: 'mem-1', ownerName: 'Rina Wijaya', ownerHasLeft: false, memberCount: 3 }] },
-      '/members/tree': { body: { nodes: [treeNode({ membershipId: 'mem-1', fullName: 'Rina Wijaya' })], leader: null, rootIds: ['mem-1'], selfId: null, counts: { ab: 0, aab: 0, agent: 1, total: 1 } } },
-    });
-    inIndonesian('/people/members', <TenantLayout><MembersPage /></TenantLayout>);
-    await screen.findByRole('table', { name: 'Roster KPM' });
-    await expectClean('people/members (id)');
-    await userEvent.click(screen.getByRole('button', { name: /^Pending/ }));
-    await screen.findByRole('table', { name: 'Permintaan pemindahan, terlama dulu' });
-    await userEvent.click(screen.getAllByRole('button', { name: 'Setujui' })[0]);
-    await expectClean('people/members (id, Pending, a join date asked)');
-    await userEvent.click(screen.getByRole('button', { name: 'Groups' }));
-    await screen.findByRole('table', { name: 'Grup informal' });
-    await expectClean('people/members (id, Groups)');
-  });
-
-  it('people/members/[membershipId]: the details, a role change explained and a removal asked', async () => {
-    stubFetch({
-      '/members/mem-1/reports': { body: [] },
-      '/members/mem-1/performance': { body: MEMBER_PERFORMANCE },
-      '/members/mem-1/tags': { body: { membershipId: 'mem-1', fullName: 'Rina Wijaya', groupIds: [], isCoreLeader: false, canBeCoreLeader: false } },
-      '/members/groups': { body: [] },
-      '/members/leader-limit-requests': { body: [] },
-      '/members/mem-1': { body: person({ joinDate: '2026-03-02', canChangeRole: true, canPromoteToAb: true, canRemove: true }) },
-    });
-    inIndonesian('/people/members/mem-1', <TenantLayout><MemberPage params={routeParams({ membershipId: 'mem-1' })} /></TenantLayout>);
-    const data = await screen.findByRole('heading', { name: 'Data pribadi' });
-    await userEvent.click(data.closest('summary')!);
-    await expectClean('people/members/[membershipId] (id)');
-    await userEvent.click(screen.getByRole('button', { name: 'Ubah peran' }));
-    await userEvent.selectOptions(screen.getByLabelText('Peran baru'), 'aab');
-    await expectClean('people/members/[membershipId] (id, role change)');
-    await userEvent.click(screen.getByRole('button', { name: 'Batal' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Keluarkan dari KPM' }));
-    await expectClean('people/members/[membershipId] (id, removal)');
-  });
-
-  it('people/admins, a revoke asked', async () => {
-    stubFetch({
-      '/members/admins': { body: [{ membershipId: 'mem-admin', fullName: 'Maya Halim', initials: 'MH', agentCode: 'KPM0417-002', role: 'ab', grantedAt: '2026-01-14T00:00:00.000Z', grantedByName: 'Wilson Tanoto', canRevoke: true }] },
-      '/members/tree': { body: { nodes: [treeNode({ membershipId: 'mem-agus', fullName: 'Agus Prasetyo', role: 'ab' })], leader: null, rootIds: ['mem-agus'], selfId: null, counts: { ab: 1, aab: 0, agent: 0, total: 1 } } },
-    });
-    inIndonesian('/people/admins', <TenantLayout><AdminsPage /></TenantLayout>);
-    await userEvent.click(await screen.findByRole('button', { name: 'Cabut' }));
-    await screen.findByRole('button', { name: 'Cabut akses' });
-    await expectClean('people/admins (id, a revoke asked)');
-  });
-
-  it('people/org-tree on the canvas, and on a phone as the list', async () => {
-    const tree = {
-      nodes: [
-        treeNode({ membershipId: 'mem-owner', fullName: 'Wilson Tanoto', initials: 'WT', role: 'ab', layer: 1, isLeader: true, directCount: 1, isSelf: true }),
-        treeNode({ membershipId: 'mem-ab', fullName: 'Agus Prasetyo', initials: 'AP', role: 'ab', layer: 2, leaderId: 'mem-owner' }),
-      ],
-      leader: null, rootIds: ['mem-owner'], selfId: 'mem-owner', counts: { ab: 1, aab: 0, agent: 0, total: 1 },
-    };
-    stubFetch({ '/members/tree': { body: tree } });
-    const { unmount } = inIndonesian('/people/org-tree', <TenantLayout><OrgTreePage /></TenantLayout>);
-    await screen.findByText('Lapisan 1');
-    await expectClean('people/org-tree (id)');
-    unmount();
-    atWidth(375);
-    stubFetch({ '/members/tree': { body: tree } });
-    inIndonesian('/people/org-tree', <TenantLayout><OrgTreePage /></TenantLayout>);
-    await screen.findByRole('button', { name: 'Sembunyikan yang melapor kepada Wilson Tanoto' });
-    await expectClean('people/org-tree (id, phone)');
-  });
-
-  it('people/import: the file’s columns, the template, a paste checked with a problem', async () => {
-    const HEADER = 'fullName,email,agentCode,role,leaderAgentCode,dateOfBirth,companyJoinMonth,workStatus,gender';
-    stubFetch({
-      '/admin/tenants/roster-template': { body: { header: HEADER, columns: [], template: `${HEADER}\n`, examples: [] } },
-      // P19.3-T4 (ADR-0205): the preview's shape under A3 — counts, rows with an outcome, the skipped rows' file.
-      '/admin/tenants/kpm-1/roster/preview': {
-        body: {
-          issues: [{ line: 2, column: 'email', message: '"x" is not an email address.' }], header: HEADER.split(','),
-          counts: { imported: 0, updated: 0, invited: 0, skipped: 0 }, rows: [], skippedCsv: null,
-        },
-      },
-    });
-    inIndonesian('/people/import', <TenantLayout><PeopleImportPage /></TenantLayout>);
-    await screen.findByRole('button', { name: 'Unduh Excel (.xlsx)' });
-    await userEvent.click(screen.getByLabelText('Tempel dari spreadsheet'));
-    await userEvent.type(screen.getByLabelText('Baris dari spreadsheet Anda'), 'A,x,881,ab');
-    await userEvent.click(screen.getByRole('button', { name: 'Periksa file' }));
-    await screen.findByRole('table', { name: 'Yang salah dengan file ini' });
-    await expectClean('people/import (id, a problem)');
-  });
 });
 
 /**
@@ -6506,15 +5380,28 @@ describe('P18.10-T4 coaching and the Unit Dashboard in Indonesian', () => {
   const agus = { membershipId: 'mem-agus', name: 'Agus Santoso' };
   const rosterRow = (membershipId: string, name: string, over: Record<string, unknown> = {}) => ({
     membershipId, name, rung: { code: 'AGENT', label: 'Agent' }, depth: 1,
-    lastOneOnOne: { days: 9, date: '2026-09-23', overdue: true, coach: agus }, status: 'watch_closely', ...over,
+    lastOneOnOne: { days: 9, date: '2026-09-23', overdue: true, coach: agus }, status: 'watch_closely',
+    coaching: { status: 'recent', days: 9, coach: agus }, phone: '+6281211002200', isReader: false, opens: true, ...over,
   });
+  // P19.18-T5 (ADR-0271 §9): grouped by unit — *Unit Anda*, then an AAB's unit.
   const roster = {
-    today: '2026-10-02', overdueAfterDays: 7,
-    directAgents: [rosterRow('mem-rina', 'Rina Wijaya'), rosterRow('mem-melati', 'Melati Putri', { lastOneOnOne: null, status: 'no_goal_set' })],
-    units: [{
-      head: rosterRow('mem-dimas', 'Dimas Aditya', { rung: { code: 'AAB', label: 'Associate Agency Builder' }, status: 'on_track' }),
-      members: [rosterRow('mem-tono', 'Tono Saputra', { depth: 2, status: 'needs_attention' })],
-    }],
+    today: '2026-10-02', overdueAfterDays: 7, scope: 'direct', scopes: { offered: ['unit', 'direct'], default: 'direct' }, total: 4,
+    sections: [
+      {
+        key: 'own', kind: 'own', leader: { ...agus, photoUrl: null }, count: 2, teams: [],
+        rows: [
+          rosterRow('mem-rina', 'Rina Wijaya'),
+          rosterRow('mem-melati', 'Melati Putri', { lastOneOnOne: null, status: 'no_goal_set', coaching: { status: 'never', days: null, coach: null } }),
+        ],
+      },
+      {
+        key: 'mem-dimas', kind: 'unit', leader: { membershipId: 'mem-dimas', name: 'Dimas Aditya', photoUrl: null }, count: 2, teams: [],
+        rows: [
+          rosterRow('mem-dimas', 'Dimas Aditya', { rung: { code: 'AAB', label: 'Associate Agency Builder' }, status: 'on_track' }),
+          rosterRow('mem-tono', 'Tono Saputra', { depth: 2, status: 'needs_attention' }),
+        ],
+      },
+    ],
   };
   const rina = {
     membershipId: 'mem-rina', name: 'Rina Wijaya', pronoun: 'she', rung: { code: 'AGENT', label: 'Agent' },
@@ -6592,7 +5479,7 @@ describe('P18.10-T4 coaching and the Unit Dashboard in Indonesian', () => {
   it('coaching: the roster, one row per person and the tree (UI-033)', async () => {
     stubFetch({ ...shell, '/coaching/coachees': { body: roster } });
     inIndonesian('/coaching', <CoachingRosterPage />);
-    await screen.findByRole('heading', { level: 2, name: 'Semua orang yang Anda coaching' });
+    await screen.findByRole('heading', { level: 2, name: /Semua orang/ });
     await screen.findAllByRole('link', { name: /.+/ });
     await expectClean('coaching (id, UI V1)');
   });
@@ -6683,23 +5570,24 @@ describe('P18.10-T4 coaching and the Unit Dashboard in Indonesian', () => {
     return inIndonesian('/unit/dashboard', <UnitDashboardPage />, UNIT_READER);
   };
 
-  it('unit/dashboard: filled, a unit closed, the chips filtering, and Update production open (UI V1)', async () => {
+  /*
+   * *Changed 2026-11-20 (P19.18-T1; ADR-0271 §3–§6):* the Overview's roster is unit cards — no table to close a unit in,
+   * no status chips to filter by. Every unit is open from 768px; on a phone *Unit Anda* is open and the others closed.
+   */
+  it('unit/dashboard: filled, the unit cards, and Update production open (P19.18-T1)', async () => {
     unitShow();
-    await screen.findByRole('table', { name: 'Roster tim Anda' });
+    await screen.findByRole('region', { name: /^Roster tim Anda/ });
     await expectClean('unit/dashboard (id)');
-    await userEvent.click(screen.getByRole('button', { name: 'Unit Anda · 4' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Perlu perhatian 3' }));
-    await expectClean('unit/dashboard (id, closed and filtered)');
     await userEvent.click(screen.getByRole('button', { name: 'Perbarui produksi' }));
     await screen.findByRole('dialog', { name: 'Perbarui produksi' });
     await expectClean('unit/dashboard (id, Update production)');
   });
 
-  it('unit/dashboard: on a phone, the accordion with a unit opened (UI V1, UI-002)', async () => {
+  it('unit/dashboard: on a phone, Unit Anda open and another unit opened (P19.18-T1 AC-6)', async () => {
     onPhone();
     unitShow();
-    await screen.findByRole('button', { name: /^Unit Anda · 4/ });
-    await userEvent.click(screen.getByRole('button', { name: /^Unit Sari Wulandari/ }));
+    expect(await screen.findByRole('button', { name: /^Unit Anda/ })).toHaveAttribute('aria-expanded', 'true');
+    await userEvent.click(screen.getByRole('button', { name: /^Unit SARI WULANDARI/ }));
     await expectClean('unit/dashboard (id, phone)');
   });
 
@@ -7005,13 +5893,12 @@ describe('P18.10-T4 training and the office’s products in Indonesian', () => {
     }],
   }];
 
-  it('kpm/settings/training: on Modules with the add panel open', async () => {
-    window.history.replaceState(null, '', '/kpm/settings/training#modules');
+  it('kpm/settings/training: the tree with the add form open (P19.25-T4)', async () => {
     nav.pathname = '/kpm/settings/training';
     stubFetch({ ...officeShell, '/kpm/settings/training': { body: settingsTree } });
     inOffice(<TrainingSettingsPage />);
     await screen.findByText('Menyusun daftar prospek');
-    await userEvent.click(screen.getByRole('button', { name: '+ Tambah modul' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Tambah modul' }));
     await expectClean('kpm/settings/training (id)');
   });
 
@@ -7056,10 +5943,12 @@ describe('P18.10-T4 training and the office’s products in Indonesian', () => {
       '/kpm/settings/products': { body: [row] },
     });
     inOffice(<KpmProductsPage />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Lainnya untuk PRUMapan' }));
     await userEvent.click(await screen.findByRole('button', { name: 'Sesuaikan' }));
     await screen.findByLabelText('Nama yang dipakai KPM Anda');
     await expectClean('kpm/settings/products (id)');
-    await userEvent.click(screen.getByRole('link', { name: 'Script approvals' }));
+    await userEvent.keyboard('{Escape}');
+    await userEvent.click(screen.getByRole('link', { name: 'Persetujuan script' }));
     await userEvent.click(await screen.findByRole('button', { name: 'Kembalikan' }));
     await screen.findByLabelText('Mengapa Anda mengembalikannya?');
     await expectClean('kpm/settings/products#approvals (id)');
@@ -7100,38 +5989,6 @@ describe('P18.10-T6 the Super Admin’s console in Indonesian', () => {
     return renderWithSession(<InLanguage language="id"><AdminLayout>{page}</AdminLayout></InLanguage>, { me: ADMIN });
   };
 
-  it('admin: the Overview, filled', async () => {
-    // The server writes the queue's words in the reader's language (ADR-0179 §7): the tag as an Indonesian reader gets it.
-    stubFetch({ ...INBOX, '/admin/overview': { body: { ...OVERVIEW, attention: [{ ...OVERVIEW.attention[0], tag: 'KPM Owner' }] } } });
-    inIndonesian('/admin', <AdminOverviewPage />);
-    await screen.findByRole('heading', { name: 'Perlu perhatian Anda' });
-    await expectClean('admin (id)');
-  });
-
-  it('admin/tenants: the list past the limit, and Edit subscription open', async () => {
-    stubFetch({ ...INBOX, '/admin/tenants': { body: [SUBSCRIBED] } });
-    inIndonesian('/admin/tenants', <TenantsPage />);
-    await screen.findByRole('table', { name: 'KPM di platform' });
-    await expectClean('admin/tenants (id)');
-    await userEvent.click(screen.getByRole('button', { name: /^Ubah langganan untuk KPM 0417/ }));
-    await screen.findByRole('dialog', { name: 'Ubah langganan' });
-    await expectClean('admin/tenants, Edit subscription (id)');
-  });
-
-  it('admin/tenants/new and an office’s page', async () => {
-    stubFetch({ ...INBOX, '/admin/companies': { body: [COMPANY] }, '/admin/companies/co-1/templates': { body: [] } });
-    const { unmount } = inIndonesian('/admin/tenants/new', <NewTenantPage />);
-    await screen.findByLabelText('Kode KPM');
-    await expectClean('admin/tenants/new (id)');
-    unmount();
-    vi.unstubAllGlobals();
-    const { default: TenantDetailPage } = await import('./(admin)/admin/tenants/[kpmId]/page');
-    stubFetch({ ...INBOX, '/admin/tenants/kpm-1': { body: SUBSCRIBED } });
-    inIndonesian('/admin/tenants/kpm-1', <TenantDetailPage params={routeParams({ kpmId: 'kpm-1' })} />);
-    await screen.findByRole('heading', { name: 'Siklus hidup' });
-    await expectClean('admin/tenants/[kpmId] (id)');
-  });
-
   it('admin/tenants/[kpmId]/owner, transferring', async () => {
     const { default: AssignOwnerPage } = await import('./(admin)/admin/tenants/[kpmId]/owner/page');
     stubFetch({ ...INBOX, '/admin/tenants/kpm-1': { body: SUBSCRIBED } });
@@ -7153,107 +6010,77 @@ describe('P18.10-T6 the Super Admin’s console in Indonesian', () => {
     await expectClean('admin/tenant-admins (id)');
   });
 
-  it('admin/billing: the tiers strip and the KPMs (P19.4-T3 AC-10)', async () => {
+  it('admin/billing: the calculator, the price list and Langganan per KPM with Atur open (P19.23-T5)', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-11-20T03:00:00Z'));
     const { default: BillingPage } = await import('./(admin)/admin/billing/page');
-    const tier = (code: string, min: number, max: number | null, s: number, six: number, annual: number) => ({
-      code, minLeaders: min, maxLeaders: max, standardMinor: s * 100, sixMonthMinor: six * 100, annualMinor: annual * 100, customPricing: max === null,
+    const { CalculatorDialog } = await import('@/components/admin/billing/calculator-dialog');
+    const rp = (n: number) => n * 100;
+    const tier = (code: string, min: number, max: number | null, s: number | null, o: number | null) => ({
+      code, minLeaders: min, maxLeaders: max, standardMinor: s === null ? null : rp(s), offerMinor: o === null ? null : rp(o), customPricing: max === null,
     });
+    const row = {
+      kpmId: 'kpm-1', code: '0603', branch: 'Tangerang Branch', company: { id: 'co-1', name: 'Prudential' }, kpmStatus: 'active',
+      owner: { fullName: 'Hendra Gunawan', phone: '+6281111111111' }, leadersUsed: 11, maxLeaders: 10,
+      tier: { code: 'T1', minLeaders: 1, maxLeaders: 10 }, rateMinor: rp(400_000), customPrice: false, plan: 'annual', trial: false,
+      startDate: '2026-03-16', endDate: '2027-03-15', perMonthMinor: rp(4_180_000), periodTotalMinor: rp(50_160_000),
+      graceEndsOn: null, attention: 'over', needsAction: true, agents: null, bulkDiscount: null, note: null,
+    };
     stubFetch({
       ...INBOX,
       '/admin/billing/prices': {
-        body: { currency: 'IDR', annualDiscountPct: 5, tiers: [tier('T1', 1, 10, 500_000, 400_000, 380_000), tier('T2', 11, null, 375_000, 250_000, 237_500)] },
+        body: {
+          currency: 'IDR', tiers: [tier('T1', 1, 10, 500_000, 400_000), tier('T2', 11, 20, 475_000, 375_000), tier('T3', 21, null, null, null)],
+          annualDiscountPct: 5, trialDays: 30, graceDays: 7, endingSoonDays: 30, daysPerMonth: 30, perDayRoundingMinor: rp(100),
+          bulkPercentMax: 100, noteMax: 500, kpmNameMax: 120, countMax: 10_000, rateMaxMinor: rp(100_000_000),
+          breakEven: { policyApeMinor: rp(20_000_000), commissionPct: 20, overridingPct: 10, bonusPct: 10, incomePerPolicyMinor: rp(8_000_000) },
+        },
       },
       '/admin/billing/kpms': {
-        body: [{ kpmId: 'kpm-1', code: '0417', branch: 'BSD City Branch', company: { id: 'co-1', name: 'Prudential' }, leadersUsed: 9, tier: { code: 'T1', minLeaders: 1, maxLeaders: 10 }, plan: 'annual', renewalDate: '2027-01-05', status: 'active' }],
-      },
-    });
-    inIndonesian('/admin/billing', <BillingPage />);
-    await screen.findByRole('table');
-    await expectClean('admin/billing (id)');
-  });
-
-  it('a KPM’s Billing tab: the editor with its override open, the dialog refused, and the quote (P19.4-T3 AC-10)', async () => {
-    vi.useFakeTimers({ toFake: ['Date'] });
-    vi.setSystemTime(new Date('2026-10-07T18:30:00Z'));
-    const { KpmBillingTab } = await import('@/components/admin/kpm-billing-tab');
-    const kpm = {
-      _id: 'kpm-1', code: '0417', branchName: 'BSD City Branch', ownerUserId: 'u-owner', ownerName: 'Rina Wijaya',
-      leadersUsed: 8, subscription: null,
-    } as never;
-    const tier = (code: string, min: number, max: number | null, s: number, six: number, annual: number) => ({
-      code, minLeaders: min, maxLeaders: max, standardMinor: s * 100, sixMonthMinor: six * 100, annualMinor: annual * 100, customPricing: max === null,
-    });
-    stubFetch({
-      ...INBOX,
-      '/admin/billing/prices': {
-        body: { currency: 'IDR', annualDiscountPct: 5, tiers: [tier('T1', 1, 10, 500_000, 400_000, 380_000), tier('T2', 11, null, 375_000, 250_000, 237_500)] },
-      },
-    });
-    inIndonesian('/admin/tenants/kpm-1', <KpmBillingTab kpm={kpm} />);
-    await screen.findByText('Perkirakan harga Anda');
-    await userEvent.click(screen.getByText('Penyesuaian manual'));
-    await expectClean('admin/billing (id)');
-    await userEvent.click(screen.getByRole('button', { name: 'Kirim penawaran' }));
-    await userEvent.clear(screen.getByLabelText('Nama PIC'));
-    await userEvent.click(screen.getByRole('button', { name: 'Buat penawaran' }));
-    await screen.findByText('Isi nama PIC.');
-    await expectClean('admin/billing, the dialog refused (id)');
-    await userEvent.type(screen.getByLabelText('Nama PIC'), 'Andi Wijaya');
-    await userEvent.type(screen.getByLabelText('Diisi oleh sales'), 'Maya');
-    await userEvent.click(screen.getByRole('button', { name: 'Buat penawaran' }));
-    await screen.findByRole('heading', { name: 'Penawaran langganan' });
-    await expectClean('admin/billing, the quote (id)');
-  });
-
-  it('admin/analytics and admin/audit', async () => {
-    const figures = { members: 20, byRung: [{ code: 'AGENT', label: 'Agent', count: 20 }], joinedThisMonth: 1, leftThisMonth: 0, signedIn7d: 12, signedIn30d: 18 };
-    stubFetch({
-      ...INBOX,
-      '/admin/analytics': {
         body: {
-          month: '2026-10',
-          offices: [{ kpmId: 'kpm-1', code: '0417', branch: 'BSD City Branch', company: { id: 'co-1', name: 'Prudential' }, state: 'active', ...figures }],
-          companies: [{ id: 'co-1', name: 'Prudential', offices: 1, ...figures }],
-          platform: { offices: 1, companies: 1, ...figures },
+          summary: { monthlyRevenueMinor: rp(4_180_000), payingKpms: 1, leadersBilled: 10, endingSoon: 0, needsAction: 1, kpms: 1 },
+          total: { kpms: 1, leadersUsed: 11, weightedRateMinor: rp(400_000), perMonthMinor: rp(4_180_000), periodTotalMinor: rp(50_160_000), needsAction: 1 },
+          rows: [row],
         },
       },
     });
-    const { unmount } = inIndonesian('/admin/analytics', <PlatformAnalyticsPage />);
-    await screen.findByRole('table', { name: 'Adopsi per KPM dan perusahaan' });
-    await expectClean('admin/analytics (id)');
-    unmount();
-    vi.unstubAllGlobals();
-    stubFetch({ ...INBOX, '/admin/audit': { body: AUDIT_PAGE }, '/admin/tenants': { body: [KPM] } });
-    inIndonesian('/admin/audit', <AuditPage />);
-    await screen.findByRole('table', { name: 'Entri audit, terbaru lebih dulu' });
-    await expectClean('admin/audit (id)');
+    inIndonesian('/admin/billing', <BillingPage />);
+    await screen.findByRole('heading', { name: 'Kalkulator harga' });
+    await expectClean('admin/billing, the calculator (id)');
+    cleanup();
+    inIndonesian('/admin/tenants/kpm-1', <CalculatorDialog kpmId="kpm-1" onClose={vi.fn()} />);
+    await screen.findByRole('button', { name: 'Konfirmasi paket' });
+    await expectClean('admin/billing, Atur (id)');
   });
 
-  it('admin/kpm-requests and admin/leader-limit-requests, a card waiting and the decided table', async () => {
+  it('admin/platform/audit', async () => {
+    stubFetch({ ...INBOX, '/admin/audit': { body: AUDIT_PAGE }, '/admin/tenants': { body: [KPM] } });
+    inIndonesian('/admin/platform/audit', <AuditPage />);
+    await screen.findByRole('list', { name: 'Entri audit, terbaru lebih dulu' });
+    await expectClean('admin/platform/audit (id)');
+  });
+
+  it('admin/approvals, both queues waiting and the decided tab (P19.23-T3)', async () => {
+    const kpmRow = {
+      requestId: 'req-1', branchName: 'Surabaya Branch', companyId: 'co-1', companyName: 'Prudential', requestedByName: 'Rangga Wibisono',
+      requestedByEmail: 'rangga@example.test', note: null, status: 'pending', requestedAt: '2026-09-01T00:00:00.000Z', decidedAt: null,
+      decidedByName: null, reason: null, createdKpmId: null, requestedByPhone: null, requesterCompanyId: 'co-1',
+      requesterCompanyName: 'Prudential', requesterEmailVerified: true, createdKpm: null,
+    };
     stubFetch({
       ...INBOX,
       '/admin/kpm-requests': {
-        body: [
-          { requestId: 'req-1', branchName: 'Surabaya Branch', companyId: 'co-1', companyName: 'Prudential', requestedByName: 'Rangga Wibisono', requestedByEmail: 'rangga@example.test', note: null, status: 'pending', requestedAt: '2026-09-01T00:00:00.000Z', decidedAt: null, reason: null, createdKpmId: null },
-          { requestId: 'req-2', branchName: 'Medan Branch', companyId: 'co-1', companyName: 'Prudential', requestedByName: 'Dewi', requestedByEmail: 'dewi@example.test', note: null, status: 'approved', requestedAt: '2026-09-01T00:00:00.000Z', decidedAt: '2026-09-02T00:00:00.000Z', reason: null, createdKpmId: 'kpm-9' },
-        ],
+        body: [kpmRow, { ...kpmRow, requestId: 'req-2', branchName: 'Medan Branch', status: 'declined', decidedAt: '2026-09-02T00:00:00.000Z', decidedByName: 'Dina Kusuma', reason: 'Duplikat.' }],
       },
+      '/admin/leader-limit-requests': { body: [] },
+      '/companies': { body: [] },
     });
-    const { unmount } = inIndonesian('/admin/kpm-requests', <KpmRequestsPage />);
-    await screen.findByRole('table', { name: 'Pendaftaran yang sudah diputuskan' });
-    await expectClean('admin/kpm-requests (id)');
-    unmount();
-    vi.unstubAllGlobals();
-    const limit = (over: Record<string, unknown>) => ({
-      requestId: 'llr-1', kpmId: 'kpm-1', kpmCode: '0603', kpmBranchName: 'Tangerang Branch', subjectMembershipId: 'mem-1',
-      subjectName: 'Rizky Ramadhan', subjectAgentCode: '86114', action: 'promote', fromOrgLevelCode: 'AGENT', toOrgLevelCode: 'AAB',
-      reason: 'Siap memimpin', requestedByMembershipId: 'mem-owner', requestedByName: 'Hendra Gunawan', status: 'pending',
-      requestedAt: '2026-10-25T00:00:00.000Z', decidedAt: null, declineReason: null, maxLeaders: 10, leadersUsed: 13, ...over,
-    });
-    stubFetch({ ...INBOX, '/admin/leader-limit-requests': { body: [limit({}), limit({ requestId: 'llr-2', status: 'declined', declineReason: 'Naikkan saat perpanjangan.' })] } });
-    inIndonesian('/admin/leader-limit-requests', <LeaderLimitRequestsPage />);
-    await screen.findByRole('table', { name: 'Permintaan yang sudah diputuskan' });
-    await expectClean('admin/leader-limit-requests (id)');
+    inIndonesian('/admin/approvals', <ApprovalsPage />);
+    await screen.findByText('KPM baru · Surabaya Branch');
+    await expectClean('admin/approvals (id)');
+    await userEvent.click(screen.getByRole('tab', { name: 'Sudah diputuskan' }));
+    await screen.findByRole('list', { name: 'Permintaan yang sudah diputuskan' });
+    await expectClean('admin/approvals › Sudah diputuskan (id)');
   });
 
   it('admin/impersonate/[userId] from Open as Owner: Hanya melihat, with no choice (P19.4-T2)', async () => {
@@ -7334,11 +6161,13 @@ describe('P18.10-T4 events, campaigns and the calendar in Indonesian', () => {
     });
     nav.pathname = '/kpm/settings/events';
     tenant(<EventsSettingsPage />);
-    await userEvent.click(await screen.findByRole('button', { name: 'Ubah' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Tindakan untuk PRULink briefing' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Ubah' }));
     await screen.findByRole('searchbox', { name: 'Cari orang' });
     await expectClean('kpm/settings/events (picker, id)');
     await userEvent.click(screen.getByRole('button', { name: 'Batal' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Lihat masukan' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Tindakan untuk PRULink briefing' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Catat kehadiran' }));
     await screen.findByRole('table');
     await expectClean('kpm/settings/events (Daftar hadir, id)');
     await userEvent.click(screen.getByRole('tab', { name: 'Ringkasan masukan' }));
@@ -7353,7 +6182,7 @@ describe('P18.10-T4 events, campaigns and the calendar in Indonesian', () => {
     await screen.findByRole('region', { name: 'Berjalan' });
     await expectClean('campaigns (seasonal, id)');
     await userEvent.click(screen.getByRole('tab', { name: 'Struktural' }));
-    await screen.findByRole('region', { name: 'Kriteria promosi' });
+    await screen.findByRole('region', { name: 'Struktural' });
     await expectClean('campaigns (structural, id)');
     unmount();
     vi.unstubAllGlobals();
@@ -7364,10 +6193,10 @@ describe('P18.10-T4 events, campaigns and the calendar in Indonesian', () => {
     await expectClean('campaigns/[campaignCode] (id)');
   });
 
-  it('Settings › Campaigns: the list, the form with a requirement row, and the carrier’s tiers', async () => {
+  // P19.25-T5 (ADR-0282): the filter, and the form on *Struktural* — no tiers tab, no *Bagian*.
+  it('Settings › Campaigns: the list and the form with a requirement row', async () => {
     stubFetch({
       ...shell,
-      '/kpm/settings/campaigns/rules': { body: [] },
       '/kpm/settings/campaigns': { body: [] },
       '/metrics': { body: [{ key: 'APE_ACHIEVED', name: 'APE achieved', unit: 'idr_minor', phase: '9', computed: true, campaign: true }] },
     });
@@ -7377,11 +6206,8 @@ describe('P18.10-T4 events, campaigns and the calendar in Indonesian', () => {
     await userEvent.selectOptions(screen.getByLabelText('Jenis'), 'structural');
     await userEvent.click(screen.getByRole('button', { name: '+ Tambah syarat' }));
     await userEvent.selectOptions(screen.getByLabelText('Syarat 1'), 'APE_ACHIEVED');
-    await screen.findByLabelText('Bagian');
+    await screen.findByLabelText('Dinilai selama');
     await expectClean('kpm/settings/campaigns (form, id)');
-    await userEvent.click(screen.getByRole('link', { name: 'Production club tiers' }));
-    await screen.findByText('Ini milik perusahaan asuransi Anda, bukan milik KPM Anda.');
-    await expectClean('kpm/settings/campaigns (tiers, id)');
   });
 
   it('the calendar: the week with the compare popover, the month, a dialog, and a phone’s agenda', async () => {
@@ -7510,29 +6336,29 @@ describe('P18.10-T6 the company templates in Indonesian', () => {
       '/product-data/intakes': { body: { aiReading: true, intakes: [] } },
     });
     inIndonesian('/admin/companies', <CompaniesPage />);
-    const table = await screen.findByRole('table', { name: 'Perusahaan' });
+    // *Changed 2026-11-20 (P19.23-T4 AC-1; ADR-0278):* the cards; *Ubah* in a card's ⋯; *Perusahaan baru*'s dialog.
+    const cards = await screen.findByRole('list', { name: 'Perusahaan' });
     await expectClean('admin/companies (id)');
-    // *Changed 2026-11-06 (P19.2-T2 AC-1, AC-3; UI-126, UI-133):* *Ubah* is in the row's ⋯ and opens the company sheet;
-    // *Tambah perusahaan* opens the same sheet from the title row.
-    await userEvent.click(within(table).getAllByRole('button', { name: /^Tindakan untuk / })[0]);
+    await userEvent.click(within(cards).getAllByRole('button', { name: /^Tindakan untuk / })[0]);
     await userEvent.click(screen.getByRole('menuitem', { name: 'Ubah' }));
     await screen.findByRole('dialog', { name: 'Ubah perusahaan' });
     await expectClean('admin/companies (id, renaming)');
     await userEvent.keyboard('{Escape}');
-    await userEvent.click(screen.getByRole('button', { name: 'Tambah perusahaan' }));
-    await screen.findByRole('dialog', { name: 'Tambah perusahaan' });
+    await userEvent.click(screen.getByRole('button', { name: 'Perusahaan baru' }));
+    await screen.findByRole('dialog', { name: 'Perusahaan baru' });
     await expectClean('admin/companies (id, adding)');
   });
 
-  it('admin/companies/[companyId]: the cards, and Template baru copying (id)', async () => {
-    templateRoutes();
+  // *Changed 2026-11-20 (P19.23-T4 AC-2; ADR-0278 §1):* the company page is its *Jenjang* tab.
+  it('admin/companies/[companyId]: Jenjang, its rungs (id)', async () => {
+    templateRoutes({
+      '/admin/org-levels': {
+        body: [{ orgLevelId: 'r1', companyId: 'c1', code: 'AGENT', label: 'Agent', displayOrder: 1, leaderTier: null, status: 'active', archivedAt: null, version: 0 }],
+      },
+    });
     inIndonesian('/admin/companies/c1', <CompanyPage params={routeParams({ companyId: 'c1' })} />);
-    await screen.findByRole('list', { name: 'Daftar template' });
+    await screen.findByText('1. Agent');
     await expectClean('admin/companies/[companyId] (id)');
-    await userEvent.click(screen.getByRole('button', { name: 'Template baru' }));
-    await userEvent.click(screen.getByRole('radio', { name: /^Salin dari…/ }));
-    await screen.findByLabelText('Template sumber');
-    await expectClean('admin/companies/[companyId] (id, Template baru)');
   });
 
   it('admin/companies/[companyId]/templates/[templateId]: the checklist, Terbitkan semua and the offices behind (id)', async () => {
@@ -7657,16 +6483,9 @@ describe('P18.10-T6 the company templates in Indonesian', () => {
       '/metrics': { body: [{ key: 'APE_ACHIEVED', name: 'APE achieved', unit: 'idr_minor', phase: '9', computed: true }] },
     });
     settings();
-    // The product opened from its row (P19.2-T2 AC-2; UI-131); Escape closes its panel.
-    await userEvent.click(await screen.findByRole('button', { name: 'PRUMapan' }));
-    await screen.findByRole('table', { name: 'Persentase komisi' });
-    await expectClean('admin/companies/[companyId]/settings#products (id, a product open)');
-    await userEvent.keyboard('{Escape}');
-    await userEvent.click(screen.getByRole('link', { name: 'Campaign' }));
-    await screen.findByText('Bonus promosi');
-    await expectClean('admin/companies/[companyId]/settings#campaigns (id)');
-    // P19.4-T5 (ADR-0210 §3): Pengaturan perusahaan keeps Produk · Campaign; Rekrutmen is the template's section.
-    expect(screen.queryByRole('link', { name: 'Rekrutmen' })).not.toBeInTheDocument();
+    // *Changed 2026-11-20 (P19.23-T4 AC-4; ADR-0278 §1):* *Pengaturan template*, the owner hub's groups, no *Tampilan*.
+    await screen.findByRole('link', { name: 'Objection handling' });
+    await expectClean('admin/companies/[companyId]/settings (id)');
     cleanup();
     section('recruitment');
     await userEvent.click(within(await screen.findByRole('group', { name: 'Lulusan baru' })).getByRole('button', { name: 'Ubah' }));
@@ -8129,7 +6948,7 @@ describe('P18.11-T13 selling and programmes on a phone (UI V1) have no axe viola
  * and the Strategic Leader Forum's list and meeting on a phone in the field shell, in both languages. The screens and
  * their fixtures are imported here, inside the block, so the file's head stays as it is for the tasks beside this one.
  */
-describe('UI V1 T14 KPM Analytics, the Leader Forum and Profil saya through axe', () => {
+describe('UI V1 T14 the Leader Forum and Profil saya through axe', () => {
   const named = (language: 'en' | 'id', what: string) => (language === 'id' ? `${what} (id)` : what);
   const render = (language: 'en' | 'id', ui: React.ReactElement, me: ReturnType<typeof makeMe>) =>
     renderWithSession(language === 'id' ? <InLanguage language="id">{ui}</InLanguage> : ui, { me });
@@ -8160,47 +6979,25 @@ describe('UI V1 T14 KPM Analytics, the Leader Forum and Profil saya through axe'
     await expectClean(named(language, 'profile (UI V1, Foto profil)'));
   });
 
-  it.each(['en', 'id'] as const)('UI-109 KPM Analytics Overview and Compliance on a phone (%s)', async (language) => {
-    const { default: Layout } = await import('./kpm/analytics/layout');
-    const { default: Overview } = await import('./kpm/analytics/page');
-    const { default: Compliance } = await import('./kpm/analytics/compliance/page');
-    const analytics = await import('@test/kpm-analytics-fixtures');
-    const compliance = await import('@test/kpm-compliance-fixtures');
-    atWidth(375);
-    nav.pathname = '/kpm/analytics';
-    nav.search = '';
-    stubFetch({ ...analytics.SHELL_STUBS, 'GET /kpm/analytics/compliance': { body: compliance.complianceView('training') }, 'GET /kpm/analytics': { body: analytics.analyticsView() } });
-    const { unmount } = render(language, <Layout><Overview /></Layout>, analytics.CORE_LEADER_ME);
-    // P19.3-T3: the Leader list at every size, where UI V1 drew a phone's own Overview.
-    await waitFor(() => expect(document.querySelector('[data-leaders]')).not.toBeNull());
-    await expectClean(named(language, 'kpm/analytics (UI V1, phone)'));
-    unmount();
-    nav.pathname = '/kpm/analytics/compliance';
-    render(language, <Layout><Compliance /></Layout>, analytics.CORE_LEADER_ME);
-    await waitFor(() => expect(document.querySelector('[data-v1-section]')).not.toBeNull());
-    await expectClean(named(language, 'kpm/analytics/compliance (UI V1, phone)'));
-  });
-
-  it.each(['en', 'id'] as const)('UI-110 the forum’s list and a meeting’s three tabs on a phone (%s)', async (language) => {
+  it.each(['en', 'id'] as const)('UI-110, P19.22-T8 the forum’s list and a forum’s agenda and action items on a phone (%s)', async (language) => {
     const { default: List } = await import('./leader-meetings/page');
     const { default: Meeting } = await import('./leader-meetings/[meetingId]/page');
     const forum = await import('./leader-meetings/forum-fixtures');
     atWidth(375);
     nav.pathname = '/leader-meetings';
-    const meeting = forum.meetingView({ can: forum.CORE_LEADER_CAN });
-    stubFetch({ ...forum.SHELL_STUBS, 'GET /leader-meetings/m-14': { body: meeting }, 'GET /leader-meetings': { body: forum.listView() } });
+    nav.search = '';
+    stubFetch({ ...forum.SHELL_STUBS, 'GET /leader-meetings/m-14': { body: forum.meetingView() }, 'GET /leader-meetings': { body: forum.listView() } });
     const { unmount } = render(language, <List />, forum.CORE_LEADER_ME);
-    await waitFor(() => expect(document.querySelector('[data-v1-forum-list]')).not.toBeNull());
-    await expectClean(named(language, 'leader-meetings (UI V1, phone)'));
+    await waitFor(() => expect(document.querySelector('[data-forum-list]')).not.toBeNull());
+    await expectClean(named(language, 'leader-meetings (phone)'));
     unmount();
     nav.pathname = '/leader-meetings/m-14';
     render(language, <Meeting params={routeParams({ meetingId: 'm-14' })} />, forum.CORE_LEADER_ME);
-    await waitFor(() => expect(document.querySelector('[data-v1-overview-meeting]')).not.toBeNull());
-    await expectClean(named(language, 'leader-meetings/[meetingId] (UI V1, Overview)'));
-    await userEvent.click(screen.getByRole('tab', { name: 'Agenda' }));
-    await expectClean(named(language, 'leader-meetings/[meetingId] (UI V1, Agenda)'));
-    await userEvent.click(screen.getByRole('tab', { name: 'Action Items' }));
-    await expectClean(named(language, 'leader-meetings/[meetingId] (UI V1, Action Items)'));
+    await forumPanel('agenda');
+    await expectClean(named(language, 'leader-meetings/[meetingId] (phone, Agenda)'));
+    await userEvent.click(screen.getByRole('tab', { name: 'Action items' }));
+    await forumPanel('actions');
+    await expectClean(named(language, 'leader-meetings/[meetingId] (phone, Action items)'));
   });
 });
 
@@ -8236,6 +7033,22 @@ describe('UI V1 T11 Home through axe', () => {
         await screen.findByRole('dialog');
         await expectClean(named(language, 'home (UI V1, Isi nomor WhatsApp)'));
       }
+      unmount();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it.each(['en', 'id'] as const)('P19.18-T4 the KPM Owner’s Home: the whole office, grouped by unit, the view picker open (%s)', async (language) => {
+    const { default: HomePage } = await import('./(agent)/home/page');
+    const home = await import('@test/home-fixtures');
+    nav.pathname = '/home';
+    for (const width of [375, 1280]) {
+      atWidth(width);
+      stubFetch({ '/home': { body: home.OWNER_VIEW }, '/notifications': { body: { items: [], unread: 0 } } });
+      const ui = <AgentLayout><HomePage /></AgentLayout>;
+      const { unmount } = renderWithSession(language === 'id' ? <InLanguage language="id">{ui}</InLanguage> : ui, { me: home.WILSON_OWNER });
+      await waitFor(() => expect(document.querySelector('[data-home-team] [data-team-unit]')).not.toBeNull());
+      await expectClean(named(language, `home (P19.18-T4, owner, ${width})`));
       unmount();
       vi.unstubAllGlobals();
     }
@@ -8391,45 +7204,150 @@ describe('UI V1 T16 the email change through axe', () => {
 });
 
 /*
- * P19.2-T1 AC-8 (UI-169 item 5; ADR-0199 §2, §5): a linked login's link page, `/link-account/[token]` — the form, and the
- * linked line — and *Profil saya*'s *Akun tertaut* line with *Hapus tautan*, in both languages. Imported inside the
- * block, as T16's are, so the file's head stays as it is.
+ * *Removed 2026-11-20 (P19.17-T3 AC-1; ADR-0269 §1):* P19.2-T1 AC-8's linked logins through axe — `/link-account/[token]`
+ * and *Profil saya*'s *Akun tertaut* line are gone with the second login (ADR-0199 superseded).
  */
-describe('P19.2-T1 AC-8 linked logins through axe', () => {
-  const named = (language: 'en' | 'id', what: string) => (language === 'id' ? `${what} (id)` : what);
-  const render = (language: 'en' | 'id', ui: React.ReactElement, me: ReturnType<typeof makeMe> | null) =>
-    renderWithSession(language === 'id' ? <InLanguage language="id">{ui}</InLanguage> : ui, { me });
 
-  it.each(['en', 'id'] as const)('P19.2-T1 AC-8 /link-account/[token], the form and linked (%s)', async (language) => {
-    const { default: LinkAccount } = await import('./(auth)/link-account/[token]/page');
-    nav.pathname = '/link-account/t';
-    stubFetch({ '/auth/links/confirm': { body: { status: 'linked' } } });
-    render(language, <LinkAccount params={routeParams({ token: 't' })} />, null);
-    await expectClean(named(language, 'link-account'));
-    await userEvent.type(screen.getByLabelText(language === 'id' ? 'Kata sandi akun ini' : 'Password of this login'), 'pw');
-    await userEvent.click(screen.getByRole('button', { name: language === 'id' ? 'Tautkan akun' : 'Link the logins' }));
-    await screen.findByRole('status');
-    await expectClean(named(language, 'link-account (linked)'));
+/*
+ * **People through axe** (P19.20; ADR-0273): All members — the table, the rows, the tablet's bar, *Menunggu*, *Riwayat*, a
+ * row's ⋯ and its two dialogs — the member sheet with a field open, the Org tree, KPM admins with its picker and *Cabut*,
+ * and Import people with its columns and *Unggah anggota* — each populated, in English and in Indonesian.
+ */
+describe('P19.20 the People screens', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const steward = makeMe({
+    membership: {
+      membershipId: 'mem-wilson', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab',
+      isKpmOwner: true, isKpmAdmin: false, status: 'active', directCount: 4,
+    },
+    permissions: [
+      'member:read_profile', 'member:tag_group', 'member:read_tags', 'member:read_role_change_log', 'member:transfer_approve',
+      'member:tag_core_leader', 'member:complete_personal', 'org_tree:read', 'kpm_admin:list', 'kpm_admin:grant',
+      'kpm_admin:revoke', 'kpm:import_roster',
+    ],
+  });
+  const dewi = peopleRow({
+    membershipId: 'mem-dewi', role: 'aab', orgLevelCode: 'AAB', fullName: 'Dewi Lestari', isCoreLeader: false, isLeader: false,
+    directCount: 0, subtreeCount: 0, lastActivityDays: 23, lastActivityStatus: 'lapsed',
+  });
+  const yosef = peopleRow({ membershipId: 'mem-yosef', fullName: 'Yosef Tambunan', openable: false, groupPlace: { group: null, ab: { membershipId: 'mem-yosef', name: 'Yosef Tambunan' }, isGroupLeader: false } });
+  const ROUTES = {
+    '/transfer-requests': { body: [transfer()] },
+    '/join/requests': { body: [] },
+    '/members/groups': { body: { groups: [], ungrouped: { abs: [], counts: { leaders: 0, people: 0, abGroups: 0 } }, unplaced: 0, canWrite: true } },
+    '/people/history': { body: [
+      { id: 'h-1', kind: 'role', membershipId: 'mem-dewi', fullName: 'Dewi Lestari', agentCode: '80007', role: 'aab', photoUrl: null, fromRole: 'agent', toRole: 'aab', fromLeaderName: null, toLeaderName: null, reason: 'Took the AAB track', actorName: 'Agus Prasetyo', at: '2026-10-07T02:00:00.000Z', openable: true },
+      { id: 'h-2', kind: 'moved', membershipId: 'mem-raka', fullName: 'Raka Aditama', agentCode: '87014', role: 'agent', photoUrl: null, fromRole: null, toRole: null, fromLeaderName: 'Satria Nugraha', toLeaderName: 'Agus Prasetyo', reason: null, actorName: 'Wilson Tanoto', at: '2026-10-20T02:00:00.000Z', openable: false },
+    ] },
+    '/members/mem-budi/tags': { body: { membershipId: 'mem-budi', fullName: 'Budi Santoso', groupIds: [], isCoreLeader: false, canBeCoreLeader: false, canCarryGroup: false, group: { groupId: 'g-top', name: 'Top Producers 2026' }, ab: { membershipId: 'mem-agus', name: 'Agus Prasetyo' } } },
+    '/members/mem-budi': { body: peopleBudi() },
+    '/members/tree': { body: PEOPLE_TREE },
+    '/members/admins': { body: [{ membershipId: 'mem-maya', fullName: 'Maya Halim', initials: 'MH', agentCode: '80004', role: 'ab', grantedAt: '2026-03-02T02:00:00.000Z', grantedByName: 'Wilson Tanoto', canRevoke: true, photoUrl: null }] },
+    '/people/stewards': { body: { owner: { membershipId: 'mem-wilson', fullName: 'Wilson Tanoto', agentCode: '80003', role: 'ab', photoUrl: null }, admins: 1, coreLeaders: 4 } },
+    '/people/imports': { body: [{ importId: 'imp-1', fileName: 'anggota_okt_2026.xlsx', importedAt: '2026-11-02T02:00:00.000Z', byName: 'Wilson Tanoto', created: 3, updated: 1, invited: 0, skipped: 0 }] },
+    '/admin/tenants/kpm-1/roster/file/preview': { body: {
+      issues: [], header: ['Kode agen', 'Nama', 'Peran', 'Kode upline', 'No. WhatsApp', 'Email', 'Tanggal bergabung', 'Waktu', 'Tanggal lahir', 'Jenis kelamin', 'Bulan bergabung di perusahaan'],
+      counts: { imported: 1, updated: 0, invited: 0, skipped: 0 },
+      rows: [{ line: 2, agentCode: '80213', fullName: 'Citra Lestari', role: 'Agent', leaderAgentCode: '80006', email: 'citra@mail.com', outcome: 'imported', messages: [], warnings: ['Tanggal lahir: not a date.'], flagged: ['Tanggal lahir'], cells: ['80213', 'Citra Lestari', 'Agent', '80006', '', 'citra@mail.com', '', '', '31/02/1990', '', ''] }],
+      skippedCsv: null,
+    } },
+    '/members': (req: { url: string }) => ({
+      body: {
+        members: req.url.includes('status=pending')
+          ? [peopleRow({ membershipId: 'mem-fajar', fullName: 'Fajar Nugroho', status: 'pending', role: 'agent', orgLevelCode: 'AGENT', groupPlace: undefined, registeredAt: '2026-11-16T02:00:00.000Z' })]
+          : [peopleRow({ isKpmOwner: true, membershipId: 'mem-wilson', fullName: 'Wilson Tanoto', leaderId: null, leaderName: null }), peopleRow(), dewi, yosef],
+        nextCursor: req.url.includes('status=pending') ? null : '25',
+        counts: { directory: 30, pending: 1, removed: 0 },
+      },
+    }),
+  };
+  const open = (path: string, page: React.ReactElement, language: 'en' | 'id' = 'en') => {
+    nav.pathname = path;
+    stubFetch(ROUTES as never);
+    return language === 'id'
+      ? renderWithSession(<InLanguage language="id"><TenantLayout>{page}</TenantLayout></InLanguage>, { me: steward })
+      : renderInLayout(TenantLayout, page, { me: steward });
+  };
+
+  it.each(['en', 'id'] as const)('P19.20-T1 people/members (%s): the table, ⋯ open, Ubah peran / leader and Keluarkan dari KPM', async (language) => {
+    atWidth(1280);
+    open('/people/members', <MembersPage />, language);
+    await screen.findByRole('table');
+    await expectClean(`people/members (${language})`);
+    const [menu] = screen.getAllByRole('button', { name: language === 'en' ? 'Actions for Dewi Lestari' : 'Tindakan untuk Dewi Lestari' });
+    await userEvent.click(menu);
+    await screen.findAllByRole('menuitem');
+    await expectClean(`people/members (${language}, ⋯ open)`);
+    await userEvent.click(screen.getByRole('menuitem', { name: language === 'en' ? 'Change role / leader' : 'Ubah peran / leader' }));
+    await screen.findByRole('dialog');
+    await expectClean(`people/members (${language}, Ubah peran / leader)`);
+    await userEvent.keyboard('{Escape}');
+    await userEvent.click(menu);
+    await userEvent.click(await screen.findByRole('menuitem', { name: language === 'en' ? 'Remove from the KPM' : 'Keluarkan dari KPM' }));
+    await screen.findByRole('dialog');
+    await expectClean(`people/members (${language}, Keluarkan dari KPM)`);
   });
 
-  it.each(['en', 'id'] as const)('P19.2-T1 AC-8 Profil saya with a linked login (%s)', async (language) => {
-    const { default: Profile } = await import('./profile/page');
-    nav.pathname = '/profile';
-    atWidth(375);
-    stubFetch({
-      '/auth/me/profile': { body: { companyName: 'Prudential Indonesia', agentCode: '70012345', leader: null, group: null } },
-      '/auth/sessions': { body: [] },
-      '/notifications': { body: { items: [], unread: 0 } },
-    });
-    render(language, <Profile />, makeMe({
-      user: { ...makeMe().user, fullName: 'Wilson Tanoto', email: 'owner@kpm0417.test', workStatus: 'full_time', gender: 'male' },
-      permissions: ['profile:read_self', 'account_link:manage_self'],
-      linkedLogin: {
-        linkId: 'link-1', userId: 'u-sa', email: 'wilson@agencyboost.test', fullName: 'Wilson Tanoto',
-        views: [{ kind: 'super_admin', officeName: null }],
-      },
-    }));
-    await screen.findByText('wilson@agencyboost.test');
-    await expectClean(named(language, 'profile (a linked login)'));
+  it.each([390, 768])('P19.20-T1 people/members at %ipx: the rows, the bar, Menunggu and Riwayat', async (px) => {
+    window.localStorage.clear();
+    atWidth(px);
+    open('/people/members', <MembersPage />);
+    await screen.findByRole('list', { name: 'The KPM’s members' });
+    await expectClean(`people/members (${px}px)`);
+    await userEvent.click(screen.getByRole('tab', { name: /Waiting/ }));
+    await screen.findByText('Fajar Nugroho');
+    await screen.findByText('Requests to move');
+    await expectClean(`people/members (${px}px, Menunggu)`);
+    await userEvent.click(screen.getByRole('tab', { name: 'History' }));
+    await screen.findByRole('list', { name: 'History, newest first' });
+    await expectClean(`people/members (${px}px, Riwayat)`);
+  });
+
+  it.each(['en', 'id'] as const)('P19.20-T2 people/members/[membershipId] (%s): the member sheet, a field open', async (language) => {
+    atWidth(1024);
+    open('/people/members/mem-budi', <MemberPage params={routeParams({ membershipId: 'mem-budi' })} />, language);
+    const sheet = await screen.findByRole('dialog');
+    await within(sheet).findByText('Budi Santoso');
+    await expectClean(`people/members/[membershipId] (${language})`);
+    await userEvent.click(within(sheet).getAllByRole('button', { name: /\+ (Fill in|Isi)/ })[0]);
+    await expectClean(`people/members/[membershipId] (${language}, a field open)`);
+  });
+
+  it.each([390, 1280])('P19.20-T3 people/org-tree at %ipx, a unit opened', async (px) => {
+    atWidth(px);
+    open('/people/org-tree', <OrgTreePage />);
+    await screen.findByText('Agus Prasetyo');
+    await userEvent.click(screen.getByRole('button', { name: 'Open all' }));
+    await screen.findByText('Rina Kurnia');
+    await expectClean(`people/org-tree (${px}px)`);
+  });
+
+  it.each(['en', 'id'] as const)('P19.20-T4 people/admins (%s): the tiles, the list, the picker and Cabut asked', async (language) => {
+    atWidth(1024);
+    open('/people/admins', <AdminsPage />, language);
+    await screen.findByText('Maya Halim');
+    await expectClean(`people/admins (${language})`);
+    await userEvent.click(screen.getByRole('button', { name: language === 'en' ? 'Add admin' : 'Tambah admin' }));
+    await screen.findByRole('dialog');
+    await screen.findAllByRole('radio');
+    await expectClean(`people/admins (${language}, Tambah admin)`);
+    await userEvent.click(screen.getByRole('button', { name: language === 'en' ? 'Cancel' : 'Batal' }));
+    await userEvent.click(screen.getByRole('button', { name: language === 'en' ? 'Revoke Maya Halim’s admin access' : 'Cabut akses admin Maya Halim' }));
+    await screen.findByRole('dialog');
+    await expectClean(`people/admins (${language}, Cabut)`);
+  });
+
+  it.each(['en', 'id'] as const)('P19.20-T5 people/import (%s): the card, Lihat kolom, the structure and Unggah anggota with a row open', async (language) => {
+    atWidth(1024);
+    open('/people/import', <PeopleImportPage />, language);
+    await screen.findByText('Agus Prasetyo');
+    await userEvent.click(screen.getByRole('button', { name: language === 'en' ? 'See the columns' : 'Lihat kolom' }));
+    await expectClean(`people/import (${language})`);
+    fireEvent.change(document.querySelector('input[type="file"]')!, { target: { files: [new File(['x'], 'anggota_nov_2026.xlsx')] } });
+    const dialog = await screen.findByRole('dialog');
+    await userEvent.click(within(dialog).getByRole('button', { name: /Citra Lestari/ }));
+    await expectClean(`people/import (${language}, Unggah anggota)`);
   });
 });
+

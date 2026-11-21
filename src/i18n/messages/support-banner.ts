@@ -16,19 +16,21 @@ import { defineMessages, type MessagesOf } from '@/i18n/catalogue';
  * @moved components/impersonation-banner.tsx
  */
 const en = {
-  actingAs: ({ name }: { name: string }) => `You are acting as ${name}.`,
-  lookOnly: 'This is a view-only session: you can look, and nothing can be changed.',
-  recorded: 'Everything you do is recorded against you as well.',
+  /**
+   * *Changed 2026-11-20 (P19.23-T2 AC-7; ADR-0277; the owner mockups' view-as bar):* **"Viewing as NAME"**, the name
+   * drawn after these words in the primary's colour, and the tag beside it — the three sentences it was are one line.
+   */
+  viewingAs: 'Viewing as',
+  tag: 'View only · recorded in the audit log',
   ending: 'Ending…',
-  stop: 'Stop acting as them',
+  stop: 'Done',
 };
 
 const id: MessagesOf<typeof en> = {
-  actingAs: ({ name }) => `Anda bertindak sebagai ${name}.`,
-  lookOnly: 'Ini sesi hanya melihat: Anda dapat melihat, dan tidak ada yang bisa diubah.',
-  recorded: 'Semua yang Anda lakukan juga dicatat atas nama Anda.',
+  viewingAs: 'Melihat sebagai',
+  tag: 'Hanya melihat · tercatat di audit log',
   ending: 'Mengakhiri…',
-  stop: 'Berhenti bertindak sebagai dia',
+  stop: 'Selesai',
 };
 
 export const supportBannerMessages = defineMessages({ en, id });

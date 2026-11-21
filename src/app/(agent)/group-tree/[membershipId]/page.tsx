@@ -14,7 +14,7 @@ import { groupTreeMessages } from '@/i18n/messages/group-tree';
 import { ApiRequestError, toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
 import { formatNumber } from '@/lib/format';
-import { firstName } from '@/lib/kpm-analytics';
+import { firstNameOf as firstName } from '@/lib/people';
 import { readOrgTree, type OrgTree } from '@/lib/org';
 import { useSession } from '@/lib/session';
 
@@ -141,7 +141,7 @@ function NotFound() {
         <h2 className="font-display text-lg font-bold text-navy">{t.notFoundTitle}</h2>
         <p className="mt-1 text-md text-muted">{t.notFoundLine}</p>
         <p className="mt-3">
-          <Link href="/kpm/analytics" className={cn('text-md font-semibold text-navy underline-offset-2 hover:underline', TEXT_TAP)}>
+          <Link href="/kpm/overview" className={cn('text-md font-semibold text-navy underline-offset-2 hover:underline', TEXT_TAP)}>
             {t.back}
           </Link>
         </p>

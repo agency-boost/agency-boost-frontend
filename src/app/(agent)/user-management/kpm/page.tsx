@@ -12,6 +12,7 @@ import { useMessages } from '@/i18n/language-provider';
 import { userManagementMessages } from '@/i18n/messages/user-management';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
+import { useSession } from '@/lib/session';
 import { listInsurers, type Insurer } from '@/lib/companies';
 import {
   askForKpm,
@@ -49,6 +50,9 @@ import {
 export default function RegisterKpmPage() {
   const words = useMessages(userManagementMessages);
   const t = words.kpm;
+  const { me } = useSession();
+  /** P19.20-T6 AC-1 (ADR-0273 §7): the Owner reads whose KPM it is, not *ask whoever administers it*. */
+  const owner = Boolean(me?.membership?.isKpmOwner);
   const [state, setState] = useState<JoinState | null>(null);
   const [q, setQ] = useState('');
   const [results, setResults] = useState<KpmDirectoryEntry[] | null>(null);
@@ -115,7 +119,7 @@ export default function RegisterKpmPage() {
           <p className="text-sm text-muted">{t.registered}</p>
           <p className="mt-0.5 flex items-center gap-1.5 font-display text-xl font-bold text-navy">
             {state.kpmLabel}
-            <PhoneTip text={t.moving} className="font-normal" />
+            {!owner && <PhoneTip text={t.moving} className="font-normal" />}
           </p>
           <p className="mt-1 text-md text-muted">
             {/* UI-166 item 4: "waiting for a leader" only once a leader has been asked. */}
@@ -124,7 +128,9 @@ export default function RegisterKpmPage() {
           {/* No "Switch KPM". The prototype's button only hides a card; moving between
               offices is a real operation with real consequences for your history, and it
               is not one you do to yourself from here. */}
-          <p className={cn('mt-2 text-sm text-muted', REMOVED_ON_PHONE)}>{t.moving}</p>
+          {owner
+            ? <p className="mt-2 text-md text-navy" data-testid="owner-line">{t.ownerLine({ office: state.kpmLabel ?? '' })}</p>
+            : <p className={cn('mt-2 text-sm text-muted', REMOVED_ON_PHONE)}>{t.moving}</p>}
           {state.status === 'pending' && (
             <ButtonLink href="/user-management/leader" className="mt-4">
               {words.tabs.leader}

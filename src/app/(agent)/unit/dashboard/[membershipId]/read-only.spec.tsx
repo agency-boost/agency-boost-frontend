@@ -41,7 +41,9 @@ describe('P19.3-T3 AC-3 the office’s read-only Unit Dashboard', () => {
   it('P19.3-T3 AC-3 draws Sari’s unit as she sees it, with no Update production and no + Add agent', async () => {
     open();
     expect(await screen.findByRole('heading', { level: 1 })).toHaveTextContent('Sari Wulandari’s Unit Dashboard');
-    await screen.findByRole('table');
+    await screen.findByRole('region', { name: /^Your team’s roster/ });
+    // P19.18-T1: no WhatsApp in the office's read-only view, and no card — a person's figures as Sari sees them.
+    expect(document.querySelector('[data-row-whatsapp]')).toBeNull();
     expect(screen.queryByRole('button', { name: 'Update production' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '+ Add agent' })).not.toBeInTheDocument();
   });
@@ -49,7 +51,7 @@ describe('P19.3-T3 AC-3 the office’s read-only Unit Dashboard', () => {
   it('P19.3-T3 AC-3 follows the server’s readOnly even where the grant would offer the writes', async () => {
     // `canUpdate` true from a server that has not caught up: `readOnly` still keeps the save off the screen.
     open({ ...SARI_UNIT, readOnly: true });
-    await screen.findByRole('table');
+    await screen.findByRole('region', { name: /^Your team’s roster/ });
     expect(screen.queryByRole('button', { name: 'Update production' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '+ Add agent' })).not.toBeInTheDocument();
   });

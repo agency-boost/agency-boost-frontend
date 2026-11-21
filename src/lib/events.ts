@@ -56,6 +56,11 @@ export interface GuestFeedback {
 /** The reader's own record of one event: their RSVP, their claim and their feedback. Never a confirmation. */
 export interface GuestEventMe {
   rsvp: 'going' | 'cancelled' | null;
+  /**
+   * *Tidak ikut*'s reason as the reader gave it (ADR-0281 §2); `null` with none or while not cancelled. Optional here only
+   * so the fixtures written before it still type; the server always sends it.
+   */
+  declineReason?: string | null;
   claimed: boolean;
   feedback: GuestFeedback | null;
 }
@@ -140,9 +145,14 @@ export const readEvent = (id: string) => api<GuestEvent>(`/events/${encodeURICom
 export const rsvpEvent = (id: string) =>
   api<GuestEvent>(`/events/${encodeURIComponent(id)}/rsvp`, { method: 'POST', body: {} });
 
-/** *Tidak ikut*: from going, or from no answer at all (UI V1, UI-108). */
-export const cancelRsvp = (id: string) =>
-  api<GuestEvent>(`/events/${encodeURIComponent(id)}/rsvp/cancel`, { method: 'POST', body: {} });
+/**
+ * *Tidak ikut*: from going, or from no answer at all (UI V1, UI-108), **with the reason the member gives** (P19.25-T1
+ * AC-3; ADR-0281 §2) — optional, trimmed and at most `EVENT_DECLINE_REASON_MAX` by the server.
+ */
+export const cancelRsvp = (id: string, reason?: string) =>
+  api<GuestEvent>(`/events/${encodeURIComponent(id)}/rsvp/cancel`, {
+    method: 'POST', body: reason && reason.trim() ? { reason: reason.trim() } : {},
+  });
 /** The answer taken back: *Ikut* or *Tidak ikut* tapped again on a phone's card (UI V1, UI-108). */
 export const withdrawRsvp = (id: string) =>
   api<GuestEvent>(`/events/${encodeURIComponent(id)}/rsvp/withdraw`, { method: 'POST', body: {} });

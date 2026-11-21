@@ -134,13 +134,14 @@ describe('/campaigns, the list (P18.2-T7)', () => {
       expect(within(screen.getByRole('region', { name: 'Ended' })).getByRole('button', { name: /^Mid-Year Persistency Push/ })).toBeInTheDocument();
     });
 
-    it('P18.2-T7 AC-2 the structural sections, Promotion Criteria and Production Clubs, with no filter', async () => {
+    it('P18.2-T7 AC-2, P19.25-T5 AC-1 the structural view: one Structural section, no Production Clubs, no filter', async () => {
       list();
       await listReady();
       await userEvent.click(screen.getByRole('tab', { name: 'Structural' }));
-      expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual(['Promotion Criteria2', 'Production Clubs1']);
+      expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual(['Structural3']);
       expect(screen.queryByRole('group', { name: 'Show campaigns' })).not.toBeInTheDocument();
-      expect(within(screen.getByRole('region', { name: 'Production Clubs' })).getByRole('article', { name: 'MDRT Qualification' })).toBeInTheDocument();
+      expect(within(screen.getByRole('region', { name: 'Structural' })).getByRole('article', { name: 'MDRT Qualification' })).toBeInTheDocument();
+      expect(screen.queryByText(/Production Clubs|Club/)).toBeNull();
     });
 
     it('P18.2-T7 AC-2, P19.1-T5 AC-5 an empty group is hidden; with nothing at all, one line, verbatim', async () => {
@@ -156,8 +157,8 @@ describe('/campaigns, the list (P18.2-T7)', () => {
       expect(await screen.findByText('No running campaigns right now.')).toBeInTheDocument();
       expect(screen.queryByText('No upcoming campaigns.')).not.toBeInTheDocument();
       await userEvent.click(screen.getByRole('tab', { name: 'Structural' }));
-      expect(screen.getByText('No promotion criteria published yet.')).toBeInTheDocument();
-      expect(screen.queryByText('No ongoing incentives right now.')).not.toBeInTheDocument();
+      // One section since P19.25-T5 (ADR-0282 §4): its one empty line.
+      expect(screen.getByText('No structural campaigns right now.')).toBeInTheDocument();
     });
 
     it('P18.2-T7 AC-2 keeps the server’s order (D-lists): nothing on screen sorts', async () => {

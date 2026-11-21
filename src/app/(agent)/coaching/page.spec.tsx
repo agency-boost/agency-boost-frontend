@@ -1,7 +1,8 @@
-import { cleanup, screen, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { makeMe, renderInLayout, renderWithSession, stubFetch } from '@test/harness';
-import type { RosterRow, RosterStatus } from '@/lib/coaching';
+import { makeMe, renderInIndonesian, renderInLayout, renderWithSession, stubFetch } from '@test/harness';
+import type { Roster, RosterRow } from '@/lib/coaching';
 import AgentLayout from '../layout';
 import CoachingRosterPage from './page';
 
@@ -10,255 +11,270 @@ vi.mock('next/navigation', () => ({
   usePathname: () => '/coaching',
 }));
 
-/** An AB who leads two agents' worth of people and two units. */
-const LEADER = makeMe({
+/** Wilson, the KPM Owner and the root AB, reading the whole office (the 19 November review). */
+const OWNER = makeMe({
+  user: { ...makeMe().user, fullName: 'Wilson Tanoto' },
   membership: {
-    membershipId: 'mem-jordan', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab', status: 'active',
-    isKpmOwner: false, isKpmAdmin: false, directCount: 5,
+    membershipId: 'mem-wilson', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab', status: 'active',
+    isKpmOwner: true, isKpmAdmin: false, directCount: 3,
   },
-  permissions: ['coaching_session:read'],
+  permissions: ['coaching_session:read', 'member:update_phone'],
 });
 
-const AGENT_RUNG = { code: 'AGENT', label: 'Agent' };
-const AAB_RUNG = { code: 'AAB', label: 'Associate Agency Builder' };
+const AB = { code: 'AB', label: 'AB' };
+const AAB = { code: 'AAB', label: 'AAB' };
+const AGENT = { code: 'AGENT', label: 'Agent' };
 
-function person(
-  membershipId: string,
-  name: string,
-  days: number | null,
-  status: RosterStatus,
-  over: Partial<RosterRow> & { overdue?: boolean; coach?: string | null } = {},
-): RosterRow {
-  const { overdue = false, coach = 'Jordan Pratama', ...rest } = over;
+function person(membershipId: string, name: string, over: Partial<RosterRow> = {}): RosterRow {
   return {
     membershipId,
     name,
-    rung: AGENT_RUNG,
-    depth: 1,
-    lastOneOnOne: days === null ? null : {
-      days,
-      date: '2026-09-20',
-      overdue,
-      coach: coach === null ? null : { membershipId: `coach-${coach}`, name: coach },
-    },
-    status,
-    ...rest,
+    photoUrl: null,
+    rung: AGENT,
+    depth: 2,
+    lastOneOnOne: null,
+    status: 'no_goal_set',
+    coaching: { status: 'never', days: null, coach: null },
+    phone: '+6281211002200',
+    isReader: false,
+    opens: true,
+    ...over,
   };
 }
 
+const AGUS_COACH = { membershipId: 'mem-agus', name: 'Agus Prasetyo' };
+const leader = (membershipId: string, name: string) => ({ membershipId, name, photoUrl: null });
+
 /**
- * The prototype's roster (`Overall.html:10602-10618`) as the server sends it, with one level the
- * prototype never draws: a head nested inside Sri Lestari's unit, with a member of their own.
+ * `coaching-owner-mobile` frames 1–3 as the server sends them: *Unit Anda* (Wilson alone), Agus's unit with an AAB who
+ * leads nobody, two agents and an AAB's team, Satria's unit with a lapsed 1:1, and somebody with no leader.
  */
-const ROSTER = {
-  today: '2026-10-02',
+const ROSTER: Roster = {
+  today: '2026-11-20',
   overdueAfterDays: 7,
-  directAgents: [
-    person('mem-rina', 'Rina Wijaya', 5, 'watch_closely'),
-    person('mem-fajar', 'Fajar Hidayat', 12, 'needs_attention', { overdue: true }),
-    person('mem-melati', 'Melati Putri', null, 'no_goal_set'),
-  ],
-  units: [
+  scope: 'downline',
+  scopes: { offered: ['unit', 'direct', 'informal', 'downline'], default: 'downline' },
+  total: 10,
+  sections: [
     {
-      head: person('mem-dimas', 'Dimas Aditya', 3, 'watch_closely', { rung: AAB_RUNG }),
-      members: [
-        person('mem-yuni', 'Yuni Sartika', 20, 'on_track', { depth: 2, overdue: true, coach: 'Dimas Aditya' }),
-        person('mem-bayu', 'Bayu Kurniawan', null, 'needs_attention', { depth: 2 }),
-      ],
+      key: 'own', kind: 'own', leader: leader('mem-wilson', 'Wilson Tanoto'), count: 1,
+      rows: [person('mem-wilson', 'Wilson Tanoto', { rung: AB, depth: 0, isReader: true, phone: null })],
+      teams: [],
     },
     {
-      head: person('mem-sri', 'Sri Lestari', 0, 'on_track', { rung: AAB_RUNG }),
-      members: [
-        person('mem-agus', 'Agus Santoso', 1, 'watch_closely', { depth: 2, coach: 'Sri Lestari' }),
-        person('mem-wulan', 'Wulan Sari', 9, 'on_track', { depth: 2, rung: AAB_RUNG, overdue: true, coach: null }),
-        person('mem-tono', 'Tono Saputra', 2, 'no_goal_set', { depth: 3, coach: 'Wulan Sari' }),
+      key: 'mem-agus', kind: 'unit', leader: leader('mem-agus', 'Agus Prasetyo'), count: 6,
+      rows: [
+        person('mem-agus', 'Agus Prasetyo', { rung: AB, depth: 1 }),
+        person('mem-dewi', 'Dewi Lestari', { rung: AAB }),
+        person('mem-hilmy', 'Hilmy', { coaching: { status: 'recent', days: 1, coach: AGUS_COACH }, phone: null }),
+        person('mem-indah', 'Indah Permatasari', { coaching: { status: 'recent', days: 1, coach: AGUS_COACH } }),
       ],
+      teams: [{
+        key: 'mem-arief', leader: leader('mem-arief', 'Arief Hidayat'), count: 2,
+        rows: [person('mem-arief', 'Arief Hidayat', { rung: AAB }), person('mem-novi', 'Novi Andriani', { depth: 3 })],
+      }],
+    },
+    {
+      key: 'mem-satria', kind: 'unit', leader: leader('mem-satria', 'Satria Nugraha'), count: 2,
+      rows: [
+        person('mem-satria', 'Satria Nugraha', { rung: AB, depth: 1 }),
+        person('mem-oscar', 'Oscar Lim', {
+          coaching: { status: 'lapsed', days: 47, coach: { membershipId: 'mem-satria', name: 'Satria Nugraha' } },
+        }),
+      ],
+      teams: [],
+    },
+    {
+      key: 'unled', kind: 'unled', leader: null, count: 1,
+      rows: [person('mem-nora', 'Nora Siregar', { depth: 1, opens: false })],
+      teams: [],
     },
   ],
 };
 
-const EVERYONE = [
-  'Rina Wijaya', 'Fajar Hidayat', 'Melati Putri', 'Dimas Aditya', 'Yuni Sartika', 'Bayu Kurniawan',
-  'Sri Lestari', 'Agus Santoso', 'Wulan Sari', 'Tono Saputra',
-];
+const EMPTY: Roster = { ...ROSTER, total: 0, sections: [], scopes: { offered: [], default: 'downline' } };
 
-const render = (body: unknown = ROSTER, me = LEADER) => {
+const render = (body: unknown = ROSTER, me = OWNER) => {
   const stub = stubFetch({ '/coaching/coachees': { body } });
   renderWithSession(<CoachingRosterPage />, { me });
   return stub;
 };
 
-/** A person's row: the row's link is their name, stretched over the row (`PersonRow`). */
-const linkOf = (name: string) => screen.getByRole('link', { name });
-const rowOf = (name: string) => linkOf(name).closest('[data-person-row]') as HTMLElement;
-/** Everyone, in the order the page draws them. */
-const order = () => screen.getAllByRole('link').filter((a) => a.hasAttribute('data-row-main')).map((a) => a.textContent);
+const card = () => document.querySelector('[data-roster]') as HTMLElement;
+/** A person's row, by the name on it. */
+const rowOf = (name: string) => [...card().querySelectorAll<HTMLElement>('[data-person-row]')]
+  .find((r) => r.textContent!.includes(name))!;
+/** Each unit line's words, in the order drawn. */
+const unitLines = () => [...card().querySelectorAll('[data-roster-section] > h3 button')]
+  .map((b) => b.querySelector('[data-unit-label]')!.textContent);
 
-describe('Coaching Session — the roster (P11-T6; UI V1, UI-033, UI-034)', () => {
-  afterEach(() => {
-    vi.unstubAllGlobals();
-    vi.useRealTimers();
+describe('P19.18-T5 Coaching for the KPM Owner: the whole office (ADR-0271 §9)', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('P19.18-T5 AC-1 the control row: Semua downline ⌄ and Catatan coaching saya; the card reads Semua orang · n', async () => {
+    stubFetch({ '/coaching/coachees': { body: ROSTER } });
+    renderInIndonesian(<CoachingRosterPage />, { me: OWNER });
+    await waitFor(() => expect(card()).not.toBeNull());
+    const controls = document.querySelector('[data-roster-controls]') as HTMLElement;
+    expect(within(controls).getByRole('button', { name: /Tampilan/ })).toHaveTextContent('Semua downline');
+    expect(within(controls).getByRole('link', { name: 'Catatan coaching saya' })).toHaveAttribute('href', '/coaching/me');
+    expect(within(card()).getByRole('heading', { level: 2 })).toHaveTextContent('Semua orang· 10');
+    expect(card()).toHaveTextContent('1:1 terakhir');
   });
 
-  it('UI-033, UI-034 offers the reader’s own coaching as a pill on the title row, the card gone', async () => {
+  it('P19.18-T5 AC-1 the views the server offers, and a choice reads the roster again with ?scope=', async () => {
+    const user = userEvent.setup();
+    const { calls } = render();
+    await waitFor(() => expect(card()).not.toBeNull());
+    expect(calls.map((c) => c.url)).toEqual(['http://api.test/api/v1/coaching/coachees']);
+    await user.click(screen.getByRole('button', { name: /View/ }));
+    expect(screen.getAllByRole('option').map((o) => o.textContent))
+      .toEqual(['Direct Unit', 'Direct group', 'Informal group', 'All downline']);
+    await user.click(screen.getByRole('option', { name: 'Direct group' }));
+    await waitFor(() => expect(calls.map((c) => c.url)).toContain('http://api.test/api/v1/coaching/coachees?scope=direct'));
+  });
+
+  it('P19.18-T5 AC-1 one view offered: no picker, the notes pill alone', async () => {
+    render({ ...ROSTER, scopes: { offered: ['unit'], default: 'unit' } });
+    await waitFor(() => expect(card()).not.toBeNull());
+    const controls = document.querySelector('[data-roster-controls]') as HTMLElement;
+    expect(within(controls).queryByRole('button')).toBeNull();
+    expect(within(controls).getByRole('link', { name: 'My Coaching Notes' })).toBeInTheDocument();
+  });
+
+  it('P19.18-T5 AC-2 one orange line per unit — leader photo, Unit Anda / Unit NAME / Belum punya leader, n orang — open, a tap closes', async () => {
+    const user = userEvent.setup();
+    stubFetch({ '/coaching/coachees': { body: ROSTER } });
+    renderInIndonesian(<CoachingRosterPage />, { me: OWNER });
+    await waitFor(() => expect(card()).not.toBeNull());
+    expect(unitLines()).toEqual(['Unit Anda', 'Unit AGUS PRASETYO', 'Unit SATRIA NUGRAHA', 'Belum punya leader']);
+    const agus = screen.getByRole('button', { name: /Unit AGUS PRASETYO/ });
+    expect(agus).toHaveClass('bg-primary/[0.12]');
+    expect(agus).toHaveTextContent('6 orang');
+    expect(agus).toHaveAttribute('aria-expanded', 'true');
+    // The leader's photo — initials without one — on the line; *Belum punya leader* has none.
+    expect(agus.querySelector('[aria-hidden="true"]')).toHaveTextContent('AP');
+    await user.click(agus);
+    expect(agus).toHaveAttribute('aria-expanded', 'false');
+    expect(card()).not.toHaveTextContent('Dewi Lestari');
+  });
+
+  it('P19.18-T5 AC-2 an AAB’s team is a team line in the same tint, with the leader’s photo and n orang — not a folder', async () => {
     render();
-    // P19.13-T4 AC-1 (UI-197): the menu's *Coaching*, where the title was *Coaching Session*.
-    const title = await screen.findByRole('heading', { level: 1, name: 'Coaching' });
-    const pill = screen.getByRole('link', { name: 'My Coaching Notes' });
-    expect(pill).toHaveAttribute('href', '/coaching/me');
-    expect(pill).toHaveClass('rounded-pill', 'border-primary', 'min-h-11');
-    expect(title.closest('[data-title-row], div')?.parentElement).toContainElement(pill);
-    expect(screen.queryByText('Your own coaching')).not.toBeInTheDocument();
+    await waitFor(() => expect(card()).not.toBeNull());
+    const team = card().querySelector('[data-roster-team="mem-arief"]') as HTMLElement;
+    const line = team.querySelector('h4')!;
+    expect(line).toHaveTextContent('ARIEF HIDAYAT’s unit2 people');
+    expect(line).toHaveClass('bg-primary/[0.12]');
+    expect(line.querySelector('button')).toBeNull();
+    expect(within(team).getByRole('list', { name: 'ARIEF HIDAYAT’s unit' })).toBeInTheDocument();
   });
 
-  it('P11-T6 AC-1 offers it while the roster is still on its way, and when it fails', async () => {
+  it('P19.18-T5 AC-2 inside a unit: the AB, then the AAB, then agents, in the server’s order; the label orange, an AB never AAB', async () => {
+    render();
+    await waitFor(() => expect(card()).not.toBeNull());
+    const agus = card().querySelectorAll('[data-roster-section="unit"]')[0] as HTMLElement;
+    const names = [...agus.querySelectorAll('[data-row-main]')].map((a) => a.textContent);
+    expect(names).toEqual(['Agus Prasetyo', 'Dewi Lestari', 'Hilmy', 'Indah Permatasari', 'Arief Hidayat', 'Novi Andriani']);
+    expect(within(rowOf('Agus Prasetyo')).getByText('AB')).toHaveClass('text-primary-ink', 'font-extrabold');
+    expect(within(rowOf('Satria Nugraha')).getByText('AB')).toHaveAttribute('data-rung-tag', 'AB');
+    expect(within(rowOf('Dewi Lestari')).getByText('AAB')).toHaveAttribute('data-rung-tag', 'AAB');
+    expect(rowOf('Hilmy').querySelector('[data-rung-tag]')).toBeNull();
+    expect(card().textContent).not.toMatch(/AAB units|Your direct agents/);
+  });
+
+  it('P19.18-T5 AC-2 the coaching status tile: red never, green to 14 days, yellow after — and oleh <coach> under it', async () => {
+    stubFetch({ '/coaching/coachees': { body: ROSTER } });
+    renderInIndonesian(<CoachingRosterPage />, { me: OWNER });
+    await waitFor(() => expect(card()).not.toBeNull());
+    expect(within(rowOf('Dewi Lestari')).getByText('Belum pernah coaching')).toHaveClass('bg-pill-red');
+    expect(within(rowOf('Hilmy')).getByText('Coaching 1 hari lalu')).toHaveClass('bg-pill-green');
+    expect(within(rowOf('Hilmy')).getByText('oleh AGUS PRASETYO')).toBeInTheDocument();
+    expect(within(rowOf('Oscar Lim')).getByText('Coaching 47 hari lalu')).toHaveClass('bg-pill-amber');
+    expect(within(rowOf('Oscar Lim')).getByText('oleh SATRIA NUGRAHA')).toBeInTheDocument();
+    expect(rowOf('Dewi Lestari')).not.toHaveTextContent('oleh');
+  });
+
+  it('P19.18-T5 AC-2 the row opens their Coaching Session; the reader’s own opens their notes; one outside their team opens nothing', async () => {
+    render();
+    await waitFor(() => expect(card()).not.toBeNull());
+    expect(screen.getByRole('link', { name: 'Dewi Lestari' })).toHaveAttribute('href', '/coaching/mem-dewi/session');
+    expect(screen.getByRole('link', { name: 'You (Wilson)' })).toHaveAttribute('href', '/coaching/me');
+    expect(within(rowOf('Nora Siregar')).queryByRole('link', { name: 'Nora Siregar' })).toBeNull();
+    // A row that opens carries the ›; one that does not, none.
+    expect(rowOf('Dewi Lestari').querySelector(':scope > svg')).not.toBeNull();
+    expect(rowOf('Nora Siregar').querySelector(':scope > svg')).toBeNull();
+  });
+
+  it('P19.18-T5 AC-2 WhatsApp: a number opens it, none offers Isi nomor WhatsApp to a reader who may save one, never on the own row', async () => {
+    render();
+    await waitFor(() => expect(card()).not.toBeNull());
+    expect(within(rowOf('Dewi Lestari')).getByRole('link', { name: /WhatsApp/ })).toHaveAttribute('href', expect.stringContaining('wa.me/6281211002200'));
+    expect(within(rowOf('Hilmy')).getByRole('button', { name: /WhatsApp/ })).toBeInTheDocument();
+    expect(rowOf('You (Wilson)').querySelector('[data-roster-whatsapp]')).toBeNull();
+  });
+
+  // Found 2026-11-20: the reader's row is labelled *You (Wilson)*, and its avatar drew the label's initials, *Y(* — *A(* in
+  // Indonesian. The initials are the person's own name's.
+  it('draws the reader’s own initials on their row, not the label’s', async () => {
+    render();
+    await waitFor(() => expect(card()).not.toBeNull());
+    const avatar = rowOf('You (Wilson)').querySelector(':scope > span[aria-hidden="true"]');
+    expect(avatar).toHaveTextContent(/^WT$/);
+  });
+
+  it('P19.18-T5 AC-2 a reader who may not save a number gets no button on a row without one', async () => {
+    render(ROSTER, makeMe({ ...OWNER, permissions: ['coaching_session:read'] }));
+    await waitFor(() => expect(card()).not.toBeNull());
+    expect(rowOf('Hilmy').querySelector('[data-roster-whatsapp]')).toBeNull();
+    expect(within(rowOf('Dewi Lestari')).getByRole('link', { name: /WhatsApp/ })).toBeInTheDocument();
+  });
+
+  it('UI-111 a person with a saved photo shows it on their row; a person without one shows their initials', async () => {
+    const photo = 'https://cdn.test/user/u-dewi/avatar/a.jpg?sig=abc';
+    const withPhoto: Roster = {
+      ...ROSTER,
+      sections: ROSTER.sections.map((s) => ({ ...s, rows: s.rows.map((r) => (r.membershipId === 'mem-dewi' ? { ...r, photoUrl: photo } : r)) })),
+    };
+    render(withPhoto);
+    await waitFor(() => expect(card()).not.toBeNull());
+    expect(rowOf('Dewi Lestari').querySelector('img')).toHaveAttribute('src', photo);
+    expect(rowOf('Hilmy').querySelector('img')).toBeNull();
+  });
+
+  it('P11-T6 AC-6 draws verdicts and dates, never an activity count, even if one arrived', async () => {
+    const counted = {
+      ...ROSTER,
+      sections: [{ ...ROSTER.sections[1], rows: [{ ...ROSTER.sections[1].rows[1], activityCount: 4321 } as RosterRow], teams: [] }],
+    };
+    render(counted);
+    await waitFor(() => expect(card()).not.toBeNull());
+    expect(card()).not.toHaveTextContent('4321');
+  });
+
+  it('P11-T6 AC-1 offers the reader’s notes while the roster is on its way, and when it fails', async () => {
     stubFetch({ '/coaching/coachees': { status: 500, body: { error: { code: 'INTERNAL_ERROR', message: 'Down.', requestId: 'req-9' } } } });
-    renderWithSession(<CoachingRosterPage />, { me: LEADER });
+    renderWithSession(<CoachingRosterPage />, { me: OWNER });
     expect(screen.getByRole('link', { name: 'My Coaching Notes' })).toBeInTheDocument();
     expect(screen.getByRole('status')).toHaveTextContent('Loading everyone you coach…');
     expect(await screen.findByRole('alert')).toHaveTextContent('Down.');
     expect(screen.getByRole('alert')).toHaveTextContent('INTERNAL_ERROR · req-9');
   });
 
-  it('UI-033 groups the direct agents, counted, then the AAB units, each head before their team, under 36px bands', async () => {
-    render();
-    await screen.findByRole('link', { name: 'Rina Wijaya' });
-    const direct = screen.getByRole('heading', { level: 3, name: 'Your direct agents · 3' });
-    expect(direct).toHaveClass('min-h-9');
-    expect(screen.getByRole('heading', { level: 3, name: 'AAB units' })).toBeInTheDocument();
-    expect(order()).toEqual(EVERYONE);
-  });
-
-  it('UI-033 one 60px row per person, the whole row a link to their Coaching Session with a ›, no orange button', async () => {
-    render();
-    await screen.findByRole('link', { name: 'Rina Wijaya' });
-    for (const name of EVERYONE) {
-      const id = linkOf(name).getAttribute('href');
-      expect(id).toMatch(/^\/coaching\/mem-[a-z]+\/session$/);
-      expect(rowOf(name)).toHaveClass('min-h-[3.75rem]');
-      // The ›, a line icon.
-      expect(rowOf(name).querySelector(':scope > svg')).not.toBeNull();
-    }
-    expect(linkOf('Rina Wijaya')).toHaveAttribute('href', '/coaching/mem-rina/session');
-    expect(screen.queryByRole('link', { name: /Coaching →/ })).not.toBeInTheDocument();
-    expect(screen.queryByText('→')).not.toBeInTheDocument();
-  });
-
-  it('UI-111 a person with a saved photo shows it on their row; a person without one shows their initials', async () => {
-    const photo = 'https://cdn.test/user/u-rina/avatar/a.jpg?sig=abc';
-    render({ ...ROSTER, directAgents: [{ ...ROSTER.directAgents[0], photoUrl: photo }, ...ROSTER.directAgents.slice(1)] });
-    await screen.findByRole('link', { name: 'Rina Wijaya' });
-    expect(rowOf('Rina Wijaya').querySelector('img')).toHaveAttribute('src', photo);
-    expect(rowOf('Fajar Hidayat').querySelector('img')).toBeNull();
-    expect(rowOf('Fajar Hidayat')).toHaveTextContent(/^FH/);
-  });
-
-  it('UI-033 draws each AAB’s people as a tree at every size: indented under the head, a level further for a nested AAB, no ↳', async () => {
-    render();
-    await screen.findByRole('link', { name: 'Sri Lestari' });
-    const team = screen.getByRole('list', { name: 'Sri Lestari’s unit' });
-    expect(within(team).getAllByRole('link').filter((a) => a.hasAttribute('data-row-main')).map((a) => a.textContent))
-      .toEqual(['Agus Santoso', 'Wulan Sari', 'Tono Saputra']);
-    // Wulan heads a unit of her own inside Sri's: Tono sits one level further in, under her.
-    const wulans = screen.getByRole('list', { name: 'Wulan Sari’s unit' });
-    expect(within(wulans).getByRole('link', { name: 'Tono Saputra' })).toBeInTheDocument();
-    expect(team).toContainElement(wulans);
-    for (const node of team.querySelectorAll(':scope > [data-tree-node]')) expect(node).toHaveClass('[--elbow:1.875rem]');
-    expect(document.body.textContent).not.toContain('↳');
-    // A head with nobody beneath them is the head alone.
-    expect(screen.queryByRole('list', { name: 'Rina Wijaya’s unit' })).not.toBeInTheDocument();
-  });
-
-  it('UI-033 badges a unit’s head with their rung in a grey pill, never a dot', async () => {
-    render();
-    await screen.findByRole('link', { name: 'Dimas Aditya' });
-    expect(within(rowOf('Dimas Aditya')).getByText('AAB')).toHaveAttribute('data-tone', 'grey');
-    expect(within(rowOf('Wulan Sari')).getByText('AAB')).toBeInTheDocument();
-    expect(within(rowOf('Rina Wijaya')).queryByText('AAB')).not.toBeInTheDocument();
-  });
-
-  it('P11-T6 AC-2 leaves out a group with nobody in it, and the direct agents when there are none', async () => {
-    render({ ...ROSTER, units: [] });
-    await screen.findByRole('link', { name: 'Rina Wijaya' });
-    expect(screen.queryByRole('heading', { name: 'AAB units' })).not.toBeInTheDocument();
-    cleanup();
-    vi.unstubAllGlobals();
-    render({ ...ROSTER, directAgents: [] });
-    await screen.findByRole('link', { name: 'Dimas Aditya' });
-    expect(screen.queryByRole('heading', { name: /Your direct agents/ })).not.toBeInTheDocument();
-  });
-
-  it('UI-033 the phone’s line: Last 1:1 and who held it by first name, grey — No 1:1 yet grey too — red only when overdue, in words', async () => {
-    render();
-    await screen.findByRole('link', { name: 'Rina Wijaya' });
-    const line = (name: string) => rowOf(name).querySelector('[data-roster-line]') as HTMLElement;
-    expect(line('Rina Wijaya')).toHaveTextContent('5 days ago · by Jordan');
-    expect(line('Rina Wijaya')).toHaveClass('text-signal-grey', 'md:hidden');
-    expect(line('Melati Putri')).toHaveTextContent(/^No 1:1 yet$/);
-    expect(line('Melati Putri')).toHaveClass('text-signal-grey');
-    expect(line('Melati Putri')).not.toHaveClass('text-signal-red');
-    expect(line('Fajar Hidayat')).toHaveTextContent('12 days ago · overdue · by Jordan');
-    expect(line('Fajar Hidayat')).toHaveClass('text-signal-red');
-    expect(line('Wulan Sari')).toHaveTextContent(/^9 days ago · overdue$/);
-  });
-
-  it('UI-034 from 768px: the columns under a header, every word 12px or more, who held it in full or a dash', async () => {
-    render();
-    await screen.findByRole('link', { name: 'Rina Wijaya' });
-    const header = screen.getByText('Last Coached By').parentElement!;
-    expect(header).toHaveAttribute('aria-hidden', 'true');
-    expect(header).toHaveClass('max-md:hidden', 'text-xs');
-    expect(within(header).getAllByText(/.+/).map((el) => el.textContent)).toEqual(['Name', 'Last 1:1', 'Last Coached By', 'Status']);
-    expect(rowOf('Rina Wijaya')).toHaveTextContent('Last Coached By: Jordan Pratama');
-    expect(rowOf('Wulan Sari')).toHaveTextContent('Last Coached By: —');
-    // Nothing on the page below 12px: no 11px, no 10px.
-    expect(document.body.innerHTML).not.toMatch(/text-\[(10|11)px\]|text-\[0\.6875rem\]/);
-  });
-
-  it('P11-T6 AC-3 takes overdue from the server and does no date arithmetic of its own', async () => {
-    vi.useFakeTimers({ now: new Date('2030-01-01T00:00:00Z'), toFake: ['Date'] });
-    render({ ...ROSTER, directAgents: [person('mem-rina', 'Rina Wijaya', 5, 'watch_closely')], units: [] });
-    await screen.findByRole('link', { name: 'Rina Wijaya' });
-    expect(rowOf('Rina Wijaya')).toHaveTextContent('5 days ago');
-    expect(rowOf('Rina Wijaya')).not.toHaveTextContent('overdue');
-  });
-
-  it('UI-005 shows each status in its tinted pill: On track green, Watch closely amber, Needs attention red, No goal set grey', async () => {
-    render();
-    await screen.findByRole('link', { name: 'Rina Wijaya' });
-    expect(within(rowOf('Sri Lestari')).getByText('On track')).toHaveAttribute('data-tone', 'green');
-    expect(within(rowOf('Rina Wijaya')).getByText('Watch closely')).toHaveAttribute('data-tone', 'amber');
-    expect(within(rowOf('Fajar Hidayat')).getByText('Needs attention')).toHaveAttribute('data-tone', 'red');
-    expect(within(rowOf('Melati Putri')).getByText('No goal set')).toHaveAttribute('data-tone', 'grey');
-  });
-
-  it('P11-T6 AC-6 draws verdicts and dates, never an activity count, even if one arrived', async () => {
-    render({ ...ROSTER, directAgents: [{ ...person('mem-rina', 'Rina Wijaya', 5, 'watch_closely'), activityCount: 4321 } as RosterRow], units: [] });
-    await screen.findByRole('link', { name: 'Rina Wijaya' });
-    expect(rowOf('Rina Wijaya')).not.toHaveTextContent('4321');
-  });
-
-  it('asks for the roster once, with no scope of its own', async () => {
-    const { calls } = render();
-    await screen.findByRole('link', { name: 'Rina Wijaya' });
-    expect(calls.map((c) => c.url)).toEqual(['http://api.test/api/v1/coaching/coachees']);
-  });
-
   it('P19-T4 AC-3 shows a leader with nobody to coach the roster as it will look: greyed, Example, one next step', async () => {
-    render({ ...ROSTER, directAgents: [], units: [] });
+    render(EMPTY);
     expect(await screen.findByText('No data yet')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'My Coaching Notes' })).toBeInTheDocument();
     const sample = document.querySelector('[data-sample]')!;
     expect(sample).toHaveAttribute('aria-hidden', 'true');
     expect(sample.textContent).toContain('Sample agent 1');
     expect(screen.getByText('Example')).toBeInTheDocument();
-    // The sample is no roster: none of its rows is offered as a link, and the one step is live.
     expect(screen.queryByRole('link', { name: /Sample agent/ })).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Add your first agent' })).toHaveAttribute('href', '/new-hires');
   });
 
   it('says so in one line to an Agent with nobody to coach, on a typed address (L-01)', async () => {
-    render({ ...ROSTER, directAgents: [], units: [] }, makeMe({
+    render(EMPTY, makeMe({
       permissions: ['coaching_session:read'],
       membership: {
         membershipId: 'mem-a', kpmId: 'kpm-1', orgLevelCode: 'AGENT', hierarchyRole: 'agent', status: 'active',
@@ -284,8 +300,8 @@ describe('Coaching Session — the roster (P11-T6; UI V1, UI-033, UI-034)', () =
       '/notifications': { body: { items: [], unread: 0 } },
       '/coaching/coachees': { body: ROSTER },
     });
-    renderInLayout(AgentLayout, <CoachingRosterPage />, { me: LEADER });
-    await screen.findByRole('link', { name: 'Rina Wijaya' });
+    renderInLayout(AgentLayout, <CoachingRosterPage />, { me: OWNER });
+    await screen.findByRole('link', { name: 'Dewi Lestari' });
     const nav = screen.getByRole('navigation', { name: 'Main' });
     expect(within(nav).getByRole('link', { name: 'Coaching' })).toHaveAttribute('aria-current', 'page');
   });

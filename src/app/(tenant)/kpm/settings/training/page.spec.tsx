@@ -1,6 +1,7 @@
-import { screen, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { axe } from 'vitest-axe';
 import { atWidth, makeMe, renderWithSession, stubFetch } from '@test/harness';
 import { smallTargets } from '@test/touch-audit';
 import TrainingSettingsPage from './page';
@@ -18,13 +19,16 @@ const OWNER = makeMe({
   },
   permissions: ['tenant_config:read', 'tenant_config:write', 'training_settings:read'],
 });
-
+/** A core leader holds the Owner's Pengaturan (ADR-0268): the same screen. */
+const CORE_LEADER = makeMe({ ...OWNER, membership: { ...OWNER.membership!, isKpmOwner: false, isCoreLeader: true } as never });
 /** A support session reads an office's configuration and writes none of it. */
 const READER = makeMe({ ...OWNER, permissions: ['tenant_config:read', 'training_settings:read'] });
+/** A field member: no Pengaturan at all. */
+const AGENT = makeMe({ ...OWNER, permissions: ['tenant_config:read'] });
 
 const moduleRow = (over: Record<string, unknown>) => ({
-  id: 'm-x', code: 'X', skillCode: 'PROSPECTING', title: 'X', publishState: 'published',
-  displayOrder: 1, version: 1, status: 'active', ...over,
+  id: 'm-x', code: 'X', skillCode: 'PROSPECTING', title: 'X', publishState: 'published', displayOrder: 1, version: 1,
+  status: 'active', material: 'none', materialItem: null, completion: { done: 0, started: 0, of: 30 }, ...over,
 });
 
 const TREE = [
@@ -32,512 +36,241 @@ const TREE = [
     id: 'c-sales', code: 'SALES', label: 'Sales', description: null, displayOrder: 1, version: 1, status: 'active',
     skills: [
       {
-        id: 's-prospecting', code: 'PROSPECTING', categoryCode: 'SALES', label: 'Prospecting',
+        id: 's-prospecting', code: 'PROSPECTING', categoryCode: 'SALES', label: 'Prospecting', description: null,
         displayOrder: 1, version: 2, status: 'active',
         modules: [
-          moduleRow({ id: 'm-list', code: 'PROSPECT_LIST', title: 'Building Your Prospect List', version: 4 }),
-          moduleRow({ id: 'm-cold', code: 'COLD_APPROACH_SCRIPTS', title: 'Cold Approach Scripts', publishState: 'draft', displayOrder: 2 }),
+          moduleRow({
+            id: 'm-list', code: 'PROSPECT_LIST', title: 'Membangun daftar prospek', version: 4, material: 'company',
+            materialItem: { label: 'Prospek_list.pdf', kind: 'file', mimeType: 'application/pdf' },
+            completion: { done: 24, started: 26, of: 30 },
+          }),
+          moduleRow({ id: 'm-cold', code: 'COLD_APPROACH', title: 'Cold approach script', displayOrder: 2 }),
+          moduleRow({ id: 'm-draft', code: 'DRAFT_ONE', title: 'Script baru', publishState: 'draft', displayOrder: 3 }),
         ],
       },
       {
-        id: 's-closing', code: 'CLOSING', categoryCode: 'SALES', label: 'Closing',
+        id: 's-closing', code: 'CLOSING', categoryCode: 'SALES', label: 'Closing', description: null,
         displayOrder: 2, version: 1, status: 'active',
-        modules: [moduleRow({ id: 'm-close', code: 'CLOSING_TECHNIQUES', skillCode: 'CLOSING', title: 'Closing Techniques That Work' })],
+        modules: [moduleRow({ id: 'm-close', code: 'CLOSING_TECHNIQUES', skillCode: 'CLOSING', title: 'Teknik closing' })],
       },
     ],
   },
+  { id: 'c-product', code: 'PRODUCT', label: 'Product', description: null, displayOrder: 2, version: 1, status: 'active', skills: [] },
   {
-    id: 'c-product', code: 'PRODUCT', label: 'Product', description: null, displayOrder: 2, version: 1,
-    status: 'active', skills: [],
-  },
-  {
-    id: 'c-old', code: 'OLD', label: 'Old ways', description: null, displayOrder: 3, version: 3,
-    status: 'archived',
-    skills: [{
-      id: 's-old', code: 'OLD_SKILL', categoryCode: 'OLD', label: 'Door knocking', displayOrder: 1,
-      version: 2, status: 'archived',
-      modules: [moduleRow({ id: 'm-old', code: 'OLD_MODULE', skillCode: 'OLD_SKILL', title: 'Knock twice', status: 'archived' })],
-    }],
+    id: 'c-old', code: 'OLD', label: 'Old ways', description: null, displayOrder: 3, version: 3, status: 'archived',
+    skills: [],
   },
 ];
 
-const PUBLISH_STATE = {
-  publishedVersion: 1, workingVersion: 1, hasUnpublishedChanges: false, publishedAt: null,
-};
+const PUBLISH_STATE = { publishedVersion: 1, workingVersion: 1, hasUnpublishedChanges: false, publishedAt: null };
+const clean = async () =>
+  expect((await axe(document.body, { rules: { 'color-contrast': { enabled: false }, region: { enabled: false } } })).violations ?? [])
+    .toHaveLength(0);
 
-function render(me = OWNER, changes: { status?: number; body?: unknown } = { body: { training: [], version: 2 } }) {
+function render(me = OWNER, extra: Record<string, unknown> = {}) {
   const stub = stubFetch({
     '/kpm/settings/training': { body: TREE },
     '/kpm/settings/publish-state': { body: PUBLISH_STATE },
-    '/kpm/settings/changes': changes,
-  });
+    '/kpm/settings/changes': { body: { training: [], version: 2 } },
+    ...extra,
+  } as never);
   renderWithSession(<TrainingSettingsPage />, { me });
   return stub;
 }
 
-/** Press Save changes and read the batch that went out. */
-async function saved(calls: { url: string; init: RequestInit }[]) {
-  await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
-  const post = calls.find((c) => c.url.includes('/kpm/settings/changes'))!;
-  return JSON.parse(post.init.body as string).ops as Record<string, unknown>[];
-}
-
 const rowOf = (text: string) => screen.getByText(text).closest('li') as HTMLElement;
-const tabs = () => within(screen.getByRole('navigation', { name: 'Training sections' }));
+const batch = (calls: { url: string; init: RequestInit }[]) =>
+  calls.filter((c) => c.url.endsWith('/kpm/settings/changes')).map((c) => JSON.parse(String(c.init.body)).ops);
 
-async function openTab(name: 'Categories' | 'Skills' | 'Modules') {
-  await userEvent.click(tabs().getByRole('link', { name }));
-}
-
-describe('Settings › Training (P5-T1)', () => {
-  beforeEach(() => window.history.replaceState(null, '', '/kpm/settings/training'));
+describe('P19.25-T4 Pengaturan › Training as one tree', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     push.mockReset();
   });
 
-  describe('the three subtabs (AC-9)', () => {
-    it('draws Categories · Skills · Modules, with Categories first', async () => {
-      render();
-      await screen.findByText('Sales');
-
-      expect(tabs().getAllByRole('link').map((l) => l.textContent)).toEqual(['Categories', 'Skills', 'Modules']);
-      expect(tabs().getByRole('link', { name: 'Categories' })).toHaveAttribute('aria-current', 'page');
-    });
-
-    it('opens on the subtab the address names, so a link can land on Modules', async () => {
-      window.history.replaceState(null, '', '/kpm/settings/training#modules');
-      render();
-
-      expect(await screen.findByText('Building Your Prospect List')).toBeInTheDocument();
-      expect(tabs().getByRole('link', { name: 'Modules' })).toHaveAttribute('aria-current', 'page');
-    });
-
-    it('writes the subtab into the address when one is chosen', async () => {
-      render();
-      await screen.findByText('Sales');
-      await openTab('Skills');
-
-      expect(window.location.hash).toBe('#skills');
-    });
-  });
-
-  describe('categories', () => {
-    it('badges each with what agents are offered, or Empty — the prototype’s own words', async () => {
-      render();
-
-      await screen.findByText('Sales');
-      expect(within(rowOf('Sales')).getByText('2 skills · 2 modules published')).toBeInTheDocument();
-      expect(within(rowOf('Product')).getByText('Empty')).toBeInTheDocument();
-    });
-
-    it('keeps an archived category off the list until Show archived is on', async () => {
-      render();
-      await screen.findByText('Sales');
-      expect(screen.queryByText('Old ways')).not.toBeInTheDocument();
-
-      await userEvent.click(screen.getByLabelText('Show archived'));
-
-      expect(within(rowOf('Old ways')).getByText('archived')).toBeInTheDocument();
-      expect(within(rowOf('Old ways')).getByRole('button', { name: 'Restore' })).toBeInTheDocument();
-    });
-
-    it('fills the code in from the name, and sends both when saved', async () => {
-      const { calls } = render();
-      await screen.findByText('Sales');
-      await userEvent.click(screen.getByRole('button', { name: '+ Add category' }));
-      await userEvent.type(screen.getByLabelText('Name'), 'Product Knowledge');
-
-      expect(screen.getByLabelText('Code')).toHaveValue('PRODUCT_KNOWLEDGE');
-
-      await userEvent.click(screen.getByRole('button', { name: 'Add the category' }));
-      expect(within(rowOf('Product Knowledge')).getByText('Added — not saved yet')).toBeInTheDocument();
-
-      expect(await saved(calls)).toEqual([
-        { op: 'trainingCategory.create', body: { code: 'PRODUCT_KNOWLEDGE', label: 'Product Knowledge' } },
-      ]);
-    });
-
-    it('stops following the name once somebody types a code', async () => {
-      render();
-      await screen.findByText('Sales');
-      await userEvent.click(screen.getByRole('button', { name: '+ Add category' }));
-      await userEvent.type(screen.getByLabelText('Code'), 'pk');
-      await userEvent.type(screen.getByLabelText('Name'), 'Product Knowledge');
-
-      expect(screen.getByLabelText('Code')).toHaveValue('PK');
-    });
-
-    it('refuses a code already used, counting archived rows (AC-3)', async () => {
-      render();
-      await screen.findByText('Sales');
-      await userEvent.click(screen.getByRole('button', { name: '+ Add category' }));
-      await userEvent.type(screen.getByLabelText('Name'), 'Old');
-
-      expect(screen.getByRole('alert')).toHaveTextContent(/already has a category with this code/);
-      expect(screen.getByRole('button', { name: 'Add the category' })).toBeDisabled();
-    });
-
-    it('edits the name and shows the code it cannot change, sending only what changed', async () => {
-      const { calls } = render();
-      await screen.findByText('Sales');
-      await userEvent.click(within(rowOf('Sales')).getByRole('button', { name: 'Edit' }));
-
-      expect(screen.getByLabelText('Code')).toHaveValue('SALES');
-      const name = screen.getByLabelText('Name');
-      await userEvent.clear(name);
-      await userEvent.type(name, 'Selling');
-      await userEvent.click(screen.getByRole('button', { name: 'Save' }));
-
-      expect(within(rowOf('Selling')).getByText('Edited — not saved yet')).toBeInTheDocument();
-      expect(await saved(calls)).toEqual([
-        { op: 'trainingCategory.update', id: 'c-sales', expectedVersion: 1, body: { label: 'Selling' } },
-      ]);
-    });
-  });
-
-  describe('archiving reaches down, and restoring does not (AC-3, AC-10)', () => {
-    it('shows a category’s skills going with it before anything is saved', async () => {
-      render();
-      await screen.findByText('Sales');
-    await userEvent.click(within(rowOf('Sales')).getByRole('button', { name: 'Archive' }));
-      expect(within(rowOf('Sales')).getByText('Archived — not saved yet')).toBeInTheDocument();
-
-      await openTab('Skills');
-
-      expect(within(rowOf('Prospecting')).getByText('Archived with Sales — not saved yet')).toBeInTheDocument();
-      // Its Undo is on the category, so the skill offers neither Archive nor Restore.
-      expect(within(rowOf('Prospecting')).queryByRole('button', { name: /Archive|Restore/ })).not.toBeInTheDocument();
-    });
-
-    it('takes a staged archive back when Restore is pressed, rather than sending both', async () => {
-      render();
-      await screen.findByText('Sales');
-    await userEvent.click(within(rowOf('Sales')).getByRole('button', { name: 'Archive' }));
-      await userEvent.click(within(rowOf('Sales')).getByRole('button', { name: 'Restore' }));
-
-      expect(screen.queryByText(/not saved yet/)).not.toBeInTheDocument();
-      expect(screen.queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument();
-    });
-
-    it('offers no Restore under an archived category, and names what to restore first', async () => {
-      render();
-      await screen.findByText('Sales');
-      await userEvent.click(screen.getByLabelText('Show archived'));
-      await openTab('Skills');
-      await userEvent.selectOptions(screen.getByLabelText('Category'), 'OLD');
-
-      const row = rowOf('Door knocking');
-      expect(within(row).getByText('Restore Old ways first')).toBeInTheDocument();
-      expect(within(row).queryByRole('button', { name: 'Restore' })).not.toBeInTheDocument();
-    });
-  });
-
-  describe('skills', () => {
-    it('lists the chosen category’s skills, with how many modules teach each', async () => {
-      render();
-      await screen.findByText('Sales');
-      await openTab('Skills');
-
-      expect(within(rowOf('Prospecting')).getByText('2 modules')).toBeInTheDocument();
-      expect(within(rowOf('Closing')).getByText('1 module')).toBeInTheDocument();
-
-      await userEvent.selectOptions(screen.getByLabelText('Category'), 'PRODUCT');
-      expect(screen.getByText('No skills for this category yet.')).toBeInTheDocument();
-    });
-
-    it('moves a skill to another category, which takes its modules with it (AC-2)', async () => {
-      const { calls } = render();
-      await screen.findByText('Sales');
-      await openTab('Skills');
-      await userEvent.click(within(rowOf('Closing')).getByRole('button', { name: 'Edit' }));
-      await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Category', description: /modules move with it/ }), 'PRODUCT');
-      await userEvent.click(screen.getByRole('button', { name: 'Save' }));
-
-      // Gone from Sales, because it will be in Product.
-      expect(screen.queryByText('Closing')).not.toBeInTheDocument();
-      expect(await saved(calls)).toEqual([
-        { op: 'trainingSkill.update', id: 's-closing', expectedVersion: 1, body: { categoryCode: 'PRODUCT' } },
-      ]);
-    });
-
-    it('adds a skill to the category chosen', async () => {
-      const { calls } = render();
-      await screen.findByText('Sales');
-      await openTab('Skills');
-      await userEvent.click(screen.getByRole('button', { name: '+ Add skill' }));
-      await userEvent.type(screen.getByLabelText('Name'), 'Needs Analysis');
-      await userEvent.click(screen.getByRole('button', { name: 'Add the skill' }));
-
-      expect(within(rowOf('Needs Analysis')).getByText('Added — not saved yet')).toBeInTheDocument();
-      expect(await saved(calls)).toEqual([
-        { op: 'trainingSkill.create', body: { code: 'NEEDS_ANALYSIS', categoryCode: 'SALES', label: 'Needs Analysis' } },
-      ]);
-    });
-  });
-
-  describe('modules', () => {
-    it('offers the chosen category’s skills, not Sales’s whatever is chosen (AC-2, F-13)', async () => {
-      render();
-      await screen.findByText('Sales');
-      await openTab('Modules');
-
-      const skill = screen.getByLabelText('Skill');
-      expect(within(skill).getAllByRole('option').map((o) => o.textContent)).toEqual(['All skills', 'Prospecting', 'Closing']);
-
-      await userEvent.selectOptions(screen.getByLabelText('Category'), 'PRODUCT');
-      expect(within(screen.getByLabelText('Skill')).getAllByRole('option').map((o) => o.textContent)).toEqual(['All skills']);
-      expect(screen.getByText('No modules for this category/skill yet.')).toBeInTheDocument();
-    });
-
-    it('says whether each module is published with one switch, not a badge and a button', async () => {
-      /*
-       * The row used to carry a *Published* badge **and** an *Unpublish* button — two controls
-       * answering one question, and whichever a reader trusted the other contradicted. The
-       * switch's state is the answer, and its name stays *Published* in both states so it does
-       * not announce as a different control appearing.
-       */
-      render();
-      await screen.findByText('Sales');
-      await openTab('Modules');
-
-      expect(within(rowOf('Building Your Prospect List')).getByRole('switch', { name: 'Published' }))
-        .toBeChecked();
-      expect(within(rowOf('Cold Approach Scripts')).getByRole('switch', { name: 'Published' }))
-        .not.toBeChecked();
-      expect(within(rowOf('Closing Techniques That Work')).getByText('Closing')).toBeInTheDocument();
-    });
-
-    it('stages Unpublish as an edit, and publishing it again takes the edit back', async () => {
-      render();
-      await screen.findByText('Sales');
-      await openTab('Modules');
-      const row = rowOf('Building Your Prospect List');
-
-      await userEvent.click(within(row).getByRole('switch', { name: 'Published' }));
-      expect(within(row).getByRole('switch', { name: 'Published' })).not.toBeChecked();
-      expect(within(row).getByText('Edited — not saved yet')).toBeInTheDocument();
-
-      await userEvent.click(within(row).getByRole('switch', { name: 'Published' }));
-      expect(within(row).queryByText(/not saved yet/)).not.toBeInTheDocument();
-    });
-
-    /*
-     * The batch moves a row's version on after each op against it. Unpublishing and archiving one
-     * module in one Save named version 4 twice, and the archive came back as a conflict.
-     */
-    it('sends two edits to one module at the versions the batch will find it at', async () => {
-      const { calls } = render();
-      await screen.findByText('Sales');
-      await openTab('Modules');
-      const row = rowOf('Building Your Prospect List');
-      await userEvent.click(within(row).getByRole('switch', { name: 'Published' }));
-      await userEvent.click(within(row).getByRole('button', { name: 'Archive' }));
-
-      expect(await saved(calls)).toEqual([
-        { op: 'trainingModule.update', id: 'm-list', expectedVersion: 4, body: { publishState: 'draft' } },
-        { op: 'trainingModule.archive', id: 'm-list', expectedVersion: 5 },
-      ]);
-    });
-
-    it('adds a module as a draft, to the skill chosen', async () => {
-      const { calls } = render();
-      await screen.findByText('Sales');
-      await openTab('Modules');
-      await userEvent.click(screen.getByRole('button', { name: '+ Add module' }));
-      // The panel's own Skill, not the filter's of the same name.
-      const panel = within(screen.getByRole('heading', { name: 'Add a module' }).closest('div')!);
-      await userEvent.selectOptions(panel.getByLabelText('Skill'), 'CLOSING');
-      await userEvent.type(panel.getByLabelText('Title'), 'Trial closes');
-      expect(panel.getByLabelText('Code')).toHaveValue('TRIAL_CLOSES');
-      await userEvent.click(panel.getByRole('button', { name: 'Add the module' }));
-
-      expect(within(rowOf('Trial closes')).getByRole('switch', { name: 'Published' }))
-        .not.toBeChecked();
-      expect(await saved(calls)).toEqual([
-        { op: 'trainingModule.create', body: { code: 'TRIAL_CLOSES', skillCode: 'CLOSING', title: 'Trial closes' } },
-      ]);
-    });
-
-    it('opens a module as its own page', async () => {
-      render();
-      await screen.findByText('Sales');
-      await openTab('Modules');
-
-      expect(within(rowOf('Building Your Prospect List')).getByRole('link', { name: 'Edit' }))
-        .toHaveAttribute('href', '/kpm/settings/training/m-list');
-    });
-
-    it('asks before opening a module would discard unsaved changes', async () => {
-      render();
-      await screen.findByText('Sales');
-      await openTab('Modules');
-      await userEvent.click(
-        within(rowOf('Cold Approach Scripts')).getByRole('switch', { name: 'Published' }),
-      );
-      await userEvent.click(within(rowOf('Building Your Prospect List')).getByRole('link', { name: 'Edit' }));
-
-      expect(screen.getByRole('alert')).toHaveTextContent('You have changes here that are not saved.');
-      expect(push).not.toHaveBeenCalled();
-
-      await userEvent.click(screen.getByRole('button', { name: 'Discard and open Building Your Prospect List' }));
-      expect(push).toHaveBeenCalledWith('/kpm/settings/training/m-list');
-    });
-  });
-
-  it('reads again after saving, rather than drawing the list from what agents are offered', async () => {
-    const { calls } = render();
-    await screen.findByText('Sales');
-    await userEvent.click(within(rowOf('Sales')).getByRole('button', { name: 'Archive' }));
-    await saved(calls);
-
-    await screen.findByText('Product');
-    // The list's reads; *Sinkron dari template* reads its own address (P19.6-T4), which is not counted here.
-    expect(calls.filter((c) => c.url.includes('/kpm/settings/training') && !c.url.includes('template-sync')).length).toBe(2);
-    expect(screen.queryByText(/not saved yet/)).not.toBeInTheDocument();
-  });
-
-  it('keeps what is staged when the batch is refused, and says why', async () => {
-    render(OWNER, {
-      status: 400,
-      body: {
-        error: {
-          code: 'VALIDATION_FAILED',
-          message: 'Change 1 (trainingCategory.archive): That row not found.',
-          requestId: 'req-1',
-        },
-      },
-    });
-    await screen.findByText('Sales');
-    await userEvent.click(within(rowOf('Sales')).getByRole('button', { name: 'Archive' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
-
-    expect(await screen.findByText(/That row not found/)).toBeInTheDocument();
-    expect(within(rowOf('Sales')).getByText('Archived — not saved yet')).toBeInTheDocument();
-  });
-
-  it('keeps codes off the lists, with nothing that puts them back', async () => {
-    // A module title is a sentence; a code beside it is the same thing again in shouting case.
-    // It is on the module's own page, where it is the value being set.
+  it('P19.25-T4 AC-1 draws one tree, no Categories / Skills / Modules tabs: Kategori › Skill › Modul with its counts', async () => {
     render();
     await screen.findByText('Sales');
-
-    expect(screen.queryByText('SALES')).not.toBeInTheDocument();
-    expect(screen.queryByText('PROSPECT_LIST')).not.toBeInTheDocument();
-    expect(screen.queryByLabelText('Show codes')).not.toBeInTheDocument();
-  });
-
-  it('gives a reader without write permission the lists and none of the controls', async () => {
-    render(READER);
-    await screen.findByText('Sales');
-
-    expect(screen.queryByRole('button', { name: '+ Add category' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Archive' })).not.toBeInTheDocument();
-
-    await openTab('Modules');
-    expect(screen.getByText('Building Your Prospect List')).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: 'Edit' })).not.toBeInTheDocument();
-    /*
-     * The switch is still there, and disabled. A reader who cannot change the catalogue still
-     * has to be able to see which modules their agents are offered — hiding the state along
-     * with the control would leave them reading a list that says nothing.
-     */
-    const published = screen.getAllByRole('switch', { name: 'Published' });
-    expect(published.length).toBeGreaterThan(0);
-    published.forEach((s) => expect(s).toBeDisabled());
-  });
-});
-
-/**
- * **No target under 44px on a phone or a tablet** (P19.2-T3 AC-4; UI-142: text links 17px tall, *Tampilkan yang
- * diarsipkan* 13px, tab rows 38px, ⠿ 20px), inside the field shell's frame the Owner's pages wear (ADR-0197), which
- * `data-surface` stands for here.
- */
-describe('P19.2-T3 AC-4 the training catalogue’s targets (UI-142)', () => {
-  afterEach(() => vi.unstubAllGlobals());
-
-  it.each([375, 768])('P19.2-T3 AC-4 at %ipx finds no target under 44px', async (px) => {
-    atWidth(px);
-    render();
-    const frame = document.body.firstElementChild!;
-    frame.setAttribute('data-surface', 'v1');
-    await screen.findByText('Sales');
+    expect(screen.queryByRole('navigation', { name: 'Training sections' })).toBeNull();
+    expect(screen.getByText('Category › Skill › Module')).toBeInTheDocument();
+    expect(within(rowOf('Sales')).getByText('2 skills · 4 modules')).toBeInTheDocument();
+    expect(within(rowOf('Product')).getByText('0 skills · 0 modules')).toBeInTheDocument();
+    expect(within(rowOf('Prospecting')).getByText('3 modules')).toBeInTheDocument();
+    // Archived rows wait for *Show archived*.
+    expect(screen.queryByText('Old ways')).toBeNull();
     await userEvent.click(screen.getByLabelText('Show archived'));
-    expect(smallTargets(frame, px)).toEqual([]);
+    expect(within(rowOf('Old ways')).getByText('Archived')).toBeInTheDocument();
   });
 
-  /** P19.6-T4 (UI-161, ADR-0220 §1, §4): *Nama* and *Deskripsi singkat*, and *Sinkron dari template*. */
-  describe('short descriptions and Sinkron dari template (P19.6-T4)', () => {
-    const DESCRIBED = TREE.map((c) => (c.code !== 'SALES' ? c : {
-      ...c,
-      skills: c.skills.map((s) => (s.code !== 'PROSPECTING' ? s : {
-        ...s,
-        description: 'Temukan calon nasabah',
-        modules: s.modules.map((m) => (m.code === 'PROSPECT_LIST' ? { ...m, description: 'Daftar 100 nama' } : m)),
-      })),
-    }));
-    const renderDescribed = (sync: unknown = { template: null, templateVersions: {}, revision: 'r', differences: [] }) => {
-      const stub = stubFetch({
-        '/kpm/settings/training': { body: DESCRIBED },
-        '/kpm/settings/training/template-sync': { body: sync },
-        '/kpm/settings/publish-state': { body: PUBLISH_STATE },
-        '/kpm/settings/changes': { body: { training: [], version: 2 } },
-      });
-      renderWithSession(<TrainingSettingsPage />, { me: OWNER });
-      return stub;
-    };
+  it('P19.25-T4 AC-1 opens on the first category and its first skill; a tap on a row opens and closes it', async () => {
+    render();
+    await screen.findByText('Membangun daftar prospek');
+    const sales = screen.getByRole('button', { name: 'Open or close Sales' });
+    expect(sales).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByRole('button', { name: 'Open or close Closing' })).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByText('Teknik closing')).toBeNull();
+    // The row itself, not only its chevron (the brief: *tap to open/close*).
+    await userEvent.click(screen.getByText('Closing'));
+    expect(screen.getByText('Teknik closing')).toBeInTheDocument();
+    await userEvent.click(sales);
+    expect(sales).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByText('Membangun daftar prospek')).toBeNull();
+  });
 
-    it('P19.6-T4 AC-1 draws a skill’s and a module’s description in grey under its name', async () => {
-      renderDescribed();
-      await screen.findByText('Sales');
-      await openTab('Skills');
-      expect(within(rowOf('Prospecting')).getByText('Temukan calon nasabah')).toHaveClass('text-muted');
-      await openTab('Modules');
-      expect(within(rowOf('Building Your Prospect List')).getByText('Daftar 100 nama')).toHaveClass('text-muted');
-    });
+  it('P19.25-T4 AC-2 a module reads "n of 30 done" or nobody yet, its file with Replace, or Upload material', async () => {
+    render();
+    await screen.findByText('Membangun daftar prospek');
+    const list = rowOf('Membangun daftar prospek');
+    expect(within(list).getByText('24 of 30 done')).toBeInTheDocument();
+    expect(within(list).getByText('Prospek_list.pdf')).toBeInTheDocument();
+    expect(within(list).getByRole('button', { name: 'Replace the material of Membangun daftar prospek' })).toHaveTextContent('Replace');
+    const cold = rowOf('Cold approach script');
+    expect(within(cold).getByText('Nobody has started yet')).toBeInTheDocument();
+    expect(within(cold).getByRole('button', { name: 'Upload material to Cold approach script' })).toHaveTextContent('Upload material');
+    // A draft says so: agents are not offered it.
+    expect(within(rowOf('Script baru')).getByText('Draft')).toBeInTheDocument();
+    await clean();
+  });
 
-    it('P19.6-T4 AC-1 stages a skill’s new Deskripsi singkat, and only what changed', async () => {
-      const { calls } = renderDescribed();
-      await screen.findByText('Sales');
-      await openTab('Skills');
-      await userEvent.click(within(rowOf('Closing')).getByRole('button', { name: 'Edit' }));
-      await userEvent.type(screen.getByRole('textbox', { name: 'Short description' }), 'Ajak nasabah memutuskan');
-      await userEvent.click(screen.getByRole('button', { name: 'Save' }));
-      expect(await saved(calls)).toEqual([
-        { op: 'trainingSkill.update', id: 's-closing', expectedVersion: 1, body: { description: 'Ajak nasabah memutuskan' } },
-      ]);
-    });
+  it('P19.25-T4 AC-2 the pencil renames, its code shown and never sent; the batch names the version read', async () => {
+    const stub = render();
+    await screen.findByText('Sales');
+    await userEvent.click(screen.getByRole('button', { name: 'Rename Prospecting' }));
+    expect(screen.getByLabelText('Name')).toHaveAccessibleDescription('Code PROSPECTING: permanent.');
+    await userEvent.clear(screen.getByLabelText('Name'));
+    await userEvent.type(screen.getByLabelText('Name'), 'Mencari prospek');
+    await userEvent.type(screen.getByLabelText('Short description'), 'Seratus nama');
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(batch(stub.calls)).toHaveLength(1));
+    expect(batch(stub.calls)[0]).toEqual([{
+      op: 'trainingSkill.update', id: 's-prospecting', expectedVersion: 2, body: { label: 'Mencari prospek', description: 'Seratus nama' },
+    }]);
+  });
 
-    it('P19.6-T4 AC-1 a new skill can carry its description, at most 160 characters as typed', async () => {
-      const { calls } = renderDescribed();
-      await screen.findByText('Sales');
-      await openTab('Skills');
-      await userEvent.click(screen.getByRole('button', { name: '+ Add skill' }));
-      await userEvent.type(screen.getByRole('textbox', { name: 'Name' }), 'Fact finding');
-      const description = screen.getByRole('textbox', { name: 'Short description' });
-      expect(description).toHaveAttribute('maxLength', '160');
-      await userEvent.type(description, 'Menghitung kebutuhan');
-      await userEvent.click(screen.getByRole('button', { name: 'Add the skill' }));
-      expect(await saved(calls)).toEqual([{
-        op: 'trainingSkill.create',
-        body: { code: 'FACT_FINDING', categoryCode: 'SALES', label: 'Fact finding', description: 'Menghitung kebutuhan' },
-      }]);
-    });
+  it('P19.25-T4 AC-2 a skill’s pencil can also move it to another category, its modules with it (kept from the Skills tab)', async () => {
+    const stub = render();
+    await screen.findByText('Sales');
+    await userEvent.click(screen.getByRole('button', { name: 'Rename Closing' }));
+    expect(screen.getByLabelText('Category')).toHaveAccessibleDescription('Its modules move with it.');
+    // Archived categories are not offered.
+    expect(within(screen.getByLabelText('Category')).getAllByRole('option').map((o) => o.textContent)).toEqual(['Sales', 'Product']);
+    await userEvent.selectOptions(screen.getByLabelText('Category'), 'PRODUCT');
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(batch(stub.calls)).toHaveLength(1));
+    expect(batch(stub.calls)[0]).toEqual([{
+      op: 'trainingSkill.update', id: 's-closing', expectedVersion: 1, body: { label: 'Closing', categoryCode: 'PRODUCT' },
+    }]);
+  });
 
-    it('P19.6-T4 AC-3 shows Sinkron dari template in the toolbar only when the template’s names differ', async () => {
-      renderDescribed();
-      await screen.findByText('Sales');
-      expect(screen.queryByRole('button', { name: 'Sync from template' })).toBeNull();
-      vi.unstubAllGlobals();
-      document.body.innerHTML = '';
-      renderDescribed({
-        template: { id: 't', name: 'Prudential template' },
-        templateVersions: { training_taxonomy: 2, capability_ladder: 1 },
-        revision: 'r',
-        differences: [{ level: 'skill', code: 'CLOSING', field: 'name', from: 'Closing', to: 'Closing dan keputusan' }],
-      });
-      expect(await screen.findByRole('button', { name: 'Sync from template' })).toBeInTheDocument();
+  it('P19.25-T4 AC-2 ⋯ archives a category, and on a module opens its material and details', async () => {
+    const stub = render();
+    await screen.findByText('Sales');
+    await userEvent.click(screen.getByRole('button', { name: 'More for Sales' }));
+    await userEvent.click(screen.getByRole('menuitem', { name: /Archive/ }));
+    await waitFor(() => expect(batch(stub.calls)).toHaveLength(1));
+    expect(batch(stub.calls)[0]).toEqual([{ op: 'trainingCategory.archive', id: 'c-sales', expectedVersion: 1 }]);
+
+    await userEvent.click(screen.getByRole('button', { name: 'More for Membangun daftar prospek' }));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Material and details' }));
+    expect(push).toHaveBeenCalledWith('/kpm/settings/training/m-list');
+  });
+
+  it('P19.25-T4 AC-2 + Add module under a skill: its name, a code from it, offered at the next publish', async () => {
+    const stub = render();
+    await screen.findByText('Membangun daftar prospek');
+    await userEvent.click(screen.getByRole('button', { name: 'Add module' }));
+    await userEvent.type(screen.getByLabelText('Title'), 'Teknik minta referensi');
+    expect(screen.getByLabelText('Code')).toHaveValue('TEKNIK_MINTA_REFERENSI');
+    await userEvent.click(screen.getByRole('button', { name: 'Add' }));
+    await waitFor(() => expect(batch(stub.calls)).toHaveLength(1));
+    expect(batch(stub.calls)[0]).toEqual([{
+      op: 'trainingModule.create',
+      body: { code: 'TEKNIK_MINTA_REFERENSI', skillCode: 'PROSPECTING', title: 'Teknik minta referensi', publishState: 'published' },
+    }]);
+  });
+
+  it('P19.25-T4 AC-1 + Add category refuses a code already taken, archived ones included', async () => {
+    render();
+    await screen.findByText('Sales');
+    await userEvent.click(screen.getByRole('button', { name: 'Add category' }));
+    await userEvent.type(screen.getByLabelText('Name'), 'Old');
+    expect(screen.getByRole('alert')).toHaveTextContent('This office already has a category with this code.');
+    expect(screen.getByRole('button', { name: 'Add' })).toBeDisabled();
+  });
+
+  it('P19.25-T4 AC-2 Upload material on the row: sign, send, confirm, then save the file as the module’s material', async () => {
+    const stub = render(OWNER, {
+      'POST /kpm/settings/training/uploads': { status: 201, body: { uploadUrl: 'https://storage.test/up', storageKey: 'k1', fields: {} } },
+      'https://storage.test/up': { status: 204 },
+      'POST /kpm/settings/training/uploads/confirm': {
+        status: 201, body: { storageKey: 'k1', mimeType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation', bytes: 9 },
+      },
+      'GET /kpm/settings/training/modules/COLD_APPROACH/content': {
+        body: { moduleCode: 'COLD_APPROACH', title: 'Cold approach script', overridden: false, content: { files: [], videos: [], links: [] }, companyContent: { files: [], videos: [], links: [] } },
+      },
+      'PUT /kpm/settings/training/modules/COLD_APPROACH/content': { body: {} },
     });
+    await screen.findByText('Cold approach script');
+    await userEvent.click(screen.getByRole('button', { name: 'Upload material to Cold approach script' }));
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    expect(input.accept).toContain('.pptx');
+    fireEvent.change(input, { target: { files: [new File(['deck'], 'Cold_script.pptx', { type: '' })] } });
+    await screen.findByText('Cold approach script: material saved. Agents see it now.');
+    const put = stub.calls.find((c) => c.init.method === 'PUT');
+    expect(JSON.parse(String(put!.init.body))).toEqual({
+      files: [{ id: '', label: 'Cold_script.pptx', storageKey: 'k1', mimeType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation', bytes: 9 }],
+      videos: [],
+      links: [],
+    });
+  });
+
+  it('P19.25-T4 AC-2 refuses a file that is no material before anything is sent', async () => {
+    const stub = render();
+    await screen.findByText('Cold approach script');
+    await userEvent.click(screen.getByRole('button', { name: 'Upload material to Cold approach script' }));
+    fireEvent.change(document.querySelector('input[type="file"]') as HTMLInputElement, {
+      target: { files: [new File(['x'], 'setup.exe', { type: 'application/x-msdownload' })] },
+    });
+    expect(await screen.findByRole('alert')).toHaveTextContent('“setup.exe” is not a kind of file this product accepts.');
+    expect(stub.calls.some((c) => c.url.includes('/uploads'))).toBe(false);
+  });
+
+  it('P19.25-T4 AC-1 a core leader holds the same screen', async () => {
+    render(CORE_LEADER);
+    await screen.findByText('Sales');
+    expect(screen.getByRole('button', { name: 'Add category' })).toBeInTheDocument();
+  });
+
+  it('P19.25-T4 AC-1 a reader without write sees the tree and its figures, and no pencil, ⋯, upload or add', async () => {
+    render(READER);
+    await screen.findByText('24 of 30 done');
+    expect(screen.queryByRole('button', { name: /^Rename/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^More for/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Upload material to/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Add category' })).toBeNull();
+    expect(document.querySelector('input[type="file"]')).toBeNull();
+  });
+
+  it('P19.25-T4 AC-1 a field member is refused the page, and nothing is read', async () => {
+    const stub = render(AGENT);
+    expect(await screen.findByText(/permission|izin|access/i)).toBeInTheDocument();
+    expect(stub.calls.some((c) => c.url.endsWith('/kpm/settings/training'))).toBe(false);
+  });
+
+  it('P19.25-T4 AC-1 says when the catalog cannot be read', async () => {
+    render(OWNER, { '/kpm/settings/training': { status: 500, body: { error: { code: 'INTERNAL', message: 'Something broke.', requestId: 'r1' } } } });
+    expect(await screen.findByText('Something broke.')).toBeInTheDocument();
+  });
+
+  it('P19.25-T4 AC-1 says when there is no category yet', async () => {
+    render(OWNER, { '/kpm/settings/training': { body: [] } });
+    expect(await screen.findByText('No training categories yet.')).toBeInTheDocument();
+  });
+
+  it('P19.25-T4 AC-1 every control is 44px at 390', async () => {
+    atWidth(390);
+    render();
+    await screen.findByText('Membangun daftar prospek');
+    expect(smallTargets(document.body, 390)).toEqual([]);
   });
 });

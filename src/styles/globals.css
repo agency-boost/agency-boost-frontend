@@ -138,6 +138,21 @@
   --color-signal-red: #c23b3b;
   --color-signal-green: #3b6d11;
   --color-signal-grey: #6e6e69;
+  /* P19.21-T2 (DESIGN-RULES *Statuses*): the yellow status dot beside its words — *Belum diterbitkan*, *Logo belum ada*. */
+  --color-signal-amber: #d99a2b;
+  /*
+   * P19.22-T6, T7 (DESIGN-RULES *NPS bars*; ADR-0276): the promoter · passive · detractor bar; *Siapa yang menjawab*'s
+   * part-time and the four *Lama di KPM* bands; the response panel's agents (leaders are the accent, *belum* faint white).
+   */
+  --color-nps-promoter: #2e7d4f;
+  --color-nps-passive: #f2c14e;
+  --color-nps-detractor: #c23b3b;
+  --color-survey-part-time: #97c459;
+  --color-survey-agent: #f5c79e;
+  --color-tenure-1: #f6c9a2;
+  --color-tenure-2: #e8873a;
+  --color-tenure-3: #c2611e;
+  --color-tenure-4: #7e3a0e;
   --color-on-navy-red: #f27979;
   --color-on-navy-green: #97c459;
   --color-on-navy-lavender: #9aa6e0;

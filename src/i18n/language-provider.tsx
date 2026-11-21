@@ -10,6 +10,7 @@ import {
   figureLanguage, isLanguage, LANGUAGE_LIVE, LANGUAGE_PENDING, SOURCE_LANGUAGE, unchosenLanguage, type Language,
 } from './language';
 import { watchKeptTerms } from './kept-lang';
+import { messagesInName, useSystemName } from './system-name';
 import { readLanguageCookie, writeLanguageCookie } from './language-cookie';
 
 /**
@@ -58,7 +59,8 @@ export function useFigureLanguage(): Language {
  * *Words*): `const t = useMessages(shellMessages)`, then `t.signOut`, or `t.withUnread({ name, unread })`.
  */
 export function useMessages<E extends MessageTree>(area: MessageArea<E>): MessagesOf<E> {
-  return messagesIn(area, useLanguage());
+  // P19.21-T4 (ADR-0274): the KPM's *Nama sistem* wherever a message says AgencyBoost (`system-name.ts`).
+  return messagesInName(messagesIn(area, useLanguage()), useSystemName());
 }
 
 /**

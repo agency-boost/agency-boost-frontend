@@ -38,7 +38,17 @@ const en = {
     onVersion: ({ version }: { version: number }) => `They are on version ${version}.`,
     publishing: 'Publishing…',
     publishToAgents: 'Publish to agents',
+    /**
+     * **One setting's bar** (P19.21-T2 AC-3): *"Draf. Agent masih memakai versi n."* + *Terbitkan ke agent*, shown only
+     * while the setting has changes agents do not see.
+     */
+    draft: 'Draft.',
+    stillOnVersion: ({ version }: { version: number }) => `Agents are still on version ${version}.`,
   },
+
+  /** The frame every page under *Pengaturan* shares (P19.21-T2 AC-3): the way back to the hub, above the tabs. */
+  backToHub: 'Settings',
+  backToHubLabel: 'Back to Settings',
 
   /** The staged-changes bar (P4-T19): held in this browser, saved to the office, published to agents — in that order. */
   staged: {
@@ -102,7 +112,12 @@ const id: MessagesOf<typeof en> = {
     onVersion: ({ version }) => `Mereka memakai versi ${version}.`,
     publishing: 'Menerbitkan…',
     publishToAgents: 'Terbitkan ke agent',
+    draft: 'Draf.',
+    stillOnVersion: ({ version }) => `Agent masih memakai versi ${version}.`,
   },
+
+  backToHub: 'Pengaturan',
+  backToHubLabel: 'Kembali ke Pengaturan',
 
   staged: {
     notSaved: ({ count }) => `${count} perubahan belum disimpan.`,

@@ -17,7 +17,7 @@ import TenantLayout from '@/app/(tenant)/layout';
 import BranchInfoPage from '@/app/(tenant)/kpm/settings/branch-info/page';
 import KpmOverviewPage from '@/app/(tenant)/kpm/overview/page';
 import type { Me } from '@/lib/session';
-import { clearCachedReads } from '@/lib/views';
+import { forgetInFlight } from '@/lib/in-flight';
 
 /**
  * **P19.13 in a real browser — the page frame's edges, the stable gutter, the sidebar that never scrolls and Home's
@@ -39,9 +39,10 @@ import { clearCachedReads } from '@/lib/views';
  *   itself is the platform's** (2026-11-17): none on macOS, whose scrollbars overlay the page, and 15px on Linux — CI's
  *   runner — where Chrome keeps the track's width out of the document although it paints nothing there and `innerWidth`
  *   and the root's `clientWidth` still count it;
- * - **the sidebar** (UI-196): at 1280 × 800 and 1440 × 900, for an AB and an Agent on Home, an Owner on the office's
- *   Overview and the Super Admin on theirs, the nav holds what it draws without scrolling, and *Panduan* and the account
- *   card are inside the window;
+ * - **the sidebar** (UI-196; *changed 2026-11-20*, P19.17-T3 AC-5, part E): at 1280 × 800 and 1440 × 900, for an AB and
+ *   an Agent on Home, an Owner on the office's Overview and the Super Admin on theirs, the floating panel's place, **only
+ *   the menu above *Pengaturan* scrolling**, with no scrollbar drawn, and *Pengaturan* (the Owner's) and the account card
+ *   inside the window;
  * - **Home's columns** (UI-195): at 1024, 1280, 1440 and 1920px, for an AB and an Agent, both columns end on one line (±2px).
  */
 const route = vi.hoisted(() => ({ path: '/home' }));
@@ -112,7 +113,7 @@ async function capture(
   window.localStorage.clear();
   window.sessionStorage.clear();
   // A read another capture left on its way (the office's configuration) is not this page's to wait on.
-  clearCachedReads();
+  forgetInFlight();
   atWidth(px);
   const rendered = renderWithSession(ui, { me });
   await waitFor(ready);
@@ -264,19 +265,28 @@ describe.skipIf(!CHROME)('P19.13 the desktop page frame, measured in a real brow
     expect(await browser.tab.evaluate<string>('getComputedStyle(document.documentElement).scrollbarGutter')).toBe('auto');
   }, 60_000);
 
-  describe('P19.13-T2 AC-7 the sidebar never scrolls on its own (UI-196)', () => {
+  /*
+   * *Changed 2026-11-20 (P19.17-T3 AC-5; ADR-0269 §5; part E, `sidebar-icons-laptop`):* P19.13-T2 AC-7's *the nav never
+   * scrolls on its own* (with only the current page's group open) gave way to the approved sidebar: every group open,
+   * **only the menu above *Pengaturan* scrolls**, no inner scrollbar is drawn, and *Pengaturan* and the account card are
+   * always in sight. *Panduan* is gone.
+   */
+  describe('P19.17-T3 AC-5 only the menu above Pengaturan scrolls; Pengaturan and the account card stay in sight', () => {
     const SIDEBAR = `(() => {
-      const nav = document.querySelector('#sidebar-nav');
+      const scroll = document.querySelector('#sidebar-nav [data-sidebar-scroll]');
       const aside = document.querySelector('aside').getBoundingClientRect();
-      const guide = document.querySelector('[data-panduan]');
+      const pinned = document.querySelector('[data-sidebar-pinned]');
       const card = document.querySelector('[data-account-card]').getBoundingClientRect();
       return {
-        scrolls: nav.scrollHeight > nav.clientHeight + 1,
-        overflow: nav.scrollHeight - nav.clientHeight,
+        scrollable: getComputedStyle(scroll).overflowY,
+        scrollbar: getComputedStyle(scroll).scrollbarWidth,
         top: aside.top, bottom: aside.bottom, left: aside.left, width: aside.width,
         radius: getComputedStyle(document.querySelector('aside')).borderTopLeftRadius,
-        guideBottom: guide ? guide.getBoundingClientRect().bottom : null,
-        cardBottom: card.bottom, height: innerHeight,
+        pinnedTop: pinned ? pinned.getBoundingClientRect().top : null,
+        pinnedBottom: pinned ? pinned.getBoundingClientRect().bottom : null,
+        scrollBottom: scroll.getBoundingClientRect().bottom,
+        guide: document.querySelector('[data-panduan]') !== null,
+        cardTop: card.top, cardBottom: card.bottom, height: innerHeight,
       };
     })()`;
     const WHO: [string, (px: number) => Promise<string>][] = [
@@ -293,28 +303,28 @@ describe.skipIf(!CHROME)('P19.13 the desktop page frame, measured in a real brow
     ];
 
     it.each(WHO.flatMap(([who, at]) => [[1280, 800], [1440, 900]].map(([w, h]) => [who, w, h, at] as const)))(
-      'P19.13-T2 AC-1, AC-7 %s at %i × %i: a floating panel, its nav unscrolled, Panduan and the account card in sight',
-      async (_who, width, height, at) => {
+      'P19.13-T2 AC-1, P19.17-T3 AC-5 %s at %i × %i: a floating panel, its menu the one part that scrolls, unseen; Pengaturan and the account card in sight',
+      async (who, width, height, at) => {
         await browser.show(await pageFor(await at(width)), width, height);
         const side = await browser.tab.evaluate<{
-          scrolls: boolean; overflow: number; top: number; bottom: number; left: number; width: number; radius: string;
-          guideBottom: number | null; cardBottom: number; height: number;
+          scrollable: string; scrollbar: string; top: number; bottom: number; left: number; width: number; radius: string;
+          pinnedTop: number | null; pinnedBottom: number | null; scrollBottom: number; guide: boolean;
+          cardTop: number; cardBottom: number; height: number;
         }>(SIDEBAR);
         expect({ top: side.top, left: side.left, width: side.width, bottom: side.height - side.bottom, radius: side.radius })
           .toEqual({ top: 12, left: 12, width: 240, bottom: 12, radius: '20px' });
-        if (_who.startsWith('the KPM Owner') && height === 800) {
-          /*
-           * **OD-325's default** (ADR-0252 §4): the office view's seven headings, the top section's four rows and *KPM*'s
-           * five items open need about 860px; the panel has 776px at 800 tall. The nav scrolls inside the panel by what
-           * does not fit — under 100px — and *Panduan* and the account card stay in sight, until the owner chooses.
-           */
-          expect(side.scrolls).toBe(true);
-          expect(side.overflow).toBeLessThanOrEqual(100);
+        expect({ scrollable: side.scrollable, scrollbar: side.scrollbar }).toEqual({ scrollable: 'auto', scrollbar: 'none' });
+        expect(side.guide).toBe(false);
+        // *Changed 2026-11-20 (P19.23-T1 AC-1; ADR-0277 §1):* the console pins *Platform* at the rail's foot, as the
+        // Owner's menu pins *Pengaturan* — it had no pinned group until then.
+        if (who.startsWith('the KPM Owner') || who.startsWith('the Super Admin')) {
+          // Pengaturan (Platform, the console's), under the part that scrolls and above the account card, inside the window.
+          expect(side.pinnedTop).not.toBeNull();
+          expect(side.pinnedTop!).toBeGreaterThanOrEqual(side.scrollBottom - 1);
+          expect(side.pinnedBottom!).toBeLessThanOrEqual(side.cardTop + 1);
         } else {
-          expect({ overflow: side.overflow, scrolls: side.scrolls }).toEqual({ overflow: side.overflow, scrolls: false });
+          expect(side.pinnedTop).toBeNull();
         }
-        expect(side.guideBottom).not.toBeNull();
-        expect(side.guideBottom!).toBeLessThanOrEqual(side.height);
         expect(side.cardBottom).toBeLessThanOrEqual(side.height - 12);
       },
       60_000,

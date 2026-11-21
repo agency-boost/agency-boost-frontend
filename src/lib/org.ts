@@ -346,6 +346,12 @@ export interface OrgTreeNode {
   todayActivityCount?: number;
   /** Their profile photo, when they have one (UI-059). */
   photoUrl?: string | null;
+  /**
+   * **This reader may open them** (ADR-0268 §1): `false` only on a core leader's Org tree (`view=kpm`), for the rows
+   * outside their downline — drawn muted, without a chevron, and answered `404` if asked for. Optional for a fixture
+   * written before it; absent reads as openable.
+   */
+  openable?: boolean;
 }
 
 /**
@@ -371,21 +377,13 @@ export interface OrgTree {
  * The tree: the reader's own, or with `forId` **a leader's, read-only, as that leader sees it** (P19.3-T3;
  * `/group-tree/[membershipId]`) — 404 outside the reader's reach or in another office, 403 for an Agent.
  */
-export const readOrgTree = (forId?: string) =>
-  api<OrgTree>('/members/tree' + (forId ? `?for=${encodeURIComponent(forId)}` : ''));
+export const readOrgTree = (forId?: string, view?: 'kpm') => {
+  // ADR-0268 §1: `view=kpm` is the KPM's Org tree — a core leader's whole KPM; omitted, the reader's Group Tree.
+  const query = [forId ? `for=${encodeURIComponent(forId)}` : null, view ? `view=${view}` : null].filter(Boolean).join('&');
+  return api<OrgTree>('/members/tree' + (query ? `?${query}` : ''));
+};
 
 /** An informal group. A label the office defines — never hierarchy, never access. */
-export interface GroupSummary {
-  groupId: string;
-  name: string;
-  /** The ★ group leader (P19.13-T3; ADR-0253 §2), or `null` — *Belum ada group leader*. */
-  ownerMembershipId: string | null;
-  ownerName: string | null;
-  /** They have been removed from the office, so the group has nobody running it. */
-  ownerHasLeft: boolean;
-  memberCount: number;
-}
-
 export interface MemberTags {
   membershipId: string;
   fullName: string;
@@ -397,6 +395,15 @@ export interface MemberTags {
    * `CORE_LEADER_NOT_A_LEADER` — and for a member tagged and since moved off a leader rung. Optional for a fixture.
    */
   canBeCoreLeader?: boolean;
+  /**
+   * **They are an active AB** (P19.17-T4; ADR-0270 §1): only an AB carries a group; an AAB or an agent follows their AB,
+   * and the API refuses a group on them. Optional for a fixture.
+   */
+  canCarryGroup?: boolean;
+  /** Their informal group — an AAB's or an agent's their AB's (*Group · ikut AB*) — or `null`. */
+  group?: { groupId: string; name: string } | null;
+  /** The AB whose AB group they are in — themselves for an AB — or `null`. */
+  ab?: { membershipId: string; name: string } | null;
 }
 
 /** Somebody the Owner has handed the office's administration to. */
@@ -420,25 +427,10 @@ export const grantAdmin = (membershipId: string) =>
 export const revokeAdmin = (membershipId: string) =>
   api<DelegatedAdmin[]>(`/members/${membershipId}/admin`, { method: 'DELETE' });
 
-export const listGroups = () => api<GroupSummary[]>('/members/groups');
-
-/**
- * A group, with no ★ (`null`) or one appointed — an AB or an AAB, placed in it (ADR-0253 §2). *Core leaders & groups*'
- * *+ Group baru* and *All members → Groups*.
+/*
+ * The informal groups' own routes — the list, *Group baru*, *Ubah nama*, *Hapus group*, an AB's group and the Group
+ * Leaders — are `lib/informal-groups.ts`'s (P19.17-T4; ADR-0270). The tags below are the member page's panel.
  */
-export const createGroup = (name: string, ownerMembershipId: string | null) =>
-  api<GroupSummary[]>('/members/groups', { method: 'POST', body: { name, ownerMembershipId } });
-
-/** Rename a group, and appoint its ★ (`null` clears it; the members follow a rename). */
-export const updateGroup = (groupId: string, name: string, ownerMembershipId: string | null) =>
-  api<GroupSummary[]>(`/members/groups/${groupId}`, {
-    method: 'PUT',
-    body: { name, ownerMembershipId },
-  });
-
-export const archiveGroup = (groupId: string) =>
-  api<GroupSummary[]>(`/members/groups/${groupId}`, { method: 'DELETE' });
-
 export const readTags = (membershipId: string) =>
   api<MemberTags>(`/members/${membershipId}/tags`);
 

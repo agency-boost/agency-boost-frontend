@@ -7,20 +7,20 @@ import { ResponsiveSheet } from '@/components/ui/responsive-sheet';
 import { useMessages } from '@/i18n/language-provider';
 import { unitDashboardMessages } from '@/i18n/messages/unit-dashboard';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
-import { createGroup } from '@/lib/org';
+import { createInformalGroup } from '@/lib/informal-groups';
 import { addGroupMembers, firstName, type GroupMembersAdded, type UnitInformal } from '@/lib/unit-dashboard';
 
 /**
- * ***+ Tambah ke grup*** (the client's message of 11 November 2026, item 7; ADR-0249 §4; `functional/unit-dashboard.md`,
- * *Views*): from *Grup informal*'s line, the Owner or an Admin (`member:tag_group`) ticks the ABs below the head who are
- * in none of the head's groups, and adds them to one — **in place**, on the dashboard, rather than one person at a time
- * in *People › Groups*.
+ * ***+ Tambah ke grup*** (the client's message of 11 November 2026, item 7; ADR-0249 §4 as ADR-0270 §1 amends it;
+ * `functional/unit-dashboard.md`, *Views*): from *Grup informal*'s line, a steward of the KPM (`member:tag_group`) ticks
+ * the ABs below the head who are not in the head's informal group, and moves them into it — each with their team —
+ * **in place**, on the dashboard.
  *
  * - **The ABs** are the server's (`informal.abs`, A to Z), each a 44px row with its checkbox; nobody is ticked to begin.
- * - **The group**: the head's live groups, the first chosen — a picker when there are several. **With none**, adding
- *   makes one, ***"Grup {first name}"***, owned by the head (`POST /members/groups`), then tags into it.
- * - **The add** is one request (`POST /members/groups/:groupId/members`): the server checks every id and the group
- *   before it writes anything, and records one entry per person. A tag is a label; nobody sees more for it.
+ * - **The group**: the head's informal group — their AB's, one or none. **With none**, adding makes one, ***"Grup {first
+ *   name}"***, a name only, with the head in it (`POST /members/groups`, the head an AB), then moves the ABs into it.
+ * - **The add** is one request (`POST /members/groups/:groupId/members`): the server checks every id — each an AB — and
+ *   the group before it writes anything, and records one entry per AB. A group is a label; nobody sees more for it.
  *
  * Its states (L-01): the add waits with its button disabled; a refusal stays in the sheet, in `toDisplayError`'s words.
  */
@@ -55,10 +55,8 @@ export function InformalGroupSheet({
     try {
       let target = groupId;
       if (target === null) {
-        // The head owns none: one is made for them, named after them, and the ABs go into it.
-        const groups = await createGroup(newName, head.membershipId);
-        target = groups.find((g) => g.name === newName && g.ownerMembershipId === head.membershipId)?.groupId ?? null;
-        if (target === null) throw new Error(t.sheet.failed);
+        // The head is in none: one is made, named after them, with them in it, and the ABs go into it too.
+        target = (await createInformalGroup(newName, head.membershipId)).groupId;
         setGroupId(target);
       }
       onAdded(await addGroupMembers(target, [...ticked]));

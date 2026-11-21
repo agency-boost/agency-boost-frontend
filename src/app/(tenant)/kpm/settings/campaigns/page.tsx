@@ -3,19 +3,20 @@
 import { useCallback, useEffect, useState } from 'react';
 import { PublishBar } from '@/components/publish-bar';
 import { SettingsScreen } from '@/components/settings-screen';
+import { ActionMenu } from '@/components/ui/action-menu';
 import { ConfigBadge } from '@/components/ui/config-badge';
 import { EmptyState } from '@/components/ui/empty-state';
 import { POSTER_FILL } from '@/components/campaigns/campaign-parts';
 import { useLadder } from '@/components/ui/role-badge';
 import { DateField } from '@/components/ui/date-field';
-import { Button, Card, Field, Select, Textarea, TextInput } from '@/components/ui/field';
-import { ListCard, ListRow } from '@/components/ui/list-rows';
+import { Button, Field, Select, Textarea, TextInput } from '@/components/ui/field';
+import { LineIcon } from '@/components/ui/line-icon';
 import { ResponsiveSheet } from '@/components/ui/responsive-sheet';
+import { Segmented } from '@/components/ui/segmented';
 import { SkeletonCards } from '@/components/ui/skeleton';
 import { TonePill } from '@/components/ui/tone-pill';
 import { messagesIn } from '@/i18n/catalogue';
 import type { Language } from '@/i18n/language';
-import { kept } from '@/i18n/kept';
 import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
 import { campaignsMessages } from '@/i18n/messages/campaigns';
 import { settingsMessages } from '@/i18n/messages/settings';
@@ -24,28 +25,19 @@ import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { figureWords, officeDay, officeDayEdge, POSTER_COLORS, ratioUnitsOf, type PosterColor } from '@/lib/campaigns';
 import { cn } from '@/lib/cn';
 import { suggestCode } from '@/lib/config-code';
-import { moneyPrefix, parseDecimal } from '@/lib/format';
+import { formatCalendarDay, formatDayRange, moneyPrefix, parseDecimal } from '@/lib/format';
 import { parseDigits, toMinor } from '@/lib/goals';
 import { useCan } from '@/lib/session';
 import { byPhaseAndDate } from '@/lib/settings-order';
 import { useTenantConfig } from '@/lib/tenant-config-cache';
-import { useHashTab } from '@/lib/use-hash-tab';
-import { usePhone } from '@/lib/use-phone';
 import { ARCHIVED_SWITCH_ROW, CHECK_LINE_TOUCH } from '../settings-touch';
 import {
-  archiveCampaign, createCampaign, listCampaigns, listMetrics, listQualificationRules, restoreCampaign,
-  updateCampaign,
-  type CampaignKindCode, type CampaignRow, type CampaignSubtypeCode, type CampaignWindowCode, type MetricDefinition,
-  type QualificationRuleRow, type RequirementView,
+  archiveCampaign, createCampaign, listCampaigns, listMetrics, restoreCampaign, updateCampaign,
+  type CampaignKindCode, type CampaignRow, type CampaignWindowCode, type MetricDefinition, type RequirementView,
 } from '@/lib/tenant-config';
 
-/** The two tabs, by their addresses: §A.3's names, the same in both languages (`settings-campaigns.ts`). */
-const TABS = [
-  { label: settingsCampaignsMessages.en.tabs.campaigns, href: '#campaigns' },
-  { label: settingsCampaignsMessages.en.tabs.tiers, href: '#tiers' },
-];
-
-const PHASE_TONE: Record<string, 'won' | 'open'> = { upcoming: 'open', running: 'won', ended: 'open' };
+/** *Semua · Struktural · Musiman* (P19.25-T5 AC-1). */
+type Filter = 'all' | 'structural' | 'seasonal';
 
 /** The comparisons a requirement takes, in the order the form offers them. */
 const COMPARATORS = ['gte', 'gt', 'lte', 'lt', 'eq'] as const;
@@ -127,12 +119,21 @@ function requirementBody(row: RequirementDraft, metrics: readonly MetricDefiniti
 }
 
 /**
- * An office's campaigns, and the carrier rules it is measured against (P5-T7, ADR-0026).
+ * **Pengaturan › Campaigns** (P19.25-T5, ADR-0282; `data-upload-pengaturan-*` frame 20; the brief's *"no Production club;
+ * each campaign is only tagged Struktural (always on: jenjang, MDRT) or Musiman (has start and end date), filter Semua /
+ * Struktural / Musiman"*).
  *
- * **Two things that look alike and behave differently, on one screen.** *Year-End Star Club Drive*
- * is this office's campaign and fully editable; *Star Club* is the insurer's recognition tier and
- * editable by nobody in any office. The tiers tab is read-only **with the reason on the card**,
- * rather than inert controls beside live ones (parity I-76).
+ * - ***Semua n · Struktural n · Musiman n***, then one white list: each campaign's title, its line — its first
+ *   requirements and when it runs (*setiap tahun*, *sepanjang tahun*, a seasonal one's dates, *mulai …* before it
+ *   starts) —, its tag ***Struktural*** or ***Musiman***, and ⋯ (*Ubah*, *Arsipkan* / *Pulihkan*). ***+ Tambah
+ *   campaign*** at the foot, the two notes under the card.
+ * - **No *Production club tiers* tab and no MOC** (*"MOC / Club: not shown anywhere for now"*): the carrier's rules stay
+ *   stored, unread by any screen (ADR-0282 §6). **No section in the form**: a structural campaign is *Struktural* and
+ *   nothing more (§5).
+ * - **The form is the one it was** (P18.2-T7 AC-9: requirements, window, rungs, poster, line, prize) in a sheet; kept
+ *   with *Tampilkan yang diarsipkan* (the owner's rule that fidelity work never strips a requested feature).
+ *
+ * **Saved at once**: a campaign is read live, never published, so no orange bar speaks of it (P19.21-T2).
  */
 export default function CampaignsSettingsPage() {
   const t = useMessages(settingsCampaignsMessages);
@@ -141,12 +142,12 @@ export default function CampaignsSettingsPage() {
   const language = useLanguage();
   const figures = useFigureLanguage();
   const canWrite = useCan('tenant_config:write');
-  const [tab, setTab] = useHashTab(TABS);
   const [campaigns, setCampaigns] = useState<CampaignRow[] | null>(null);
-  const [rules, setRules] = useState<QualificationRuleRow[] | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [busy, setBusy] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
+  const [filter, setFilter] = useState<Filter>('all');
+  /** The campaign whose form is open — `new` for *+ Tambah campaign* — or `null`. */
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState(emptyDraft());
   /** The product's own metric vocabulary, read rather than re-declared here (invariant 7). */
@@ -159,19 +160,10 @@ export default function CampaignsSettingsPage() {
    */
   const { config } = useTenantConfig();
   const ratioUnits = ratioUnitsOf(config?.ratios);
-  /*
-   * **Below 768px a campaign is one line, and its card and its form are its sheet** (P19.2-T3 AC-3; UI-141: *Activity
-   * types and Campaigns: same row + sheet*, 3.5 screens at 375). From 768px the cards and the form are as they were.
-   */
-  const phone = usePhone();
-  /** The campaign whose sheet is open, on a phone. */
-  const [sheetFor, setSheetFor] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
-      const [rows, carrier] = await Promise.all([listCampaigns(true), listQualificationRules()]);
-      setCampaigns(rows);
-      setRules(carrier);
+      setCampaigns(await listCampaigns(true));
       setError(null);
     } catch (err) {
       setError(toDisplayError(err));
@@ -181,11 +173,8 @@ export default function CampaignsSettingsPage() {
   useEffect(() => { void load(); }, [load]);
 
   /*
-   * Read on its own, so a failure here does not take the screen down.
-   *
-   * The registry is needed by one form on one tab. Folding it into `load` would mean an office
-   * could not see its campaigns at all because the vocabulary read failed — a worse answer than
-   * an Add form that offers nothing to measure.
+   * Read on its own, so a failure here does not take the screen down: the registry is needed by the form alone, and an
+   * office that could not see its campaigns because the vocabulary read failed would be a worse answer.
    */
   useEffect(() => { void listMetrics().then(setMetrics).catch(() => setMetrics([])); }, []);
 
@@ -204,127 +193,87 @@ export default function CampaignsSettingsPage() {
     }
   };
 
-  function campaignsTab() {
+  /** When it runs, in the row's line: a structural one's window, a seasonal one's dates — or *mulai …* before it starts. */
+  const whenOf = (campaign: CampaignRow) => {
+    if (campaign.kind === 'structural') {
+      return (t.when as Record<string, string>)[campaign.window] ?? campaign.window;
+    }
+    const start = officeDay(campaign.startsAt);
+    if (campaign.phase === 'upcoming' || !campaign.endsAt) return t.from({ day: formatCalendarDay(start, figures) });
+    const range = formatDayRange(start, officeDay(campaign.endsAt), figures);
+    return campaign.phase === 'ended' ? `${range} · ${c.ended}` : range;
+  };
+
+  /** The row's line: every requirement in words, joined as the agent's card joins them (*+*), then when it runs. */
+  const lineOf = (campaign: CampaignRow) => {
+    const need = campaign.requirements.map((r) => readRequirement(r, ratioUnits, language, figures)).join(' + ');
+    return [need, whenOf(campaign)].filter(Boolean).join(' · ');
+  };
+
+  const menuOf = (campaign: CampaignRow) => (canWrite ? (
+    <ActionMenu
+      label={t.more({ title: campaign.title })}
+      glyph="⋯"
+      triggerClassName="max-lg:h-11 max-lg:w-11"
+      items={[
+        { label: s.edit, onSelect: () => { setDraft(draftOf(campaign)); setEditing(campaign.id); } },
+        {
+          label: campaign.status === 'archived' ? s.restore : s.archive,
+          tone: campaign.status === 'archived' ? 'neutral' : 'alert',
+          onSelect: () => void run(() => (campaign.status === 'archived'
+            ? restoreCampaign(campaign.id)
+            : archiveCampaign(campaign.id))),
+        },
+      ]}
+    />
+  ) : null);
+
+  function list(active: string) {
     if (campaigns === null) return <SkeletonCards count={3} />;
-    // Upcoming, then running, then ended — each by date (P18.9-T4 AC-8, ADR-0176 §8; UI-030: the three were mixed).
-    const shown = byPhaseAndDate(campaigns.filter((c) => showArchived || c.status === 'active'));
-
+    const live = campaigns.filter((row) => showArchived || row.status === 'active');
+    // Struktural first — always on —, then Musiman: upcoming, running, ended, each by date (P18.9-T4 AC-8).
+    const ordered = [
+      ...byPhaseAndDate(live.filter((row) => row.kind === 'structural')),
+      ...byPhaseAndDate(live.filter((row) => row.kind === 'seasonal')),
+    ];
+    const shown = active === 'all' ? ordered : ordered.filter((row) => row.kind === active);
     return (
-      <div className="flex flex-col gap-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <label className={cn('flex items-center gap-2 text-md text-navy', ARCHIVED_SWITCH_ROW)}>
-            <input
-              type="checkbox"
-              checked={showArchived}
-              onChange={(e) => setShowArchived(e.target.checked)}
-            />
-            {s.showArchived}
-          </label>
-          {canWrite && (
-            <Button
-              disabled={busy || editing !== null}
-              onClick={() => { setDraft(emptyDraft()); setEditing('new'); }}
-            >
-              {t.addCampaign}
-            </Button>
-          )}
-        </div>
-
-        {editing && !phone && panel()}
-
+      <div className="overflow-hidden rounded-lg bg-card" data-campaign-list="">
         {shown.length === 0 ? (
-          <EmptyState title={t.empty} />
-        ) : phone ? (
-          <ListCard label={t.title}>
-            {shown.map((campaign) => (
-              <ListRow
-                key={campaign.id}
-                data-row={campaign.id}
-                title={campaign.title}
-                meta={`${wordFor(t.phases, campaign.phase)} · ${t.thisOffice}`}
-                trailing={campaign.status === 'archived' ? <TonePill tone="grey">{s.archivedBadge}</TonePill> : undefined}
-                haspopup
-                onSelect={() => { setEditing(null); setSheetFor(campaign.id); }}
-              />
-            ))}
-          </ListCard>
+          <EmptyState title={campaigns.length === 0 ? t.empty : t.noneOfKind} />
         ) : (
-          <ul className="flex flex-col gap-3">
+          <ul role="list" aria-label={t.title} className="m-0 list-none p-0 [&>li+li]:border-t [&>li+li]:border-divider">
             {shown.map((campaign) => (
-              <li key={campaign.id}>
-                <Card>
-                  <div className="flex flex-wrap items-center gap-3">
-                    {campaignDetails(campaign)}
-                    {campaignActions(campaign)}
-                  </div>
-                </Card>
+              <li key={campaign.id} data-row={campaign.id} className="flex min-h-11 items-center gap-3 px-4 py-2.5">
+                <span className="flex min-w-0 flex-1 flex-col">
+                  <span className="inline-flex flex-wrap items-center gap-2">
+                    <span className="text-md font-bold text-navy">{campaign.title}</span>
+                    {campaign.status === 'archived' && <ConfigBadge tone="open">{s.archivedBadge}</ConfigBadge>}
+                    {/* A requirement stored before the evaluable set, naming what a campaign cannot measure (T8 AC-1). */}
+                    {campaign.requirements.some((r) => r.measured === false) && <ConfigBadge tone="open">{c.notMeasured}</ConfigBadge>}
+                  </span>
+                  <span className="text-sm text-muted">{lineOf(campaign)}</span>
+                </span>
+                <TonePill tone={campaign.kind === 'structural' ? 'blue' : 'amber'} className="shrink-0">
+                  {campaign.kind === 'structural' ? c.structural : c.seasonal}
+                </TonePill>
+                {menuOf(campaign)}
               </li>
             ))}
           </ul>
         )}
-      </div>
-    );
-  }
-
-  /** A campaign's card: its title, description, phase, *This office*, its requirements and its reward. */
-  function campaignDetails(campaign: CampaignRow) {
-    return (
-      <div className="min-w-0 flex-1">
-        <h2 className="text-md font-semibold text-navy">{campaign.title}</h2>
-        {campaign.description && (
-          <p className="mt-0.5 text-sm text-muted">{campaign.description}</p>
-        )}
-        <p className="mt-1 flex flex-wrap items-center gap-2">
-          <ConfigBadge tone={PHASE_TONE[campaign.phase]}>
-            {wordFor(t.phases, campaign.phase)}
-          </ConfigBadge>
-          {/* *This office* (P18.9-T4 AC-8; UI-030), where it read *Your office’s*: run here, not by the insurer. */}
-          <ConfigBadge tone="open">{t.thisOffice}</ConfigBadge>
-          {campaign.status === 'archived' && (
-            <ConfigBadge tone="open">{s.archivedBadge}</ConfigBadge>
-          )}
-        </p>
-        {campaign.requirements.length > 0 && (
-          <ul className="mt-2 flex flex-col gap-1">
-            {campaign.requirements.map((r) => (
-              <li key={r.metricKey} className="flex flex-wrap items-center gap-2 text-md text-navy">
-                {readRequirement(r, ratioUnits, language, figures)}
-                {/* A requirement stored before the evaluable set, naming what a campaign cannot measure (T8 AC-1). */}
-                {r.measured === false && <ConfigBadge tone="open">{c.notMeasured}</ConfigBadge>}
-              </li>
-            ))}
-          </ul>
-        )}
-        {campaign.reward && (
-          <p className="mt-1 text-sm text-muted">{t.reward({ reward: campaign.reward })}</p>
+        {canWrite && (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => { setDraft(emptyDraft(active === 'structural' ? 'structural' : 'seasonal')); setEditing('new'); }}
+            className="flex min-h-11 w-full items-center gap-2 border-t border-divider px-4 text-left text-base font-bold text-primary-ink hover:bg-hover-row lg:min-h-10"
+          >
+            <LineIcon name="plus" className="h-4 w-4" />
+            {t.addCampaign}
+          </button>
         )}
       </div>
-    );
-  }
-
-  /** A campaign's *Edit* and *Archive* / *Restore* — on its card from 768px, in its sheet below it. */
-  function campaignActions(campaign: CampaignRow) {
-    return (
-      canWrite && (
-        <div className="flex flex-wrap gap-2">
-          <Button
-            variant="inline"
-            disabled={busy}
-            onClick={() => { setDraft(draftOf(campaign)); setEditing(campaign.id); }}
-          >
-            {s.edit}
-          </Button>
-          <Button
-            variant="inlineDanger"
-            disabled={busy}
-            onClick={() => void run(() => (campaign.status === 'archived'
-              ? restoreCampaign(campaign.id)
-              : archiveCampaign(campaign.id)))}
-          >
-            {campaign.status === 'archived' ? s.restore : s.archive}
-          </Button>
-        </div>
-      )
     );
   }
 
@@ -332,12 +281,12 @@ export default function CampaignsSettingsPage() {
     const isNew = editing === 'new';
     const structural = draft.kind === 'structural';
     const ready = draft.title.trim() && draft.code.trim() && draft.startsAt
-      && (structural ? draft.subtype && draft.window : draft.endsAt)
+      && (structural ? draft.window : draft.endsAt)
       && draft.requirements.every((r) => r.metricKey && r.value.trim() !== '');
     const setRow = (key: number, fields: Partial<RequirementDraft>) =>
       setDraft((n) => ({ ...n, requirements: n.requirements.map((r) => (r.key === key ? { ...r, ...fields } : r)) }));
     return (
-      <Card>
+      <div className="flex flex-col pb-2">
         <div className="flex flex-wrap gap-3">
           <Field label={t.fieldTitle} htmlFor="c-title" className="min-w-60 flex-1">
             <TextInput
@@ -384,7 +333,6 @@ export default function CampaignsSettingsPage() {
                 setDraft((n) => ({
                   ...n,
                   kind,
-                  subtype: kind === 'structural' ? (n.subtype || 'promotion') : '',
                   window: kind === 'structural' ? (n.window === 'campaign_dates' ? 'rolling_12m' : n.window) : 'campaign_dates',
                 }));
               }}
@@ -395,17 +343,6 @@ export default function CampaignsSettingsPage() {
           </Field>
           {structural && (
             <>
-              <Field label={t.section} htmlFor="c-subtype" className="min-w-48">
-                <Select
-                  id="c-subtype"
-                  value={draft.subtype}
-                  disabled={busy}
-                  onChange={(e) => setDraft((n) => ({ ...n, subtype: e.target.value as CampaignSubtypeCode }))}
-                >
-                  <option value="promotion">{c.promotionCriteria}</option>
-                  <option value="ongoing">{c.productionClubs}</option>
-                </Select>
-              </Field>
               <Field label={t.readOver} htmlFor="c-window" className="min-w-48">
                 <Select
                   id="c-window"
@@ -632,7 +569,9 @@ export default function CampaignsSettingsPage() {
               const body = {
                 title: draft.title.trim(),
                 kind: draft.kind,
-                subtype: structural ? draft.subtype : null,
+                // *Struktural* or *Musiman*, nothing else (ADR-0282 §5): a new campaign has no subtype, a seasonal one
+                // never, and a structural one being edited keeps whatever it was stored with.
+                ...(structural && !isNew ? {} : { subtype: null }),
                 window: structural ? draft.window : 'campaign_dates',
                 appliesToOrgLevelCodes: draft.rungs,
                 poster: { emoji: draft.emoji.trim(), color: draft.color },
@@ -652,114 +591,18 @@ export default function CampaignsSettingsPage() {
           </Button>
           <Button variant="secondary" disabled={busy} onClick={() => setEditing(null)}>{s.cancel}</Button>
         </div>
-      </Card>
-    );
-  }
-
-  /**
-   * **A campaign on a phone, in its sheet** (P19.2-T3 AC-3): the card it was, with *Edit* and *Archive* / *Restore*; *Edit*
-   * turns the sheet into the campaign's form, and *Add a campaign* opens the same form in it.
-   */
-  function campaignSheet() {
-    const campaign = sheetFor === null ? null : campaigns?.find((row) => row.id === sheetFor) ?? null;
-    const adding = editing === 'new';
-    const open = adding || campaign !== null;
-    return (
-      <ResponsiveSheet
-        open={open}
-        title={adding ? t.addCampaign : campaign?.title ?? ''}
-        onClose={() => { setSheetFor(null); setEditing(null); }}
-      >
-        {open && (editing !== null ? panel() : campaign && (
-          <div className="flex flex-col gap-3 pb-2">
-            {campaignDetails(campaign)}
-            {campaignActions(campaign)}
-          </div>
-        ))}
-      </ResponsiveSheet>
-    );
-  }
-
-  function tiersTab() {
-    if (rules === null) return <SkeletonCards count={3} />;
-    const tiers = rules.filter((r) => r.kind === 'production_club');
-    const moc = rules.filter((r) => r.kind === 'moc');
-
-    return (
-      <div className="flex flex-col gap-4">
-        <Card>
-          <p className="text-md text-navy">
-            <strong>{t.insurers}</strong>{' '}
-            <span className="text-muted">{t.insurersLine}</span>
-          </p>
-        </Card>
-
-        {([
-          { heading: t.tierHeadings.tiers, rows: tiers },
-          { heading: t.tierHeadings.moc, rows: moc },
-        ]).map(({ heading, rows }) => (
-          <Card key={heading} className="p-0">
-            <div className="border-b border-hairline px-4 py-3 sm:px-5">
-              <h2 className="font-display text-lg font-bold text-navy">{heading}</h2>
-            </div>
-            {rows.length === 0 ? (
-              <p className="px-4 py-3 text-md text-muted sm:px-5">{t.nothingHere}</p>
-            ) : (
-              <ul className="flex flex-col divide-y divide-hairline">
-                {rows.map((rule) => (
-                  <li key={rule.id} className="px-4 py-3 sm:px-5">
-                    <p className="flex flex-wrap items-center gap-2">
-                      <span className="text-md font-semibold text-navy">{rule.name}</span>
-                      {rule.appliesToOrgLevelCodes.length > 0 && (
-                        <ConfigBadge tone="open">
-                          {rule.appliesToOrgLevelCodes.join(', ')}
-                        </ConfigBadge>
-                      )}
-                      {rule.waitingOnMetrics.length > 0 && (
-                        <ConfigBadge tone="open">{c.notMeasured}</ConfigBadge>
-                      )}
-                    </p>
-                    <ul className="mt-1 flex flex-col gap-1">
-                      {rule.criteriaGroups.map((group, i) => (
-                        <li key={group.criteria.map((c) => c.metricKey).join('-')} className="text-md text-navy">
-                          {i > 0 && (
-                            <span className="text-sm font-semibold text-muted">
-                              {rule.groupMode === 'any' ? t.groupJoin.any : t.groupJoin.all}
-                            </span>
-                          )}
-                          {group.criteria.map((criterion) => readRequirement(criterion, ratioUnits, language, figures)).join(
-                            group.mode === 'all' ? t.criteriaJoin.all : t.criteriaJoin.any,
-                          )}
-                        </li>
-                      ))}
-                    </ul>
-                    {rule.reward && (
-                      <p className="mt-1 text-sm text-muted">{t.reward({ reward: rule.reward })}</p>
-                    )}
-                    {rule.waitingOnMetrics.length > 0 && (
-                      // The state and what it waits on, and nothing about when (ADR-0070). It read
-                      // "until the production figures arrive", which was timing, and stale besides.
-                      <p className="mt-1 text-sm text-muted">{t.waitingOn({ metrics: rule.waitingOnMetrics.join(', ') })}</p>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </Card>
-        ))}
       </div>
     );
   }
 
+  const editingRow = editing && editing !== 'new' ? campaigns?.find((row) => row.id === editing) ?? null : null;
+  const count = (kind: Filter) => (campaigns ?? [])
+    .filter((row) => (showArchived || row.status === 'active') && (kind === 'all' || row.kind === kind)).length;
+
   return (
     <SettingsScreen
       title={t.title}
-      subtitle={t.subtitle}
       permission="campaign_settings:read"
-      tabs={TABS}
-      tabsLabel={s.sections({ title: kept('Campaign') })}
-      activeHref={tab}
-      onSelectTab={setTab}
       error={campaigns === null ? error : null}
       bars={<PublishBar />}
     >
@@ -768,8 +611,37 @@ export default function CampaignsSettingsPage() {
           <p className="text-md text-navy">{error.message}</p>
         </div>
       )}
-      {tab === '#tiers' ? tiersTab() : campaignsTab()}
-      {phone && tab !== '#tiers' && campaignSheet()}
+      {campaigns === null ? (error ? null : <SkeletonCards count={3} />) : (
+        <div className="flex flex-col gap-3">
+          <Segmented
+            label={t.filterLabel}
+            tabs={[
+              { id: 'all', label: t.filter.all({ n: count('all') }) },
+              { id: 'structural', label: t.filter.structural({ n: count('structural') }) },
+              { id: 'seasonal', label: t.filter.seasonal({ n: count('seasonal') }) },
+            ]}
+            active={filter}
+            onSelect={(id) => setFilter(id as Filter)}
+          >
+            {(active) => list(active)}
+          </Segmented>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-1 text-sm text-muted">
+            <span>{t.noteStructural}</span>
+            <span>{t.noteSeasonal}</span>
+            <label className={cn('inline-flex items-center gap-2', ARCHIVED_SWITCH_ROW)}>
+              <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} />
+              {s.showArchived}
+            </label>
+          </div>
+        </div>
+      )}
+      <ResponsiveSheet
+        open={editing !== null}
+        title={editing === 'new' ? t.addCampaign : editingRow?.title ?? ''}
+        onClose={() => setEditing(null)}
+      >
+        {editing !== null && panel()}
+      </ResponsiveSheet>
     </SettingsScreen>
   );
 }
@@ -780,7 +652,6 @@ function draftOf(campaign: CampaignRow) {
     code: campaign.code,
     touched: true,
     kind: campaign.kind,
-    subtype: (campaign.subtype ?? '') as CampaignSubtypeCode | '',
     window: campaign.window,
     rungs: campaign.appliesToOrgLevelCodes,
     emoji: campaign.poster.emoji,
@@ -794,10 +665,11 @@ function draftOf(campaign: CampaignRow) {
   };
 }
 
-function emptyDraft() {
+/** A new campaign's form: *Musiman* unless it is opened from *Struktural*'s filter. */
+function emptyDraft(kind: CampaignKindCode = 'seasonal') {
   return {
     title: '', code: '', touched: false,
-    kind: 'seasonal' as CampaignKindCode, subtype: '' as CampaignSubtypeCode | '', window: 'campaign_dates' as CampaignWindowCode,
+    kind, window: (kind === 'structural' ? 'calendar_year' : 'campaign_dates') as CampaignWindowCode,
     rungs: [] as string[],
     // A poster to start from, which the Owner changes; the preview beside the fields shows it.
     emoji: '🎯', color: 'navy' as PosterColor,

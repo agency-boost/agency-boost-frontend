@@ -46,8 +46,21 @@ const en = {
     // P19.4-T3 (ADR-0206 §1): the Owner and the Admin change it now, under *Activity binding* on this page.
     `The summary and the goal plan count this as ${stage}. Change which activities count under Activity binding.`,
   typeCodeHint: 'Permanent. Ratios and goals bind to it.',
-  /** The button under a section's types. */
-  addTo: ({ name }: { name: string }) => `Add to ${name}`,
+  /**
+   * The *+ Tambah aktivitas* line at a card's foot (P19.21-T3 AC-1): its words, and its accessible name, which names the
+   * card and begins with its words (WCAG 2.5.3).
+   */
+  addActivity: 'Add activity',
+  addTo: ({ name }: { name: string }) => `Add activity to ${name}`,
+  /** The toolbar's *+ Tambah kategori* (P19.21-T3 AC-1; mockup f13). */
+  addCategory: 'Add category',
+  /** A card's line under its name: how many activities, and who the category is for (mockup f13). */
+  sectionMeta: ({ n, who }: { n: number; who: string }) => `${n} ${n === 1 ? 'activity' : 'activities'} · for ${who}`,
+  /** The ⋯'s second item, the mockup's *Ubah untuk siapa*. */
+  changeWho: 'Change who it is for',
+  /** The legend under the cards (mockup f13): `handle` is the ⠿ glyph. */
+  legendDrag: ({ handle }: { handle: string }) => `Drag ${handle} to change the order`,
+  legendMenu: '⋯ = rename, who it is for, archive',
 };
 
 const id: MessagesOf<typeof en> = {
@@ -77,7 +90,13 @@ const id: MessagesOf<typeof en> = {
     `Ringkasan dan rencana ${kept('goal')} menghitung ini sebagai ${stage}. Ubah aktivitas mana yang dihitung di `
     + 'Pengaitan aktivitas.',
   typeCodeHint: `Permanen. Setiap ${kept('ratio')} dan ${kept('goal')} terikat padanya.`,
-  addTo: ({ name }) => `Tambah ke ${name}`,
+  addActivity: 'Tambah aktivitas',
+  addTo: ({ name }) => `Tambah aktivitas ke ${name}`,
+  addCategory: 'Tambah kategori',
+  sectionMeta: ({ n, who }) => `${n} aktivitas · untuk ${who}`,
+  changeWho: 'Ubah untuk siapa',
+  legendDrag: ({ handle }) => `Seret ${handle} untuk mengubah urutan`,
+  legendMenu: '⋯ = ganti nama, untuk siapa, arsipkan',
 };
 
 export const activityTypesMessages = defineMessages({ en, id });

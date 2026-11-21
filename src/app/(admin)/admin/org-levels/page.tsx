@@ -142,7 +142,10 @@ export default function OrgLevelsPage() {
         // An insurer is chosen first, as before the library was listed; the library only where there is none.
         setLevels(ladder);
         setCompanies(all);
-        setCompanyId((c) => c || (insurersOf(all)[0]?._id ?? all[0]?._id ?? ''));
+        // P19.23-T4 AC-2 (ADR-0278 §1): *Jenjang*'s *Ubah* and *+ Tambah jenjang* open this with `?company=` chosen.
+        const asked = new URLSearchParams(window.location.search).get('company');
+        const named = asked && all.some((c) => c._id === asked) ? asked : null;
+        setCompanyId((c) => c || named || (insurersOf(all)[0]?._id ?? all[0]?._id ?? ''));
       })
       .catch((err) => {
         setError(toDisplayError(err));

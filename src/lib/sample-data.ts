@@ -31,9 +31,15 @@ const lastOneOnOne = (today: string, i: number): LastOneOnOne => ({
   days: 3 + i * 5, date: today, overdue: i === 2, coach: null,
 });
 
-/** Coaching's roster (`CoachingRoster`): three direct agents, one of each status. */
+/** Each sample agent's coaching status tile (P19.18-T5): never, within 14 days, then longer ago — one of each colour. */
+const COACHED: readonly RosterRow['coaching']['status'][] = ['never', 'recent', 'lapsed'];
+
+/**
+ * Coaching's roster (`CoachingRoster`): *Unit Anda* with three agents, one of each coaching status (P19.18-T5). None opens
+ * anything (`opens: false`): the sample is no roster.
+ */
 export function sampleRoster(name: SampleName, today: string): Roster {
-  const directAgents: RosterRow[] = ids.map((membershipId, i) => ({
+  const rows: RosterRow[] = ids.map((membershipId, i) => ({
     membershipId,
     name: name(i + 1),
     photoUrl: null,
@@ -41,8 +47,19 @@ export function sampleRoster(name: SampleName, today: string): Roster {
     depth: 1,
     lastOneOnOne: lastOneOnOne(today, i),
     status: STATUSES[i],
+    coaching: { status: COACHED[i], days: COACHED[i] === 'never' ? null : 3 + i * 10, coach: null },
+    phone: null,
+    isReader: false,
+    opens: false,
   }));
-  return { today, overdueAfterDays: 14, directAgents, units: [] };
+  return {
+    today,
+    overdueAfterDays: 14,
+    scope: 'downline',
+    scopes: { offered: [], default: 'downline' },
+    total: rows.length,
+    sections: [{ key: 'own', kind: 'own', leader: null, count: rows.length, rows, teams: [] }],
+  };
 }
 
 /** The Group Tree (`GroupTree`): a sample leader and three agents under them. */
@@ -152,6 +169,13 @@ export function sampleUnitView(base: UnitDashboardView, name: SampleName): UnitD
         touches: { logged: 10 - i * 3, target: null },
       },
       lastOneOnOne: lastOneOnOne(base.today, i),
+      // P19.18-T1 AC-8: the coaching status tile as the sample's last 1:1 reads it; sample leads, no potensi.
+      coaching: i === 2
+        ? { status: 'never', days: null, coach: null }
+        : { status: 'recent', days: lastOneOnOne(base.today, i).days, coach: null },
+      periodLeads: { sales: 4 - i, recruitment: i === 0 ? 1 : 0 },
+      potensi: { sales: 0, recruitment: 0 },
+      activity7d: 10 - i * 3,
       status: STATUSES[i],
       pacingToMaa: i < 2,
       newHireBeforeFirstSale: false,
@@ -170,11 +194,14 @@ export function sampleUnitView(base: UnitDashboardView, name: SampleName): UnitD
   return {
     ...base,
     empty: false,
+    // The sample opens nobody's card: a tap on a sample goes nowhere a real person is.
+    personCard: false,
     tiles: {
       team: { total: SAMPLE_PEOPLE, direct: SAMPLE_PEOPLE, units: 0, underUnits: 0, aab: 0, ab: 0, newHires: 0 },
       directGroupProduction: { ...goal, period: base.tiles.directGroupProduction.period },
-      potentialActive: { ...potentialActive, unit: potentialActive, aab: { count: 0, of: 0 }, ab: { count: 0, of: 0 } },
-      potentialRecruits: { yourUnit: 1, aabs: 0, abs: 0 },
+      // P19.18-T1 AC-3: no sample person is anybody's Active Agent or recruit — nobody behind either number.
+      activeAgent: { month: base.month, held: false, count: null, people: [] },
+      recruitment: { month: base.month, count: 0, people: [] },
     },
     yourUnit: {
       rows,

@@ -16,6 +16,7 @@ import {
 import { OFFICE_TIME_ZONE } from '@/lib/format';
 import { usePhone } from '@/lib/use-phone';
 import { PhoneEventCard } from './event-phone';
+import { DeclineDialog } from './decline-dialog';
 
 /** What the modal beneath the list needs from it: how to close, how to say something, how to update a card. */
 interface EventsHost {
@@ -94,6 +95,8 @@ export function EventsScreen({ children }: { children?: ReactNode }) {
   /** The card whose answer is in flight, and its refusal. */
   const [joining, setJoining] = useState<string | null>(null);
   const [joinError, setJoinError] = useState<{ id: string; error: ApiError } | null>(null);
+  /** The card whose *Tidak ikut* is asking why (ADR-0281 §2). */
+  const [declining, setDeclining] = useState<GuestEvent | null>(null);
 
   useEffect(() => {
     let live = true;
@@ -129,14 +132,21 @@ export function EventsScreen({ children }: { children?: ReactNode }) {
 
   const reload = useCallback(() => setAttempt((n) => n + 1), []);
 
-  /** *Ikut* or *Tidak ikut* on a card (UI-108; at every size since UI-123): give the answer, change it, or take it back. */
-  const answer = async (event: GuestEvent, tapped: 'going' | 'notGoing') => {
+  /**
+   * *Ikut* or *Tidak ikut* on a card (UI-108; at every size since UI-123): give the answer, change it, or take it back.
+   * *Tidak ikut* asks first why (P19.25-T1 AC-3; ADR-0281 §2: `DeclineDialog`, the reason optional).
+   */
+  const answer = async (event: GuestEvent, tapped: 'going' | 'notGoing', reason?: string) => {
     if (joining) return;
+    const call = rsvpCall(event, tapped);
+    if (call === 'cancel' && reason === undefined) {
+      setDeclining(event);
+      return;
+    }
     setJoining(event.id);
     setJoinError(null);
-    const call = rsvpCall(event, tapped);
     try {
-      const next = await (call === 'rsvp' ? rsvpEvent : call === 'cancel' ? cancelRsvp : withdrawRsvp)(event.id);
+      const next = await (call === 'rsvp' ? rsvpEvent(event.id) : call === 'cancel' ? cancelRsvp(event.id, reason) : withdrawRsvp(event.id));
       replace(next);
       show(call === 'rsvp' ? goingToast(next.title, language) : call === 'cancel' ? t.declined({ title: next.title }) : t.withdrawn({ title: next.title }));
     } catch (err) {
@@ -181,6 +191,18 @@ export function EventsScreen({ children }: { children?: ReactNode }) {
         )}
       </div>
       {children}
+      {declining && (
+        <DeclineDialog
+          title={declining.title}
+          busy={joining !== null}
+          onClose={() => setDeclining(null)}
+          onSend={(reason) => {
+            const event = declining;
+            setDeclining(null);
+            void answer(event, 'notGoing', reason);
+          }}
+        />
+      )}
       {/*
         * Above the modal (`z-50`), which is the whole screen on a phone: every toast the modal raises —
         * *"Joined ✓ — you're going to…"*, *"Pick a score from 0–10 first"* — would otherwise land behind it. A

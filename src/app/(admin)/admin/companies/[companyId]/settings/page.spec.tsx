@@ -1,197 +1,105 @@
 import { screen, within } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { axe } from 'vitest-axe';
-import { atWidth, renderWithSession, routeParams, stubFetch, wears, type StubReply } from '@test/harness';
-import { LIBRARY, PRUDENTIAL, SUPER_ADMIN, kindView } from '@test/kpm-template-fixtures';
-import CompanySettingsPage from './page';
+import { atWidth, renderInIndonesian, routeParams, stubFetch } from '@test/harness';
+import { englishOnly, englishShown } from '@test/english-left';
+import { adminTemplateMessages } from '@/i18n/messages/admin-template';
+import { DEFAULT_TEMPLATE, PRUDENTIAL, SUPER_ADMIN, kindView } from '@test/kpm-template-fixtures';
+import TemplateSettingsPage from './page';
+import CompanyCampaignsPage from './campaigns/page';
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
   usePathname: () => '/admin/companies/c1/settings',
 }));
-// The two parts that load on demand, as the doubles they are here: their own specs are theirs. Everything else loaded on
-// demand — the carrier rules' editor since 2026-11-06 (the bundle) — loads as it does in the app.
-vi.mock('next/dynamic', async () => {
-  const actual = await vi.importActual<typeof import('next/dynamic')>('next/dynamic');
-  return {
-    default: (load: () => Promise<unknown>, options?: Parameters<typeof actual.default>[1]) => {
-      const source = String(load);
-      if (!source.includes('products-tab') && !source.includes('recruitment-playbook-tab')) {
-        return actual.default(load as Parameters<typeof actual.default>[0], options);
-      }
-      const name = source.includes('products-tab') ? 'products' : 'recruitment';
-      return ({ onDirtyChange }: { onDirtyChange?: (dirty: boolean) => void }) => (
-        <div data-testid={name}>
-          {onDirtyChange && <button type="button" onClick={() => onDirtyChange(true)}>edit</button>}
-        </div>
-      );
-    },
-  };
-});
 
-const clean = async () =>
-  expect((await axe(document.body, { rules: { 'color-contrast': { enabled: false }, region: { enabled: false } } })).violations ?? [])
-    .toHaveLength(0);
-
-const RULES = {
-  rules: [{
-    kind: 'production_club', code: 'PRESIDENTS_CLUB', name: 'President’s Club', rank: 1,
-    criteriaGroups: [{ mode: 'all', criteria: [{ metricKey: 'ape', comparator: 'gte', value: 100000000 }] }],
-  }],
+const withDrafts = {
+  ...DEFAULT_TEMPLATE,
+  sections: {
+    ...DEFAULT_TEMPLATE.sections,
+    activity_taxonomy: { publishedVersion: 3, hasDraft: true },
+    training_taxonomy: { publishedVersion: 1, hasDraft: true },
+  },
 };
 
-function render(extra: Record<string, StubReply | StubReply[]> = {}) {
-  const stub = stubFetch({
+function render(templates: unknown = [withDrafts], campaignDraft = false) {
+  stubFetch({
     '/admin/companies': { body: [PRUDENTIAL] },
+    '/admin/companies/c1/templates': { body: templates },
     '/admin/companies/c1/template/campaign_kinds': {
-      body: kindView('campaign_kinds', RULES, { templateId: null, status: 'draft', version: 2, publishedVersion: 1 }),
+      body: kindView('campaign_kinds' as never, {}, campaignDraft ? { status: 'draft', version: 2, publishedVersion: 1 } : {}),
     },
-    '/metrics': { body: [{ key: 'ape', name: 'APE', unit: 'idr', description: '' }] },
-    ...extra,
-  });
-  const view = renderWithSession(<CompanySettingsPage params={routeParams({ companyId: 'c1' })} />, { me: SUPER_ADMIN });
-  return { ...view, stub };
+  } as never);
+  renderInIndonesian(<TemplateSettingsPage params={routeParams({ companyId: 'c1' })} />, { me: SUPER_ADMIN });
 }
 
-/**
- * **A company's page, tab *Company settings*** (ADR-0185 §2; P18.11-T20 AC-1): the company's own — products, carrier
- * rules — said once to apply at once to every office; the carrier rules asked about before they publish. The playbook
- * left for the templates' *Rekrutmen* section (P19.4-T5, ADR-0210 §3).
- */
-describe('P18.11-T20 a company’s own settings', () => {
-  beforeEach(() => window.history.replaceState(null, '', '/'));
+/** **P19.23-T4 AC-4 — *Pengaturan template*** (ADR-0278 §1, §5; frame 35): the owner hub's groups, no *Tampilan*. */
+describe('P19.23-T4 AC-4 Pengaturan template', () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it('AC-1 says once that it applies at once to every office, under the company’s second tab', async () => {
-    render();
-    expect(await screen.findByRole('heading', { level: 1, name: 'Prudential' })).toBeInTheDocument();
-    expect(screen.getByText('Applies at once to every office of this company.')).toBeInTheDocument();
-    expect(within(screen.getByRole('navigation', { name: 'Company pages' })).getByRole('link', { name: 'Company settings' }))
-      .toHaveAttribute('aria-current', 'page');
-    const parts = within(screen.getByRole('navigation', { name: 'Company settings' }));
-    // P19.4-T5 AC-6 (ADR-0210 §3; B1-11): Produk · Campaign — Rekrutmen is a template's section now.
-    expect(parts.getAllByRole('link').map((l) => l.textContent)).toEqual(['Products', 'Campaigns']);
-    expect(screen.getByTestId('products')).toBeVisible();
-  });
-
-  it('keeps a part once opened, so moving between them loses nothing', async () => {
-    render();
-    await screen.findByTestId('products');
-    await userEvent.click(await screen.findByRole('link', { name: 'Campaigns' }));
-    expect(window.location.hash).toBe('#campaigns');
-    // Hidden, never unmounted: its edit is still there to come back to.
-    expect(screen.getByTestId('products')).not.toBeVisible();
-    await userEvent.click(screen.getByRole('link', { name: 'Products' }));
-    expect(screen.getByTestId('products')).toBeVisible();
-  });
-
-  it('P19.4-T5 AC-6 an old link to #recruitment opens Products: the playbook is no longer the company’s', async () => {
-    window.history.replaceState(null, '', '/admin/companies/c1/settings#recruitment');
-    render();
-    expect(await screen.findByTestId('products')).toBeVisible();
-    expect(screen.queryByRole('link', { name: 'Recruitment' })).not.toBeInTheDocument();
-    expect(screen.queryByTestId('recruitment')).not.toBeInTheDocument();
-  });
-
-  it('Campaigns: the carrier rules through their editor, a pill per heading, the draft’s words', async () => {
-    render();
-    await userEvent.click(await screen.findByRole('link', { name: 'Campaigns' }));
-    expect(window.location.hash).toBe('#campaigns');
-    expect(await screen.findByText('Draft v2 · v1 published')).toBeInTheDocument();
-    const pills = within(screen.getByRole('navigation', { name: 'Campaigns parts' }));
-    expect(pills.getAllByRole('link').map((l) => l.textContent))
-      .toEqual(['Production club tiers', 'Maintenance of Contract', 'Promotion paths']);
-    // The editor loads with the part (the bundle, 2026-11-06).
-    expect(await screen.findByText('President’s Club')).toBeInTheDocument();
-  });
-
-  it('Campaigns: Publish asks first, because it reaches the offices that exist, then publishes the company’s rules', async () => {
-    const { stub } = render({
-      'POST /admin/companies/c1/template/campaign_kinds/publish': {
-        body: kindView('campaign_kinds', RULES, { templateId: null, version: 2, publishedVersion: 2 }),
-      },
-    });
-    await userEvent.click(await screen.findByRole('link', { name: 'Campaigns' }));
-    await userEvent.click(await screen.findByRole('button', { name: 'Publish' }));
-    const question = within(screen.getByRole('dialog'));
-    expect(question.getByText(/including the ones that already exist/)).toBeInTheDocument();
-    expect(stub.calls.some((c) => c.init.method === 'POST')).toBe(false);
-    await userEvent.click(question.getByRole('button', { name: 'Publish' }));
-    expect(await screen.findByText('Published v2')).toBeInTheDocument();
-    const post = stub.calls.find((c) => c.init.method === 'POST');
-    // The company's own, under no template.
-    expect(post?.url).toMatch(/\/admin\/companies\/c1\/template\/campaign_kinds\/publish\?$/);
-  });
-
-  it('has no axe violations: the products, and the carrier rules with Publish asked', async () => {
-    render();
-    await screen.findByTestId('products');
-    await clean();
-    await userEvent.click(screen.getByRole('link', { name: 'Campaigns' }));
-    await userEvent.click(await screen.findByRole('button', { name: 'Publish' }));
-    await clean();
-  });
-
-  it.each([375, 768])('P19.2-T2 AC-5 at %ipx draws Products · Campaigns and the carrier rules’ parts as 44px tabs (UI-135)', async (px) => {
+  it.each([390, 1024])('P19.23-T4 AC-4 at %ipx draws the four groups, objection handling under Produk & rekrut, no Tampilan', async (px) => {
     atWidth(px);
     render();
-    await screen.findByTestId('products');
-    for (const tab of within(screen.getByRole('navigation', { name: 'Company settings' })).getAllByRole('link')) {
-      expect(wears(tab, px)).toContain('min-h-11');
-    }
-    await userEvent.click(screen.getByRole('link', { name: 'Campaigns' }));
-    for (const tab of within(await screen.findByRole('navigation', { name: 'Campaigns parts' })).getAllByRole('link')) {
-      expect(wears(tab, px)).toContain('min-h-11');
-    }
+    const groups = await screen.findAllByRole('region');
+    expect(groups.map((g) => within(g).getByRole('heading').textContent)).toEqual([
+      'Aktivitas & leads', 'Agent baru & training', 'Event & campaign', 'Produk & rekrut',
+    ]);
+    const produk = within(groups[3]);
+    expect(produk.getAllByRole('link').map((l) => l.textContent)).toEqual(['Recruitment pitch', 'Objection handling']);
+    expect(screen.queryByText(/Tampilan/)).toBeNull();
+    expect(screen.getByText('Sama dengan Pengaturan owner, tapi untuk template: KPM baru menyalin ini')).toBeInTheDocument();
   });
 
-  /*
-   * **The company's slug, currency and time zone, moved here from the companies list's columns** (P19.2-T2 AC-1;
-   * UI-126: *Slug, Mata uang and Zona waktu move to the company page*). Read, not edited; an insurer's only.
-   */
-  it.each([375, 768, 1024, 1280])('P19.2-T2 AC-1 at %ipx reads the company’s slug, currency and time zone on its settings tab', async (px) => {
-    atWidth(px);
+  it('P19.23-T4 AC-4 each row opens its section of the default template, and says Belum diterbitkan only while a draft waits', async () => {
+    render([withDrafts], true);
+    await screen.findByText('Activity types');
+    const row = async (key: string) => (await screen.findAllByRole('listitem')).find((li) => li.dataset.settingRow === key)!;
+    expect(within(await row('activity_types')).getByRole('link')).toHaveAttribute('href', '/admin/companies/c1/templates/t-default/activity');
+    expect(within(await row('objection_handling')).getByRole('link')).toHaveAttribute('href', '/admin/companies/c1/templates/t-default/recruitment');
+    expect(within(await row('campaigns')).getByRole('link')).toHaveAttribute('href', '/admin/companies/c1/settings/campaigns');
+    await vi.waitFor(async () => expect(within(await row('campaigns')).getByText('Belum diterbitkan')).toBeInTheDocument());
+    expect(within(await row('activity_types')).getByText('Belum diterbitkan')).toBeInTheDocument();
+    expect(within(await row('training')).getByText('Belum diterbitkan')).toBeInTheDocument();
+    expect(within(await row('lead_statuses')).queryByText('Belum diterbitkan')).toBeNull();
+  });
+
+  it('P19.23-T4 AC-4 says a company with no template, and passes axe populated', async () => {
+    render([]);
+    expect(await screen.findByText('Perusahaan ini belum punya template.')).toBeInTheDocument();
+    vi.unstubAllGlobals();
+    document.body.innerHTML = '';
+    atWidth(1280);
     render();
-    await screen.findAllByRole('definition');
-    const facts = document.querySelector<HTMLElement>('[data-company-facts]')!;
-    expect(facts).toHaveAttribute('aria-label', 'Company details');
-    expect([...facts.querySelectorAll('dt')].map((d) => d.textContent)).toEqual(['Slug', 'Currency', 'Time zone']);
-    expect([...facts.querySelectorAll('dd')].map((d) => d.textContent)).toEqual(['prudential', 'IDR', 'Asia/Jakarta']);
-    // Facts of the company, not a sub-line under the title (AC-7): the shared header draws none.
-    expect(screen.getByText('Applies at once to every office of this company.')).toBeInTheDocument();
+    await screen.findAllByText('Belum diterbitkan');
+    const rules = { 'color-contrast': { enabled: false }, region: { enabled: false } };
+    expect((await axe(document.body, { rules })).violations ?? []).toHaveLength(0);
   });
+});
 
-  // AC-10 (*Don't change*: the *Pengaturan perusahaan* explanation stays as it is until Phase 19.4's B1-11): its line
-  // first on the tab, at every size, its words as they were — the facts after it.
-  it.each([375, 768, 1280])('P19.2-T2 AC-10 at %ipx keeps the Pengaturan perusahaan line as it was, first on the tab', async (px) => {
-    atWidth(px);
-    render();
-    const line = await screen.findByText('Applies at once to every office of this company.');
-    expect(line.tagName).toBe('P');
-    expect(line.className).not.toMatch(/hidden/);
-    const facts = await screen.findAllByRole('definition').then(() => document.querySelector('[data-company-facts]')!);
-    expect(line.compareDocumentPosition(facts) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-  });
+/**
+ * ***Campaigns*, the company's carrier rules** (P19.23-T4 AC-4; ADR-0278 §7): moved from the old *Pengaturan perusahaan*
+ * tab to their own page, opened from *Pengaturan template*'s row — a pill per part, the draft's words, and *Terbitkan* for
+ * an insurer taking the reader to *Terbitkan ke KPM*. Read in ID mode (P18.10-T7 AC-1).
+ */
+describe('P19.23-T4 AC-4 Campaigns, the carrier rules, in Indonesian', () => {
+  afterEach(() => vi.unstubAllGlobals());
 
-  it('P19.2-T2 AC-1 draws no facts for the built-in templates’ company, which holds no office', async () => {
+  it('P18.10-T7 AC-1 the parts, the draft’s words and the rule as typed, with no English left', async () => {
+    const RULES = {
+      rules: [{
+        kind: 'production_club', code: 'PRESIDENTS_CLUB', name: 'President’s Club', rank: 1,
+        criteriaGroups: [{ mode: 'all', criteria: [{ metricKey: 'ape', comparator: 'gte', value: 100000000 }] }],
+      }],
+    };
     stubFetch({
-      '/admin/companies': { body: [LIBRARY] },
-      '/admin/companies/lib/template/campaign_kinds': {
-        body: kindView('campaign_kinds', RULES, { templateId: null, status: 'draft', version: 2, publishedVersion: 1 }),
+      '/admin/companies': { body: [PRUDENTIAL] },
+      '/admin/companies/c1/template/campaign_kinds': {
+        body: kindView('campaign_kinds' as never, RULES, { templateId: null, status: 'draft', version: 2, publishedVersion: 1 }),
       },
-      '/metrics': { body: [] },
-    });
-    renderWithSession(<CompanySettingsPage params={routeParams({ companyId: 'lib' })} />, { me: SUPER_ADMIN });
-    await screen.findByTestId('products');
-    expect(document.querySelector('[data-company-facts]')).toBeNull();
-  });
-
-  it('P19.2-T2 AC-5 keeps the tabs as they were from 1024px', async () => {
-    render();
-    await screen.findByTestId('products');
-    for (const tab of within(screen.getByRole('navigation', { name: 'Company settings' })).getAllByRole('link')) {
-      expect(wears(tab, 1280)).not.toContain('min-h-11');
-    }
+      '/metrics': { body: [{ key: 'ape', name: 'APE', unit: 'idr', description: '' }] },
+    } as never);
+    renderInIndonesian(<CompanyCampaignsPage params={routeParams({ companyId: 'c1' })} />, { me: SUPER_ADMIN });
+    expect(await screen.findByText('President’s Club')).toBeInTheDocument();
+    expect(englishShown(document.body, englishOnly(adminTemplateMessages))).toEqual([]);
   });
 });

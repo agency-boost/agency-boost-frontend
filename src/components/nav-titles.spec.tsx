@@ -3,16 +3,16 @@ import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { makeMe, renderWithSession, routeParams } from '@test/harness';
 import { openEveryGroup } from '@test/sidebar';
-import { fieldNav } from '@/lib/field-nav';
+import { fieldNav, SETTINGS_HUB } from '@/lib/field-nav';
 import { LEARNER, progressView, SALES } from '@test/training-fixtures';
-import AdminAnalyticsPage from '@/app/(admin)/admin/analytics/page';
 import AuditPage from '@/app/(admin)/admin/audit/page';
 import BillingPage from '@/app/(admin)/admin/billing/page';
 import CompaniesPage from '@/app/(admin)/admin/companies/page';
-import KpmRequestsPage from '@/app/(admin)/admin/kpm-requests/page';
-import LeaderLimitRequestsPage from '@/app/(admin)/admin/leader-limit-requests/page';
+import ApprovalsPage from '@/app/(admin)/admin/approvals/page';
 import OrgLevelsPage from '@/app/(admin)/admin/org-levels/page';
-import PlatformOverviewPage from '@/app/(admin)/admin/page';
+import DashboardPage from '@/app/(admin)/admin/page';
+import PlatformLayout from '@/app/(admin)/admin/platform/layout';
+import PlatformIndex from '@/app/(admin)/admin/platform/page';
 import TenantAdminsPage from '@/app/(admin)/admin/tenant-admins/page';
 import AllKpmsPage from '@/app/(admin)/admin/tenants/page';
 import AllMembersPage from '@/app/(admin)/admin/members/page';
@@ -50,14 +50,11 @@ import ProductsPage from '@/app/(tenant)/kpm/settings/products/page';
 import RecruitmentPitchPage from '@/app/(tenant)/kpm/settings/recruitment-pitch/page';
 import TrainingSettingsPage from '@/app/(tenant)/kpm/settings/training/page';
 import KpmAdminsPage from '@/app/(tenant)/people/admins/page';
-import CoreLeadersPage from '@/app/(tenant)/people/core-leaders/page';
 import ImportPeoplePage from '@/app/(tenant)/people/import/page';
 import MembersPage from '@/app/(tenant)/people/members/page';
 import OrgTreePage from '@/app/(tenant)/people/org-tree/page';
 import AdvancedAnalyticsLayout from '@/app/kpm/advanced-analytics/layout';
 import AdvancedAnalyticsIndexPage from '@/app/kpm/advanced-analytics/page';
-import KpmAnalyticsLayout from '@/app/kpm/analytics/layout';
-import KpmAnalyticsPage from '@/app/kpm/analytics/page';
 import LeaderMeetingsPage from '@/app/leader-meetings/page';
 import { Shell } from './shell';
 
@@ -139,7 +136,6 @@ const PAGES: Record<string, Screen> = {
   '/events': { ui: () => <EventsLayout><EventsPage /></EventsLayout>, me: FIELD },
   '/campaigns': { ui: () => <CampaignsLayout><CampaignsPage /></CampaignsLayout>, me: FIELD },
   '/leader-meetings': { ui: () => <LeaderMeetingsPage />, me: FIELD },
-  '/kpm/analytics': { ui: () => <KpmAnalyticsLayout><KpmAnalyticsPage /></KpmAnalyticsLayout>, me: OWNER },
   // P19.5-T4: *Advanced analytics* opens the KPM's survey tabs, titled the same.
   // P19.5-T3 AC-1: the menu's item opens the page's index, which goes to the template's first section.
   '/kpm/advanced-analytics': { ui: () => <AdvancedAnalyticsLayout><AdvancedAnalyticsIndexPage /></AdvancedAnalyticsLayout>, me: OWNER },
@@ -163,19 +159,20 @@ const PAGES: Record<string, Screen> = {
   '/people/import': { ui: () => <ImportPeoplePage />, me: OWNER },
   '/people/org-tree': { ui: () => <OrgTreePage />, me: OWNER },
   '/people/admins': { ui: () => <KpmAdminsPage />, me: OWNER },
-  '/people/core-leaders': { ui: () => <CoreLeadersPage />, me: OWNER },
   // The platform console's.
-  '/admin': { ui: () => <PlatformOverviewPage />, me: ADMIN },
+  // P19.23-T1 (ADR-0277): the console's rail — *Dashboard · KPM · Anggota · Perusahaan · Persetujuan · Langganan · Platform*.
+  '/admin': { ui: () => <DashboardPage />, me: ADMIN },
   '/admin/companies': { ui: () => <CompaniesPage />, me: ADMIN },
   '/admin/org-levels': { ui: () => <OrgLevelsPage />, me: ADMIN },
   '/admin/tenants': { ui: () => <AllKpmsPage />, me: ADMIN },
   '/admin/members': { ui: () => <AllMembersPage />, me: ADMIN },
-  '/admin/kpm-requests': { ui: () => <KpmRequestsPage />, me: ADMIN },
-  '/admin/leader-limit-requests': { ui: () => <LeaderLimitRequestsPage />, me: ADMIN },
+  // P19.23-T3 (ADR-0277): *Persetujuan*; the two old queues redirect here.
+  '/admin/approvals': { ui: () => <ApprovalsPage />, me: ADMIN },
   '/admin/billing': { ui: () => <BillingPage />, me: ADMIN },
+  '/admin/platform': { ui: () => <PlatformLayout><PlatformIndex /></PlatformLayout>, me: ADMIN },
+  // Off the menu since P19.23 (ADR-0277), each reached from a page that is on it; kept for their titles.
   '/admin/tenant-admins': { ui: () => <TenantAdminsPage />, me: ADMIN },
   '/admin/audit': { ui: () => <AuditPage />, me: ADMIN },
-  '/admin/analytics': { ui: () => <AdminAnalyticsPage />, me: ADMIN },
 };
 
 /**
@@ -187,7 +184,7 @@ function navItems(
 ): { label: string; href: string }[] {
   nav.pathname = path;
   renderWithSession(<>{shell}</>, { me });
-  // Only the current page's group starts open since P19.13-T2 (UI-196): every group is opened to read the whole nav.
+  // Every group is opened to read the whole nav (every group starts open since P19.17-T3; this opens any folded).
   const main = openEveryGroup(screen.getByRole('navigation', { name: 'Main' }));
   const items = [...main.querySelectorAll<HTMLAnchorElement>('a[href]')].map((a) => ({
     label: (a.querySelector('[data-nav-label]')?.textContent ?? a.textContent ?? '').replace(/\s+/g, ' ').trim(),
@@ -209,12 +206,28 @@ function navItems(
  * *Changed 2026-11-05 (P19.2-T1; ADR-0197, ADR-0198):* the two consoles are the one shell's **office view** — whose
  * office groups (*KPM*, *Pengaturan*, *People*) keep the rule, its field items being the field's — and **the Super
  * Admin's menu**, all of it.
+ *
+ * *Changed 2026-11-20 (P19.17-T3; ADR-0269):* no view — **the extras** of the Owner's one menu, *KPM* and *People*, keep
+ * the rule. *Pengaturan* is one item, the hub (`/kpm/settings`), whose page is Phase 19.21's: it joins the table then.
  */
 const SHELLS = [
-  ['the office view’s groups', <Shell key="t" family="tenant">x</Shell>, OWNER, '/kpm/overview',
-    (href: string) => href.startsWith('/kpm') || href.startsWith('/people') || href === '/leader-meetings'],
+  ['the extras’ groups', <Shell key="t" family="tenant">x</Shell>, OWNER, '/kpm/overview',
+    (href: string) => (href.startsWith('/kpm') || href.startsWith('/people') || href === '/leader-meetings') && href !== SETTINGS_HUB],
   ['the Super Admin’s menu', <Shell key="p" family="admin">x</Shell>, ADMIN, '/admin', () => true],
 ] as const;
+
+/**
+ * **A title the menu's new name has not reached yet** — none since P19.20-T4 retitled `/people/admins` *KPM admins*, the
+ * menu's word since P19.17-T3 (part E). Named here, so the rule is not quietly off.
+ */
+const PENDING_TITLES: Readonly<Record<string, string>> = {
+  /*
+   * P19.23 (ADR-0277 §1; parity I-1180): the Super Admin spec's rail says *Perusahaan* and *Langganan* where the mockups
+   * title the pages in full, *Perusahaan & template* and *Langganan & akses* — the client's own pairs, kept as drawn.
+   */
+  '/admin/companies': 'Companies & templates',
+  '/admin/billing': 'Subscriptions & access',
+};
 
 /** A page's own title, once it is up: its `<h1>`. */
 async function titleOf(href: string): Promise<string> {
@@ -245,7 +258,7 @@ describe('P18.7-T9 AC-2 each menu label is its page’s title', () => {
     });
 
     it.each(items.map((item) => [item.label, item.href] as const))('P18.7-T9 AC-2 “%s” opens a page titled the same (%s)', async (label, href) => {
-      expect((await titleOf(href)).toLowerCase()).toBe(label.toLowerCase());
+      expect((await titleOf(href)).toLowerCase()).toBe((PENDING_TITLES[href] ?? label).toLowerCase());
     });
   });
 
@@ -266,16 +279,16 @@ describe('P19.13-T4 AC-1 UI-197: a page’s title is its menu label', () => {
   beforeEach(() => { nav.pathname = '/'; });
   afterEach(() => vi.unstubAllGlobals());
 
-  const officeMenu = fieldNav(OWNER, '/kpm/overview', 'kpm_owner');
+  const officeMenu = fieldNav(OWNER, '/kpm/overview');
   const label = (href: string) => [...officeMenu.top, ...officeMenu.groups.flatMap((g) => g.items)].find((d) => d.href === href)!.label;
   const NINE = [
     ['/goals', 'Goal Setting'], ['/attack-plan', 'Sales'], ['/training', 'Training'], ['/coaching', 'Coaching'],
     ['/campaigns', 'Campaign'], ['/events', 'Event'], ['/people/members', 'All members'], ['/people/org-tree', 'Org tree'],
-    ['/people/admins', 'Manage KPM admins'],
+    ['/people/admins', 'KPM admins'],
   ] as const;
 
   it.each(NINE)('P19.13-T4 AC-1 %s is titled “%s”, its menu label', async (href, words) => {
     expect(label(href)).toBe(words);
-    expect(await titleOf(href)).toBe(words);
+    expect(await titleOf(href)).toBe(PENDING_TITLES[href] ?? words);
   });
 });

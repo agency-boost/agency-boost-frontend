@@ -1,324 +1,87 @@
-import { screen, waitFor, within } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderWithSession, stubFetch } from '@test/harness';
 import LeaderMeetingsPage from './page';
-import {
-  card, CORE_LEADER_ME, editors, FIELD_ME, listView, MAYA, MEETINGS, notFound, OWNER_ME, refusal, SHELL_STUBS,
-} from './forum-fixtures';
+import { card, CORE_LEADER_ME, FIELD_ME, listView, notFound, OWNER_ME, refusal, SHELL_STUBS } from './forum-fixtures';
 
-const nav = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn(), pathname: '/leader-meetings' }));
+const nav = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn(), pathname: '/leader-meetings', search: '' }));
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: nav.push, replace: nav.replace, back: vi.fn() }),
   usePathname: () => nav.pathname,
+  useSearchParams: () => new URLSearchParams(nav.search),
 }));
 
 const list = (body = listView()) => stubFetch({ ...SHELL_STUBS, 'GET /leader-meetings': { body } });
 const main = () => within(screen.getByRole('main'));
-/** The cards, in the order drawn: each meeting's `li` in the list (the avatar stacks are lists of their own). */
-const cards = () => [...screen.getAllByRole('heading', { level: 2 })].map((h) => h.closest('li') as HTMLElement);
 
-describe('/leader-meetings — the list (P18.1-T2)', () => {
+describe('/leader-meetings — the list (P19.22-T8 AC-1)', () => {
   beforeEach(() => { nav.push.mockReset(); nav.replace.mockReset(); });
   afterEach(() => vi.unstubAllGlobals());
 
-  it('P18.1-T2 AC-2, P18.9-T2 AC-1, P19.2-T1 AC-6: the title and one subtitle, in the Owner’s office view of the one shell', async () => {
+  it('P19.22-T8 AC-1 the title, the note, + New forum, and the navy next-forum card', async () => {
     list();
-    // The office view (ADR-0198 §5): a shared page keeps the tab's view, and the forum is its KPM group's item.
-    window.sessionStorage.setItem('ab.view', 'kpm_owner');
     renderWithSession(<LeaderMeetingsPage />, { me: OWNER_ME });
     expect(await screen.findByRole('heading', { level: 1, name: 'Strategic Leader Forum' })).toBeInTheDocument();
-    expect(screen.getByText('Biweekly check-ins with your core leaders — agenda, notes, and action items')).toBeInTheDocument();
-    await screen.findByText('Strategic Check-in — #14');
-    expect(screen.queryByText(/^Biweekly strategic check-ins/)).toBeNull();
-    expect(screen.getAllByText(/^Biweekly/)).toHaveLength(1);
-    // The one shell (no console tag since P19.2-T1), with the item live.
-    expect(screen.queryByText('KPM OWNER')).not.toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Strategic Leader Forum' })).toHaveAttribute('href', '/leader-meetings');
+    expect(main().getByText('Core leaders meet every 2 weeks · 60–90 minutes')).toBeInTheDocument();
+    expect(main().getByRole('button', { name: 'New forum' })).toBeInTheDocument();
+    const next = within(document.querySelector('[data-next-forum="m-15"]') as HTMLElement);
+    expect(next.getByText('Next forum')).toBeInTheDocument();
+    expect(next.getByRole('heading', { name: 'Forum #15' })).toBeInTheDocument();
+    expect(next.getByText(/28 Nov 2026 · 14[.:]00 · 8 days to go$/)).toBeInTheDocument();
+    expect(next.getByText('3 core leaders')).toBeInTheDocument();
+    expect(next.getByRole('img', { name: 'Agus Santoso, Sari Dewanti, Yosef Pratama' })).toBeInTheDocument();
+    expect(next.getByRole('link', { name: 'Prepare the agenda' })).toHaveAttribute('href', '/leader-meetings/m-15?tab=agenda');
   });
 
-  it('P18.1-T2 AC-2: a card per meeting, newest first, each with its date block, title, meta, initials, open items and Open', async () => {
-    // Served oldest first: the screen orders them.
-    list(listView({ meetings: [...MEETINGS].reverse() }));
-    renderWithSession(<LeaderMeetingsPage />, { me: OWNER_ME });
-    await screen.findByText('Strategic Check-in — #14');
-
-    const rows = cards();
-    expect(rows.map((r) => within(r).getByRole('heading').textContent)).toEqual([
-      'Strategic Check-in — #14', 'Strategic Check-in — #13', 'Strategic Check-in — #12',
-    ]);
-    const [upcoming, past, clear] = rows.map((r) => within(r));
-    expect(upcoming.getByText('13 Oct 2026 · Upcoming · 3 core leaders tagged')).toBeInTheDocument();
-    expect(past.getByText('26 Sep 2026 · Completed · 2 core leaders tagged')).toBeInTheDocument();
-    // F-186: singular for one.
-    expect(clear.getByText('12 Sep 2026 · Completed · 1 core leader tagged')).toBeInTheDocument();
-
-    expect(upcoming.getByText('Oct')).toBeInTheDocument();
-    expect(upcoming.getByText('13')).toBeInTheDocument();
-    expect(rows[0].querySelector('[aria-hidden="true"]')).toHaveClass('bg-secondary');
-    // Grey once Completed (`:630`).
-    expect(rows[1].querySelector('[aria-hidden="true"]')).toHaveClass('bg-muted');
-
-    expect(upcoming.getByRole('img', { name: 'Agus Santoso (AB)' })).toHaveTextContent('AS');
-    expect(upcoming.getByRole('img', { name: 'Sari Dewanti (AAB)' })).toHaveTextContent('SD');
-    expect(upcoming.getByRole('img', { name: 'Yosef Pratama (AB)' })).toBeInTheDocument();
-    // The Owner is not among them (`:2591`), nor an Admin who is not tagged: three avatars for "3".
-    expect(upcoming.queryByRole('img', { name: /Wilson Tanoto/ })).not.toBeInTheDocument();
-    expect(upcoming.queryByRole('img', { name: /Maya Halim/ })).not.toBeInTheDocument();
-    expect(upcoming.getAllByRole('img')).toHaveLength(3);
-
-    expect(rows[0]).toHaveTextContent('4 open items');
-    expect(rows[1]).toHaveTextContent('2 open items');
-    expect(clear.getByText('All clear')).toBeInTheDocument();
-
-    // P18.9-T2 AC-2: the whole card is one link — one stop, named by its title, described by its line — and *Open*
-    // the visible cue inside it, no link of its own.
-    const link = upcoming.getByRole('link', { name: 'Strategic Check-in — #14' });
-    expect(link).toHaveAttribute('href', '/leader-meetings/m-14');
-    expect(link).toHaveAccessibleDescription('13 Oct 2026 · Upcoming · 3 core leaders tagged');
-    expect(rows[0].querySelectorAll('a')).toHaveLength(1);
-    expect(link.querySelector('a, button')).toBeNull();
-    // The date block, the title, its line, the initials and *Open* all inside the one link.
-    for (const part of ['Oct', 'Strategic Check-in — #14', '13 Oct 2026 · Upcoming', 'AS', '4 open items', 'Open']) expect(link).toHaveTextContent(part);
-    expect(within(link).getByText('Open')).toHaveAttribute('aria-hidden', 'true');
-    expect(upcoming.queryByRole('link', { name: 'Open' })).toBeNull();
-  });
-
-  it('P18.9-T2 AC-2: one keyboard stop per card, in the list’s order', async () => {
+  it('P19.22-T8 AC-1 all forums newest first: #n, the date · time, Agenda n items or Action items x/y done, the state pill', async () => {
     list();
     renderWithSession(<LeaderMeetingsPage />, { me: OWNER_ME });
-    await screen.findByText('Strategic Check-in — #14');
-    const user = userEvent.setup();
-    const links = cards().map((card) => within(card).getByRole('link'));
-    links[0].focus();
-    await user.tab();
-    expect(document.activeElement).toBe(links[1]);
-    await user.tab();
-    expect(document.activeElement).toBe(links[2]);
-  });
-
-  it('P18.1-T2 AC-2: the avatars are the people the count counts — a tagged Admin among them, an untagged one not', async () => {
-    list(listView({
-      meetings: [card({ editors: editors({ admins: [{ ...MAYA, tagged: true }], coreLeaderCount: 4 }) })],
-    }));
-    renderWithSession(<LeaderMeetingsPage />, { me: OWNER_ME });
-    expect(await screen.findByText('13 Oct 2026 · Upcoming · 4 core leaders tagged')).toBeInTheDocument();
-    const avatars = within(cards()[0]).getAllByRole('img');
-    expect(avatars.map((a) => a.getAttribute('aria-label'))).toEqual([
-      'Maya Halim (AAB)', 'Agus Santoso (AB)', 'Sari Dewanti (AAB)', 'Yosef Pratama (AB)',
+    await screen.findByText('All forums');
+    const rows = [...document.querySelectorAll('[data-forum-row]')].map((r) => within(r as HTMLElement));
+    expect(rows.map((r) => r.getByRole('link').getAttribute('aria-label'))).toEqual([
+      'Open forum #15', 'Open forum #14', 'Open forum #13', 'Open forum #12',
     ]);
+    expect(rows[0].getByText('Agenda 3 items')).toBeInTheDocument();
+    expect(rows[0].getByText('Upcoming')).toHaveClass('bg-pill-blue');
+    expect(rows[1].getByText('1/5').closest('span')).toHaveTextContent('Action items 1/5 done');
+    expect(rows[1].getByText('Done')).toHaveClass('bg-pill-green');
+    expect(rows[1].getByRole('link')).toHaveAttribute('href', '/leader-meetings/m-14');
+    // A forum made before P19.22 has a date alone.
+    expect(rows[3].getByText(/18 O[ck]t 2026$/)).toBeInTheDocument();
   });
 
-  it('P18.1-T2 AC-2: "1 open item", singular', async () => {
-    list(listView({ meetings: [card({ openItems: 1 })] }));
-    renderWithSession(<LeaderMeetingsPage />, { me: OWNER_ME });
-    expect(await screen.findByText(/open item$/)).toHaveTextContent('1 open item');
-  });
-
-  it('P18.1-T2 AC-2: All · Upcoming · Past, each saying whether it is pressed, filtered over the one read', async () => {
-    const { mock } = list();
-    renderWithSession(<LeaderMeetingsPage />, { me: OWNER_ME });
-    await screen.findByText('Strategic Check-in — #14');
-    const all = screen.getByRole('button', { name: 'All' });
-    const upcoming = screen.getByRole('button', { name: 'Upcoming' });
-    const past = screen.getByRole('button', { name: 'Past' });
-    expect(all).toHaveAttribute('aria-pressed', 'true');
-    expect(upcoming).toHaveAttribute('aria-pressed', 'false');
-
-    await userEvent.click(past);
-    expect(past).toHaveAttribute('aria-pressed', 'true');
-    expect(all).toHaveAttribute('aria-pressed', 'false');
-    expect(screen.queryByText('Strategic Check-in — #14')).not.toBeInTheDocument();
-    expect(screen.getByText('Strategic Check-in — #13')).toBeInTheDocument();
-
-    await userEvent.click(upcoming);
-    expect(screen.getByText('Strategic Check-in — #14')).toBeInTheDocument();
-    expect(screen.queryByText('Strategic Check-in — #12')).not.toBeInTheDocument();
-    expect(mock.mock.calls.filter(([url]) => String(url).endsWith('/leader-meetings'))).toHaveLength(1);
-  });
-
-  it('ADR-0137: the filter on is navy — what is chosen; + New meeting is amber with navy words — an action', async () => {
-    list();
-    renderWithSession(<LeaderMeetingsPage />, { me: OWNER_ME });
-    await screen.findByText('Strategic Check-in — #14');
-    const all = screen.getByRole('button', { name: 'All' });
-    const past = screen.getByRole('button', { name: 'Past' });
-    expect(all).toHaveClass('bg-secondary', 'text-secondary-contrast');
-    expect(past).not.toHaveClass('bg-secondary');
-    await userEvent.click(past);
-    expect(past).toHaveClass('bg-secondary', 'text-secondary-contrast');
-    for (const option of [all, past]) expect(option).not.toHaveClass('bg-primary');
-
-    const create = screen.getByRole('button', { name: '+ New meeting' });
-    expect(create).toHaveClass('bg-primary', 'text-primary-contrast', 'hover:bg-primary-hover');
-    expect(create).not.toHaveClass('bg-secondary');
-  });
-
-  it('P18.1-T2 AC-2: "No meetings match this filter." when a filter leaves nothing (`:2619`)', async () => {
-    list(listView({ meetings: [MEETINGS[1], MEETINGS[2]] }));
-    renderWithSession(<LeaderMeetingsPage />, { me: OWNER_ME });
-    await screen.findByText('Strategic Check-in — #13');
-    await userEvent.click(screen.getByRole('button', { name: 'Upcoming' }));
-    expect(screen.getByText('No meetings match this filter.')).toBeInTheDocument();
-  });
-
-  it('L-110: no meeting at all is "No meetings yet.", with + New meeting beside the filter as always', async () => {
-    list(listView({ meetings: [] }));
-    renderWithSession(<LeaderMeetingsPage />, { me: OWNER_ME });
-    expect(await screen.findByText('No meetings yet.')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '+ New meeting' })).toBeInTheDocument();
-    expect(screen.queryByText('No meetings match this filter.')).not.toBeInTheDocument();
-  });
-
-  it('P18.1-T2 AC-2: a Core Leader reads the list in their own shell, with no + New meeting', async () => {
-    list(listView({ can: { create: false } }));
+  it('P19.22-T8 AC-1 a core leader makes a forum: date and time, then its agenda opens', async () => {
+    const { calls } = stubFetch({
+      ...SHELL_STUBS,
+      'GET /leader-meetings': { body: listView() },
+      'POST /leader-meetings': { status: 201, body: card({ id: 'm-16', number: 16, date: '2026-12-12', state: 'upcoming' }) },
+    });
     renderWithSession(<LeaderMeetingsPage />, { me: CORE_LEADER_ME });
-    await screen.findByText('Strategic Check-in — #14');
-    expect(screen.queryByRole('button', { name: '+ New meeting' })).not.toBeInTheDocument();
-    expect(screen.queryByText('KPM OWNER')).not.toBeInTheDocument();
+    await userEvent.click(await screen.findByRole('button', { name: 'New forum' }));
+    const dialog = within(await screen.findByRole('dialog', { name: 'New forum' }));
+    expect(dialog.getByLabelText('Time')).toHaveValue('14:00');
+    await userEvent.click(dialog.getByRole('button', { name: 'Create forum' }));
+    const post = calls.find((c) => c.init.method === 'POST')!;
+    expect(JSON.parse(String(post.init.body))).toEqual({ date: '2026-11-20', time: '14:00' });
+    expect(nav.push).toHaveBeenCalledWith('/leader-meetings/m-16?tab=agenda');
   });
 
-  it('P18.1-T2 AC-1: a member the server answers 404 meets the not-found state, linking to where they land', async () => {
+  it('P19.22-T8 AC-1 no + New forum without the grant; no forum yet; no next forum card when none is to come', async () => {
+    list(listView({ meetings: [], nextId: null, can: { create: false } }));
+    renderWithSession(<LeaderMeetingsPage />, { me: OWNER_ME });
+    expect(await screen.findByText('No forum yet.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'New forum' })).not.toBeInTheDocument();
+    expect(document.querySelector('[data-next-forum]')).toBeNull();
+  });
+
+  it('P19.22-T8 AC-1 a member who is no core leader meets not found; a failed read says so with Try again', async () => {
     stubFetch({ ...SHELL_STUBS, 'GET /leader-meetings': notFound });
     renderWithSession(<LeaderMeetingsPage />, { me: FIELD_ME });
-    expect(await screen.findByRole('heading', { name: "This meeting can't be found." })).toBeInTheDocument();
-    expect(screen.getByText("It may have been deleted, or it isn't one you can open.")).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Go to your home page' })).toHaveAttribute('href', '/home');
-    expect(screen.queryByRole('button', { name: 'All' })).not.toBeInTheDocument();
-  });
-
-  it('L-110: the wait is a skeleton of the filter and three cards, named; an error is the banner with Try again', async () => {
-    stubFetch({
-      ...SHELL_STUBS,
-      'GET /leader-meetings': [refusal(500, 'INTERNAL_ERROR', 'Something went wrong.'), { body: listView() }],
-    });
+    expect(await screen.findByText("This forum can't be found.")).toBeInTheDocument();
+    vi.unstubAllGlobals();
+    stubFetch({ ...SHELL_STUBS, 'GET /leader-meetings': refusal(500, 'INTERNAL', 'Something broke.') });
     renderWithSession(<LeaderMeetingsPage />, { me: OWNER_ME });
-    expect(screen.getByRole('status', { name: '' })).toHaveTextContent('Loading meetings…');
-    expect(await screen.findByRole('alert')).toHaveTextContent('Something went wrong.');
-    await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
-    expect(await screen.findByText('Strategic Check-in — #14')).toBeInTheDocument();
-  });
-
-  it('a reader not signed in is sent to sign in, and back here after (D-share)', async () => {
-    // Sent by the shell since P18.5-T15 AC-2, from the address the browser is on.
-    window.history.replaceState(null, '', '/leader-meetings');
-    onTestFinished(() => window.history.replaceState(null, '', '/'));
-    stubFetch({});
-    renderWithSession(<LeaderMeetingsPage />, { me: null });
-    await waitFor(() => expect(nav.replace).toHaveBeenCalledWith('/login?next=%2Fleader-meetings'));
-  });
-
-  it('ADR-0168 §1: a reader whose session ended here is sent to sign in and back, told it ended', async () => {
-    window.history.replaceState(null, '', '/leader-meetings');
-    onTestFinished(() => window.history.replaceState(null, '', '/'));
-    stubFetch({});
-    renderWithSession(<LeaderMeetingsPage />, { me: null, expired: true });
-    await waitFor(() => expect(nav.replace).toHaveBeenCalledWith('/login?next=%2Fleader-meetings&reason=expired'));
-    // The shell and the list both send them, and both say why.
-    expect(nav.replace.mock.calls.every(([to]) => to === '/login?next=%2Fleader-meetings&reason=expired')).toBe(true);
-  });
-
-  it('a reader who signed out themselves here goes to plain sign-in, carrying no page (2026-10-11)', async () => {
-    stubFetch({});
-    renderWithSession(<LeaderMeetingsPage />, { me: null, signedOut: true });
-    await waitFor(() => expect(nav.replace).toHaveBeenCalledWith('/login'));
-    expect(nav.replace).not.toHaveBeenCalledWith(expect.stringContaining('next='));
-  });
-
-  it('P18.1-T2 AC-8: markup in a title is text — <b> and <script> drawn as typed', async () => {
-    list(listView({ meetings: [card({ title: '<b>Bold</b> <script>alert(1)</script>' })] }));
-    const { container } = renderWithSession(<LeaderMeetingsPage />, { me: OWNER_ME });
-    expect(await screen.findByText('<b>Bold</b> <script>alert(1)</script>')).toBeInTheDocument();
-    expect(container.querySelector('main b, main script')).toBeNull();
-  });
-
-  it('P18.1-T2 AC-8: at 360px a card wraps its right-hand side under the title instead of widening the page', async () => {
-    list();
-    renderWithSession(<LeaderMeetingsPage />, { me: OWNER_ME });
-    await screen.findByText('Strategic Check-in — #14');
-    const [first] = cards();
-    // The card is its link since P18.9-T2 AC-2: the link is the box that wraps.
-    expect(within(first).getByRole('link')).toHaveClass('flex-wrap');
-    expect(within(first).getByRole('heading').parentElement).toHaveClass('min-w-0');
-    expect(within(first).getByRole('heading')).toHaveClass('break-words');
-  });
-
-  describe('+ New meeting (OD-145, I-254)', () => {
-    it('P18.1-T2 AC-2: opens New meeting, titled one past the highest number, and the meeting opens once made', async () => {
-      const { calls } = stubFetch({
-        ...SHELL_STUBS,
-        'GET /leader-meetings': { body: listView() },
-        'POST /leader-meetings': { status: 201, body: card({ id: 'm-15', number: 15, title: 'Strategic Check-in — #15', date: '2026-10-27' }) },
-      });
-      renderWithSession(<LeaderMeetingsPage />, { me: OWNER_ME });
-      await userEvent.click(await screen.findByRole('button', { name: '+ New meeting' }));
-
-      // The dialog's module is fetched on this first opening (P18.11-T16).
-      const dialog = within(await screen.findByRole('dialog', { name: 'New meeting' }));
-      const title = dialog.getByRole('textbox', { name: 'Title' });
-      expect(title).toHaveValue('Strategic Check-in — #15');
-      expect(title).toHaveAttribute('maxLength', '120');
-      await userEvent.type(dialog.getByLabelText('Date'), '2026-10-27');
-      await userEvent.click(dialog.getByRole('button', { name: 'Create meeting' }));
-
-      await waitFor(() => expect(nav.push).toHaveBeenCalledWith('/leader-meetings/m-15'));
-      const post = calls.find((c) => c.init.method === 'POST')!;
-      expect(JSON.parse(String(post.init.body))).toEqual({ title: 'Strategic Check-in — #15', date: '2026-10-27' });
-    });
-
-    it('asks for a title and a date before sending anything, in the spec’s words', async () => {
-      const { calls } = list();
-      renderWithSession(<LeaderMeetingsPage />, { me: OWNER_ME });
-      await userEvent.click(await screen.findByRole('button', { name: '+ New meeting' }));
-      const dialog = within(await screen.findByRole('dialog', { name: 'New meeting' }));
-      await userEvent.clear(dialog.getByRole('textbox', { name: 'Title' }));
-      await userEvent.type(dialog.getByRole('textbox', { name: 'Title' }), '   ');
-      await userEvent.click(dialog.getByRole('button', { name: 'Create meeting' }));
-
-      expect(dialog.getByText('Give the meeting a title.')).toBeInTheDocument();
-      expect(dialog.getByText('Pick a date.')).toBeInTheDocument();
-      expect(dialog.getByRole('textbox', { name: 'Title' })).toHaveAccessibleDescription('Give the meeting a title.');
-      expect(calls.some((c) => c.init.method === 'POST')).toBe(false);
-    });
-
-    it('P18.1-T2 AC-9: the server’s refusal stands under its field; anything else is the banner', async () => {
-      stubFetch({
-        ...SHELL_STUBS,
-        'GET /leader-meetings': { body: listView() },
-        'POST /leader-meetings': [
-          refusal(400, 'VALIDATION_FAILED', 'date must be a valid date', { violations: ['date must be a valid date'] }),
-          refusal(503, 'SERVICE_UNAVAILABLE', 'Try again shortly.'),
-        ],
-      });
-      renderWithSession(<LeaderMeetingsPage />, { me: OWNER_ME });
-      await userEvent.click(await screen.findByRole('button', { name: '+ New meeting' }));
-      const dialog = within(await screen.findByRole('dialog', { name: 'New meeting' }));
-      await userEvent.type(dialog.getByLabelText('Date'), '2026-10-27');
-      await userEvent.click(dialog.getByRole('button', { name: 'Create meeting' }));
-      expect(await dialog.findByText('Pick a date.')).toBeInTheDocument();
-      expect(dialog.queryByText('Give the meeting a title.')).not.toBeInTheDocument();
-
-      await userEvent.click(dialog.getByRole('button', { name: 'Create meeting' }));
-      expect(await dialog.findByText('Try again shortly.')).toBeInTheDocument();
-      expect(nav.push).not.toHaveBeenCalled();
-    });
-
-    it('Cancel closes it, and opened again it starts over', async () => {
-      list();
-      renderWithSession(<LeaderMeetingsPage />, { me: OWNER_ME });
-      await userEvent.click(await screen.findByRole('button', { name: '+ New meeting' }));
-      await userEvent.type(screen.getByRole('textbox', { name: 'Title' }), ' extra');
-      await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
-      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-      await userEvent.click(screen.getByRole('button', { name: '+ New meeting' }));
-      expect(screen.getByRole('textbox', { name: 'Title' })).toHaveValue('Strategic Check-in — #15');
-    });
-  });
-
-  it('the core leaders drawn are the meeting’s own — the frozen list on a past one (F-186)', async () => {
-    list(listView({ meetings: [card({ state: 'completed', editors: editors({ coreLeaders: [], coreLeaderCount: 0, frozen: true }) })] }));
-    renderWithSession(<LeaderMeetingsPage />, { me: OWNER_ME });
-    expect(await screen.findByText('13 Oct 2026 · Completed · 0 core leaders tagged')).toBeInTheDocument();
-    expect(main().queryByRole('img')).not.toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Try again' })).toBeInTheDocument();
   });
 });

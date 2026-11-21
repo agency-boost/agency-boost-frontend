@@ -16,6 +16,7 @@ import { useScrollLock } from '@/lib/use-scroll-lock';
 import { EventLocation, EventPosterFrame, EventStatePill, EventTagLabel } from './event-card';
 import { drawsPastBlock, PastEventBlock } from './event-feedback';
 import { useEventsHost } from './events-screen';
+import { DeclineDialog } from './decline-dialog';
 
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
@@ -53,6 +54,8 @@ export function EventModal({ id }: { id: string }) {
   const [error, setError] = useState<ApiError | null>(null);
   const [writeError, setWriteError] = useState<ApiError | null>(null);
   const [busy, setBusy] = useState(false);
+  /** *Tidak ikut* is asking why (ADR-0281 §2). */
+  const [declining, setDeclining] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const box = useRef<HTMLDivElement>(null);
   const titleId = useId();
@@ -211,13 +214,25 @@ export function EventModal({ id }: { id: string }) {
               busy={busy}
               writeError={writeError}
               onJoin={() => void rsvp(rsvpEvent, goingToast)}
-              onCancel={() => void rsvp(cancelRsvp, cancelledToast)}
+              // *Tidak ikut* asks why first (P19.25-T1 AC-3; ADR-0281 §2), the reason optional.
+              onCancel={() => setDeclining(true)}
               onAnswer={answered}
               onStale={() => setAttempt((n) => n + 1)}
             />
           )}
         </div>
       </div>
+      {declining && event && (
+        <DeclineDialog
+          title={event.title}
+          busy={busy}
+          onClose={() => setDeclining(false)}
+          onSend={(reason) => {
+            setDeclining(false);
+            void rsvp((id) => cancelRsvp(id, reason), cancelledToast);
+          }}
+        />
+      )}
     </>
   );
 }

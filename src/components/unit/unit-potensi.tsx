@@ -55,20 +55,27 @@ const firstName = (name: string) => name.split(' ')[0] ?? name;
  * - **The month picker** (*November 2026 ⌄*), the row under the slider: this month on open — the shared `PickerMenu`, a
  *   menu under its button, never a native select (MOB UI-171, ADR-0227 §2).
  * - **Two tiles that are the switch** (a radio group): ***Active Agent*** (was *AA*), chosen on open, and ***Rekrut*** —
- *   each its number and, under it, ***potensi x***: the people with a lead of that type switched on for the month,
- *   whatever became of it (MOB UI-186). The chosen one navy. Not *dari 12*. A small legend under them.
+ *   each its number and, under it, ***potensi x*** (MOB UI-186). The chosen one navy. Not *dari 12*. A small legend under
+ *   them. **Since the brief of 19 November 2026** (P19.18-T3 AC-1, AC-2; ADR-0271 §8): *Active Agent n* is the people
+ *   active this month **from the uploaded production** and its *potensi n* **the people who can become Active Agent** — those
+ *   with a sales potensi, never the sum of their leads; *Rekrut n* is **the new hires the unit's people registered who
+ *   joined this month** (New Hires' rule) and its *potensi m* the recruit candidates summed. Every figure the server's.
  * - **One list design, every month** (MOB UI-182): **the whole team, under each group**, in the Overview's order and with
- *   its names — ***Unit Anda*** first, then ***Unit <AAB name>*** (MOB UI-179); each card's leader first with the navy role
- *   tag, then everybody in the roster's order, the same in both views. Each header keeps its words: *1 potensi · 0 AA*, and
- *   in an earlier month *potensi 2/2 · 4 AA*, *potensi 0/1 rekrut*.
- * - **A person's mark** (MOB UI-186): **an orange number**, their potensi; **a green ✓**, *Active Agent* this month on the
- *   first tile or a rekrut this month on the second; both together; or **a grey ✕** with neither. Every row that opens has
- *   ›, in any month.
+ *   its names — ***Unit Anda*** first (with an AAB who has no team of their own, after the AB), then ***Unit <name>***
+ *   (MOB UI-179); **each header with its leader's photo** (P19.18-T3 AC-3), each card's leader first, then everybody in the
+ *   roster's order — AB → AAB → agents — the same in both views; **a leader's level the small bold orange label before the
+ *   NAME** (`RungTag`, ADR-0266 §3), an agent none. The headers: ***n potensi · n AA*** (people) and ***n rekrut · potensi
+ *   m*** (sums); in an earlier month *potensi 2/2 · 4 AA*, *potensi 0/1 rekrut*.
+ * - **A person's marks** (MOB UI-186; P19.18-T3 AC-2): **the orange number first** — their potensi — **then the green
+ *   mark**: a ✓ for *Active Agent* this month on the first tile, **a green number** on the second — how many they recruited
+ *   this month (one person can recruit several); either or both; or **a grey ✕** with neither. Every row that opens has ›,
+ *   in any month.
  * - **A row opens a read-only sheet** for the month on screen: *Agent RINA · n potensi* with their switched-on clients (Q-2:
  *   names), or *Agent RINA · n potensi · n rekrut* with their kandidat — *New Hires ›* for one linked to a member,
  *   *Tambahkan ke unit ›* (the add-agent form, the name typed in) for one who is not yet — and *Chat Agent Rina*.
  *
- * Tablet and laptop lay the same cards out two to a row (no mockup draws them; the parity row says so).
+ * **Tablet and laptop** (P19.18-T3 AC-3; `unit-potensi-{tablet,laptop}`): each card across the width, its header on the
+ * orange tint, **three people a row**; a phone one card under another, one person a row (parity I-1091).
  */
 export function UnitPotensi({
   forId, onHead, readOnly = false, scope = null, reload = 0, onAnswered, viewPicker, informalLine,
@@ -142,7 +149,7 @@ export function UnitPotensi({
 
           <Tiles data={data} view={view} onView={setView} />
 
-          <div className="mt-2 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          <div className="mt-2 grid gap-3">
             {data.units.map((unit) => (
               <UnitCard key={`${unit.kind}:${unit.leader?.membershipId ?? ''}`} unit={unit} head={data.head} view={view} past={past} onOpen={setPerson} />
             ))}
@@ -205,16 +212,15 @@ function Tiles({ data, view, onView }: { data: UnitPotensiView; view: PotensiVie
           );
         })}
       </div>
+      {/* The orange number first, then the green mark — the rows' own order (P19.18-T3 AC-2). */}
       <p aria-label={t.legend} data-potensi-legend="" className="mt-2.5 flex flex-wrap gap-x-3.5 gap-y-1 text-sm text-muted">
-        {view === 'aa' && (
-          <span className="inline-flex items-center gap-1.5">
-            <DoneMark small />
-            {t.legendDone}
-          </span>
-        )}
         <span className="inline-flex items-center gap-1.5">
           <NumberMark n={1} small />
           {t.legendNumber({ rekrut: view === 'rekrut' })}
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          {view === 'aa' ? <DoneMark small /> : <RecruitedMark n={1} small />}
+          {view === 'aa' ? t.legendDone : t.legendRecruited}
         </span>
       </p>
     </>
@@ -232,6 +238,26 @@ function DoneMark({ small = false }: { small?: boolean }) {
       )}
     >
       <LineIcon name="check" className={small ? 'h-3.5 w-3.5' : 'h-[18px] w-[18px]'} />
+    </span>
+  );
+}
+
+/**
+ * **The green number** (P19.18-T3 AC-2; ADR-0267 §3, `RECRUITS_JOINED`): how many new hires a person registered who joined
+ * this month — the Rekrut view's mark, a number because one person can recruit several. Drawn; its words are the row's.
+ */
+function RecruitedMark({ n, small = false }: { n: number; small?: boolean }) {
+  const figures = useFigureLanguage();
+  return (
+    <span
+      aria-hidden="true"
+      data-recruited={n}
+      className={cn(
+        'inline-flex shrink-0 items-center justify-center rounded-pill bg-pill-green font-bold tabular-nums text-pill-green-ink',
+        small ? 'h-[22px] min-w-[22px] text-sm' : 'h-7 min-w-7 px-2 text-base',
+      )}
+    >
+      {formatNumber(n, {}, figures)}
     </span>
   );
 }
@@ -263,7 +289,10 @@ function cardTitle(unit: PotensiUnit, head: UnitPotensiView['head'], words: Dash
   return words.unitOf({ name: unit.leader.name });
 }
 
-/** One group's card: its header, which keeps its words, and the whole team under it, in the roster's order. */
+/**
+ * One group's card: its header — **the leader's photo** (P19.18-T3 AC-3), its title and its words — and the whole team
+ * under it, in the roster's order; **three people a row from 768px** on the orange tint's header, one a row on a phone.
+ */
 function UnitCard({
   unit, head, view, past, onOpen,
 }: {
@@ -277,27 +306,39 @@ function UnitCard({
   const line = past
     ? view === 'aa' ? t.aaPast({ x: was.x, y: was.y, n: was.done }) : t.rekrutPast({ x: was.x, y: was.y, n: was.done })
     : view === 'aa' ? t.aaCounts({ potensi: counts.potensi, aa: counts.done }) : t.rekrutCounts({ potensi: counts.potensi, rekrut: counts.done });
+  // The leader is the card's first row, and carries the photo the header shows (initials without one).
+  const leader = unit.leader ? unit.people.find((p) => p.membershipId === unit.leader!.membershipId) ?? null : null;
   return (
     <section aria-label={title} className="overflow-hidden rounded-lg bg-card" data-potensi-unit={unit.kind}>
-      <header className="flex items-center justify-between gap-2 bg-hover-row px-3.5 py-2.5">
-        <h2 className="min-w-0 text-md font-bold text-ink">{title}</h2>
-        <span className="shrink-0 text-sm font-semibold text-muted">{line}</span>
+      <header className="flex items-center gap-2.5 bg-hover-row px-3.5 py-2.5 md:bg-primary/[0.12]">
+        {unit.leader && (
+          <span data-potensi-leader-photo="">
+            <Avatar name={unit.leader.name} photoUrl={leader?.photoUrl ?? null} seed={unit.leader.membershipId} size={28} />
+          </span>
+        )}
+        <h2 className="min-w-0 flex-1 text-md font-bold text-ink">{title}</h2>
+        <span data-potensi-header="" className="shrink-0 text-sm font-semibold text-muted">{line}</span>
       </header>
-      <ul>
+      <ul className="md:grid md:grid-cols-3">
         {unit.people.map((p) => <PersonRow key={p.membershipId} person={p} view={view} onOpen={onOpen} />)}
       </ul>
     </section>
   );
 }
 
-/** One person's row: avatar, the role tag for a leader, the name in full (two lines at most, never cut), the marks, ›. */
+/**
+ * One person's row: avatar, **the orange level label for a leader** (AB, AAB — any leader's rung, not only the card's
+ * leader: an AAB in *Unit Anda* keeps hers), the NAME in full (two lines at most, never cut), the marks, ›.
+ */
 function PersonRow({ person, view, onOpen }: { person: PotensiPerson; view: PotensiView; onOpen: (p: PotensiPerson) => void }) {
   const t = useMessages(unitPotensiMessages);
   const isLeader = useIsLeaderRung();
   const { potensi, done, none } = marksOf(person, view);
+  // The Rekrut view's green number: how many they recruited this month (P19.18-T3 AC-2).
+  const recruited = view === 'rekrut' ? person.rekrut.rekrut : 0;
   const said = [
     potensi > 0 ? t.potensi({ n: potensi }) : null,
-    done ? t.done({ rekrut: view === 'rekrut' }) : null,
+    done ? (view === 'rekrut' ? t.recruited({ n: recruited }) : t.done({ rekrut: false })) : null,
     none ? t.neither : null,
   ].filter(Boolean).join(', ');
   const face = (
@@ -305,15 +346,16 @@ function PersonRow({ person, view, onOpen }: { person: PotensiPerson; view: Pote
       <Avatar name={person.name} photoUrl={person.photoUrl} seed={person.membershipId} size={36} />
       <span data-potensi-name="" className="min-w-0 flex-1 text-base font-bold uppercase leading-snug text-ink [overflow-wrap:anywhere]">
         {/*
-          * The shared level tag (P19.9-T4 AC-1), on the card's leader — and, one rule with the Overview's roster, only
-          * where their rung is a leader's (P19.11-T6 AC-4; UXQ10): a card led by somebody on an Agent's rung draws none.
+          * The level label (ADR-0266 §3; P19.18-T3 AC-3): small bold orange text before the name, wherever the rung is a
+          * leader's (P19.11-T6 AC-4; UXQ10) — the card's leader and an AAB with no team alike; an agent none.
           */}
-        {person.isLeader && isLeader(person.rung) && <RungTag rung={person.rung} className="mr-1.5" />}
+        {isLeader(person.rung) && <RungTag rung={person.rung} className="mr-1.5" />}
         {person.name}
       </span>
+      {/* The orange potensi number first, then the green mark, beside the › (P19.18-T3 AC-2). */}
       <span data-potensi-marks="" className="flex shrink-0 items-center gap-1.5">
         {potensi > 0 && <NumberMark n={potensi} />}
-        {done && <DoneMark />}
+        {done && (view === 'rekrut' ? <RecruitedMark n={recruited} /> : <DoneMark />)}
         {none && (
           <span aria-hidden="true" className="inline-flex w-7 justify-center text-signal-grey">
             <LineIcon name="close" className="h-5 w-5" />
@@ -325,7 +367,11 @@ function PersonRow({ person, view, onOpen }: { person: PotensiPerson; view: Pote
   );
   const ROW = 'flex min-h-14 w-full items-center gap-2.5 border-t border-divider px-3.5 py-1.5 text-left';
   return (
-    <li className="first:[&>*]:border-t-0" data-potensi-row={none ? 'none' : done ? 'done' : 'potensi'}>
+    <li
+      // One column on a phone, the first row's line dropped; three a row from 768px, each but the third ruled on its right.
+      className="max-md:first:[&>*]:border-t-0 md:min-w-0 md:border-divider md:[&:not(:nth-child(3n))]:border-r"
+      data-potensi-row={none ? 'none' : done ? 'done' : 'potensi'}
+    >
       {person.opens ? (
         <button type="button" aria-label={`${t.open({ name: person.name })}: ${said}`} onClick={() => onOpen(person)} className={cn(ROW, 'hover:bg-hover-row')}>
           {face}

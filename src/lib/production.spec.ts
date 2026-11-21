@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { KODE_OF, V1_COLUMNS } from '@test/data-upload-fixtures';
 import {
-  APE_KODE, cellKey, columnHeading, columnLabel, correctionKey, workbookFilename, ytdColumns,
+  APE_KODE, cellKey, columnHeading, columnLabel, workbookFilename, ytdColumns,
 } from './production';
 
 /**
@@ -36,11 +36,12 @@ describe('P19.5-T2 the Data upload’s columns, by kode, as the backend writes t
     expect(cellKey('APE', false)).toBe('APE');
   });
 
-  it('P19.5-T2 names a ticked correction as the commit reads it: membershipId:KODE, held:<CODE>:KODE', () => {
-    const service = source('modules/production/production-import.service.ts');
-    expect(service).toContain('`held:${heldCodeOf(r.agentCode)}`');
-    expect(correctionKey({ status: 'ready', membershipId: 'm1', agentCode: 'A' }, { kode: 'APE', ytd: false })).toBe('m1:APE');
-    expect(correctionKey({ status: 'held', membershipId: null, agentCode: 'abc' }, { kode: 'FYP', ytd: false })).toBe('held:ABC:FYP');
+  it('P19.21-T1 AC-5 the commit carries no choice of corrections: the file replaces them (ADR-0274 §1)', () => {
+    const controller = source('modules/production/production.controller.ts');
+    expect(controller).not.toContain('replace?: string');
+    expect(source('modules/production/uploaded-figures.ts')).toContain('`${membershipId}|${cellKey(kode, ytd)}`');
+    expect(cellKey('APE', false)).toBe('APE');
+    expect(cellKey('KOMISI', true)).toBe('KOMISI_YTD');
   });
 
   it('P19.5-T2 AC-1 saves the workbook named as the CSV is: <kpmCode>-agent-data-<YYYY-MM>.xlsx', () => {

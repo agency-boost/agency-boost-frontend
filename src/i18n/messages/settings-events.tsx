@@ -25,7 +25,9 @@ type Strong = (words: string) => ReactNode;
 const en = {
   title: kept('Events'),
   subtitle: 'What your office is running, and who is invited.',
-  tabs: { events: kept('Events'), types: kept('Event types') },
+  // *Jenis event* (the brief of 19 November): the tab is named in the reader's language, so its English is not the kept
+  // glossary term *Event types*.
+  tabs: { events: kept('Events'), types: 'Kinds of event' },
   /** Who puts an event on, and who is invited (the issuer and the scope, which the prototype crams into one string). */
   issuers: { kpm: 'This office', company: 'Your company', group: 'A group' },
   scopes: {
@@ -39,7 +41,7 @@ const en = {
   noActiveTypes: ({ strong }: { strong: Strong }) => (
     <>
       You have no active event types, so there is nothing to file an event under. Add one on
-      the {strong(kept('Event types'))} tab first.
+      the {strong('Kinds of event')} tab first.
     </>
   ),
   empty: 'No events yet. Anything your office runs goes here — training, launches, recognition nights.',
@@ -74,12 +76,31 @@ const en = {
   /** The toolbar's add buttons. */
   addType: 'Add an event type',
   addAnEvent: 'Add an event',
+  /**
+   * *Pengaturan › Events* as the brief of 19 November draws it (P19.25-T3 AC-1; ADR-0281 §6): the row's two statuses —
+   * a running event is *Akan datang* until it ends — the audience in the row's line, *Lihat masukan ›* to Advanced
+   * analytics › Event, the ⋯ and its *Catat kehadiran*, *+ Tambah event* at the list's foot and its one note.
+   */
+  status: { upcoming: 'Coming up', past: 'Past' },
+  audienceShort: {
+    all_agents: 'all members',
+    leaders: 'leaders',
+    select_agents: ({ n }: { n: number }) => `${n} chosen people`,
+    select_leaders: ({ n }: { n: number }) => `${n} chosen leaders`,
+  },
+  seeFeedback: 'See feedback ›',
+  seeFeedbackFor: ({ title }: { title: string }) => `See feedback and attendance for ${title}`,
+  recordAttendance: 'Record attendance',
+  actionsFor: ({ title }: { title: string }) => `Actions for ${title}`,
+  plusAddEvent: '+ Add event',
+  whereFeedback: 'Feedback and attendance: Advanced analytics › Event',
 };
 
 const id: MessagesOf<typeof en> = {
   title: kept('Events'),
   subtitle: `Apa yang diadakan ${kept('KPM')} Anda, dan siapa yang diundang.`,
-  tabs: { events: kept('Events'), types: kept('Event types') },
+  // *Events | Jenis event* (the brief of 19 November, Pengaturan › Events; P19.25-T3 AC-1).
+  tabs: { events: kept('Events'), types: `Jenis ${kept('event')}` },
   issuers: { kpm: `${kept('KPM')} ini`, company: 'Perusahaan Anda', group: 'Sebuah grup' },
   scopes: {
     all_agents: `Semua orang di ${kept('KPM')}`,
@@ -91,7 +112,7 @@ const id: MessagesOf<typeof en> = {
   noActiveTypes: ({ strong }) => (
     <>
       Anda belum punya jenis {kept('event')} yang aktif, jadi belum ada tempat untuk mencatat {kept('event')}.
-      Tambahkan satu di tab {strong(kept('Event types'))} terlebih dahulu.
+      Tambahkan satu di tab {strong(`Jenis ${kept('event')}`)} terlebih dahulu.
     </>
   ),
   empty: `Belum ada ${kept('event')}. Semua yang diadakan ${kept('KPM')} Anda ada di sini — pelatihan, peluncuran, malam penghargaan.`,
@@ -122,6 +143,19 @@ const id: MessagesOf<typeof en> = {
     `${kept('Event')} yang sudah tercatat dengan jenis ini (${n}) tetap dapat dibaca, dan ${kept('event')} baru tidak dapat ditambahkan.`,
   addType: `Tambah jenis ${kept('event')}`,
   addAnEvent: `Tambah ${kept('event')}`,
+  status: { upcoming: 'Akan datang', past: 'Sudah lewat' },
+  audienceShort: {
+    all_agents: 'semua anggota',
+    leaders: kept('leaders'),
+    select_agents: ({ n }) => `${n} orang terpilih`,
+    select_leaders: ({ n }) => `${n} ${kept('leader')} terpilih`,
+  },
+  seeFeedback: 'Lihat masukan ›',
+  seeFeedbackFor: ({ title }) => `Lihat masukan dan kehadiran ${title}`,
+  recordAttendance: 'Catat kehadiran',
+  actionsFor: ({ title }) => `Tindakan untuk ${title}`,
+  plusAddEvent: `+ Tambah ${kept('event')}`,
+  whereFeedback: `Masukan dan kehadiran: ${kept('Advanced analytics')} › ${kept('Event')}`,
 };
 
 export const settingsEventsMessages = defineMessages({ en, id });

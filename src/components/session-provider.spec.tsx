@@ -11,7 +11,7 @@ import { SessionProvider } from './session-provider';
 const replace = vi.hoisted(() => vi.fn());
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ replace, push: vi.fn() }),
-  usePathname: () => '/kpm/analytics/compliance',
+  usePathname: () => '/kpm/data-upload',
 }));
 
 function Probe() {
@@ -364,7 +364,7 @@ describe('SessionProvider', () => {
     });
 
     it('Sign out on the page for an office that cannot be used sends the page’s guard to plain /login', async () => {
-      window.history.pushState({}, '', '/kpm/analytics/compliance');
+      window.history.pushState({}, '', '/kpm/data-upload');
       stubFetch({
         '/auth/refresh': { body: { accessToken: 'fresh' } },
         '/auth/me': {
@@ -374,7 +374,7 @@ describe('SessionProvider', () => {
         '/auth/logout': { status: 204, body: undefined },
       });
       replace.mockClear();
-      render(<SessionProvider><RequireSession permission="kpm_analytics:read">secret</RequireSession></SessionProvider>);
+      render(<SessionProvider><RequireSession permission="data_upload:read">secret</RequireSession></SessionProvider>);
 
       await userEvent.click(await screen.findByRole('button', { name: 'Sign out' }));
       await waitFor(() => expect(replace).toHaveBeenCalled());
@@ -388,7 +388,7 @@ describe('SessionProvider', () => {
    * reader to sign in with `reason=expired`. A reader who arrives with no session keeps the plain return path.
    */
   describe('a session that ends under the reader (ADR-0168 §1)', () => {
-    const PAGE = '/kpm/analytics/compliance';
+    const PAGE = '/kpm/data-upload';
     const EXPIRED = `/login?next=${encodeURIComponent(PAGE)}&reason=expired`;
 
     /** A screen that reads something when asked, and says what came back. */
@@ -571,7 +571,7 @@ describe('SessionProvider', () => {
    * on the refresh and on `/auth/me`, and never ends the session; a session that really ended still says so.
    */
   describe('P19-T5 sessions through a busy minute (UI-125)', () => {
-    const PAGE = '/kpm/analytics/compliance';
+    const PAGE = '/kpm/data-upload';
     const LIMITED = {
       status: 429,
       body: { error: { code: 'AUTH_RATE_LIMITED', message: 'Too many attempts.', requestId: 'r', details: { retryAfterSeconds: 0 } } },

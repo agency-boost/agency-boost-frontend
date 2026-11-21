@@ -25,7 +25,7 @@ const OWNER = makeMe({
 
 const moduleRow = (over: Record<string, unknown>) => ({
   id: 'm-x', code: 'X', skillCode: 'PROSPEK', title: 'X', publishState: 'published',
-  displayOrder: 1, version: 1, status: 'active', ...over,
+  displayOrder: 1, version: 1, status: 'active', materialItem: null, completion: { done: 0, started: 0, of: 30 }, ...over,
 });
 
 /** The office's own catalog, in its own words (OD-238: the Default template is to be Indonesian). */
@@ -38,7 +38,10 @@ const TREE = [
         id: 's-prospek', code: 'PROSPEK', categoryCode: 'PENJUALAN', label: 'Mencari prospek', displayOrder: 1, version: 2,
         status: 'active',
         modules: [
-          moduleRow({ id: 'm-list', code: 'DAFTAR_PROSPEK', title: 'Menyusun daftar prospek', version: 4 }),
+          moduleRow({
+            id: 'm-list', code: 'DAFTAR_PROSPEK', title: 'Menyusun daftar prospek', version: 4,
+            materialItem: { label: 'Materi prospek', kind: 'file', mimeType: 'application/pdf' }, completion: { done: 24, started: 25, of: 30 },
+          }),
           moduleRow({ id: 'm-cold', code: 'TELEPON', title: 'Telepon pertama', publishState: 'draft', displayOrder: 2 }),
         ],
       },
@@ -83,7 +86,6 @@ const SETTINGS_ENGLISH = englishOnly(trainingSettingsMessages, settingsMessages)
 const noEnglishLeft = () => expect(englishShown(document.body, SETTINGS_ENGLISH)).toEqual([]);
 
 const rowOf = (text: string) => screen.getByText(text).closest('li') as HTMLElement;
-const tabs = () => within(screen.getByRole('navigation', { name: 'Bagian Training' }));
 
 /**
  * **P18.10-T4, Settings › Training in ID mode** (ADR-0179 §3–§5): the list, a module's page and its Files, Videos and
@@ -99,86 +101,55 @@ describe('P18.10-T4 Settings › Training in Indonesian', () => {
     resetLanguage();
   });
 
-  it('AC-2 categories: the title and tabs kept, the line, badges and controls in Indonesian, the office’s as typed', async () => {
+  it('P19.25-T4 AC-1 the tree in Indonesian: Kategori › Skill › Modul, its counts and the notes under it', async () => {
     stubs();
     renderInIndonesian(<TrainingSettingsPage />, { me: OWNER });
     await screen.findByText('Penjualan');
     expect(screen.getByRole('heading', { level: 1, name: 'Training' })).toBeInTheDocument();
-    expect(screen.getByText('Kategori, skill, dan modul yang tersedia untuk KPM ini')).toBeInTheDocument();
-    expect(tabs().getAllByRole('link').map((l) => l.textContent)).toEqual(['Categories', 'Skills', 'Modules']);
-    expect(within(rowOf('Penjualan')).getByText('1 skill · 1 modul diterbitkan')).toBeInTheDocument();
-    expect(within(rowOf('Penjualan')).getByText('Dasar-dasar menjual')).toBeInTheDocument();
-    expect(within(rowOf('Produk')).getByText('Kosong')).toBeInTheDocument();
+    expect(screen.queryByRole('navigation', { name: 'Bagian Training' })).toBeNull();
+    expect(screen.getByText('Kategori › Skill › Modul')).toBeInTheDocument();
+    expect(within(rowOf('Penjualan')).getByText('1 skill · 2 modul')).toBeInTheDocument();
+    expect(within(rowOf('Mencari prospek')).getByText('2 modul')).toBeInTheDocument();
+    expect(within(rowOf('Produk')).getByText('0 skill · 0 modul')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Tambah kategori' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Tambah modul' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Tambah skill' })).toBeInTheDocument();
+    expect(screen.getByText('Ketuk untuk membuka')).toBeInTheDocument();
+    expect(screen.getByText('Unggah materi langsung di modul · format apa saja')).toBeInTheDocument();
+    expect(screen.getByText('ganti nama')).toBeInTheDocument();
     expect(screen.getByLabelText('Tampilkan yang diarsipkan')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '+ Tambah kategori' })).toBeInTheDocument();
     noEnglishLeft();
   });
 
-  it('AC-1 adding a category: the fields, a code taken and its refusal in Indonesian, the code’s example as it is', async () => {
+  it('P19.25-T4 AC-2 a module’s row in Indonesian: "n dari 30 selesai", Belum ada yang belajar, Ganti, Unggah materi, Draf', async () => {
+    stubs();
+    renderInIndonesian(<TrainingSettingsPage />, { me: OWNER });
+    await screen.findByText('Menyusun daftar prospek');
+    const list = rowOf('Menyusun daftar prospek');
+    expect(within(list).getByText('24 dari 30 selesai')).toBeInTheDocument();
+    expect(within(list).getByRole('button', { name: 'Ganti materi Menyusun daftar prospek' })).toHaveTextContent('Ganti');
+    const cold = rowOf('Telepon pertama');
+    expect(within(cold).getByText('Belum ada yang belajar')).toBeInTheDocument();
+    expect(within(cold).getByRole('button', { name: 'Unggah materi ke Telepon pertama' })).toHaveTextContent('Unggah materi');
+    expect(within(cold).getByText('Draf')).toBeInTheDocument();
+    await userEvent.click(within(list).getByRole('button', { name: 'Lainnya untuk Menyusun daftar prospek' }));
+    expect(screen.getByRole('menuitem', { name: 'Materi & detail' })).toBeInTheDocument();
+    noEnglishLeft();
+  });
+
+  it('P19.25-T4 AC-2 renaming and adding in Indonesian: the code shown, a code taken refused', async () => {
     stubs();
     renderInIndonesian(<TrainingSettingsPage />, { me: OWNER });
     await screen.findByText('Penjualan');
-    await userEvent.click(screen.getByRole('button', { name: '+ Tambah kategori' }));
-    expect(screen.getByRole('heading', { name: 'Tambah kategori' })).toBeInTheDocument();
-    expect(screen.getByLabelText('Kode')).toHaveAttribute('placeholder', 'PRODUCT_KNOWLEDGE');
+    await userEvent.click(screen.getByRole('button', { name: 'Ganti nama Penjualan' }));
+    expect(screen.getByLabelText('Nama')).toHaveAccessibleDescription('Kode PENJUALAN: permanen.');
+    await userEvent.click(screen.getByRole('button', { name: 'Batal' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Tambah kategori' }));
     expect(screen.getByLabelText('Kode')).toHaveAccessibleDescription('Diisi dari nama. Permanen setelah disimpan.');
-    expect(screen.getByLabelText('Deskripsi')).toHaveAccessibleDescription(
-      'Opsional. Ditampilkan di bawah nama di layar pelatihan agent.',
-    );
     await userEvent.type(screen.getByLabelText('Nama'), 'Lama');
     expect(screen.getByRole('alert')).toHaveTextContent(
       'KPM ini sudah punya kategori dengan kode ini. Yang diarsipkan ikut dihitung — kode tidak pernah dipakai ulang.',
     );
-    expect(screen.getByRole('button', { name: 'Tambah kategori ini' })).toBeDisabled();
-    noEnglishLeft();
-  });
-
-  it('AC-1 staging: an archive reaching down, its marks and Restore first in Indonesian', async () => {
-    stubs();
-    renderInIndonesian(<TrainingSettingsPage />, { me: OWNER });
-    await screen.findByText('Penjualan');
-    await userEvent.click(within(rowOf('Penjualan')).getByRole('button', { name: 'Arsipkan' }));
-    expect(within(rowOf('Penjualan')).getByText('Diarsipkan — belum disimpan')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Simpan perubahan' })).toBeInTheDocument();
-    await userEvent.click(tabs().getByRole('link', { name: 'Skills' }));
-    expect(within(rowOf('Mencari prospek')).getByText('Diarsipkan bersama Penjualan — belum disimpan')).toBeInTheDocument();
-    noEnglishLeft();
-  });
-
-  it('AC-1 skills and modules: the filters, the counts, the switch and the empty states in Indonesian', async () => {
-    stubs();
-    renderInIndonesian(<TrainingSettingsPage />, { me: OWNER });
-    await screen.findByText('Penjualan');
-    await userEvent.click(tabs().getByRole('link', { name: 'Skills' }));
-    expect(within(rowOf('Mencari prospek')).getByText('2 modul')).toBeInTheDocument();
-    await userEvent.selectOptions(screen.getByLabelText('Kategori'), 'PRODUK');
-    expect(screen.getByText('Belum ada skill untuk kategori ini.')).toBeInTheDocument();
-
-    await userEvent.click(tabs().getByRole('link', { name: 'Modules' }));
-    expect(within(screen.getByLabelText('Skill')).getAllByRole('option').map((o) => o.textContent))
-      .toEqual(['Semua skill', 'Mencari prospek']);
-    expect(within(rowOf('Menyusun daftar prospek')).getByRole('switch', { name: 'Diterbitkan' })).toBeChecked();
-    expect(within(rowOf('Telepon pertama')).getByRole('switch', { name: 'Diterbitkan' })).not.toBeChecked();
-    await userEvent.click(screen.getByRole('button', { name: '+ Tambah modul' }));
-    expect(screen.getByText(/^Modul baru dimulai sebagai draf/)).toHaveTextContent(
-      'Modul baru dimulai sebagai draf, yang tidak ditawarkan ke agent mana pun. Terbitkan di sini saat sudah siap — '
-      + 'agent melihatnya setelah KPM Anda menerbitkan perubahannya berikutnya.',
-    );
-    noEnglishLeft();
-  });
-
-  it('AC-3 opening a module with edits staged asks in Indonesian, the module’s title inside the sentence', async () => {
-    window.history.replaceState(null, '', '/kpm/settings/training#modules');
-    stubs();
-    renderInIndonesian(<TrainingSettingsPage />, { me: OWNER });
-    await screen.findByText('Menyusun daftar prospek');
-    await userEvent.click(within(rowOf('Telepon pertama')).getByRole('switch', { name: 'Diterbitkan' }));
-    await userEvent.click(within(rowOf('Menyusun daftar prospek')).getByRole('link', { name: 'Ubah' }));
-    expect(screen.getByRole('alert')).toHaveTextContent(
-      'Ada perubahan di sini yang belum disimpan. Membuka Menyusun daftar prospek akan membuang perubahan itu.',
-    );
-    expect(screen.getByRole('button', { name: 'Buang dan buka Menyusun daftar prospek' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Tetap di sini' })).toBeInTheDocument();
     noEnglishLeft();
   });
 
@@ -211,10 +182,10 @@ describe('P18.10-T4 Settings › Training in Indonesian', () => {
     renderInIndonesian(<TrainingModulePage params={routeParams({ moduleId: 'm-list' })} />, { me: OWNER });
     const line = (await screen.findByText('Modul ini sudah diarsipkan.')).parentElement!;
     expect(line).toHaveTextContent(
-      'Modul ini sudah diarsipkan. Tidak ada agent yang ditawari modul ini. Pulihkan dari Training — di Modules, dengan '
+      'Modul ini sudah diarsipkan. Tidak ada agent yang ditawari modul ini. Pulihkan dari Training — dengan '
       + 'Tampilkan yang diarsipkan aktif.',
     );
-    expect(within(line).getByRole('link', { name: 'Training' })).toHaveAttribute('href', '/kpm/settings/training#modules');
+    expect(within(line).getByRole('link', { name: 'Training' })).toHaveAttribute('href', '/kpm/settings/training');
     expect(screen.getByText('Status terbit')).toBeInTheDocument();
     noEnglishLeft();
   });

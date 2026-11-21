@@ -13,6 +13,7 @@ import { DestructiveRow, destructiveLast } from '@/components/ui/destructive-act
 import { EmptyState } from '@/components/ui/empty-state';
 import { Button, ButtonLink, Card, ErrorBanner, Field, TextInput } from '@/components/ui/field';
 import { LineIcon } from '@/components/ui/line-icon';
+import { PersonName } from '@/components/people/people-parts';
 import { Avatar, PersonRow } from '@/components/ui/person-row';
 import { REMOVED_ON_PHONE } from '@/components/ui/phone';
 import { ResponsiveSheet } from '@/components/ui/responsive-sheet';
@@ -569,6 +570,8 @@ export default function AddAgentsPage() {
                 avatarSize={40}
                 className="px-0"
                 nameClassName="text-md"
+                // P19.20-T6 AC-1 (DESIGN-RULES, *Names*): the orange AB / AAB label right before the NAME.
+                tag={member.role !== 'agent' ? <span className="mr-1.5 text-xs font-extrabold normal-case text-primary-ink">{rungShort(member.orgLevelCode ?? member.role.toUpperCase(), ladder)}</span> : undefined}
                 meta={<span className="truncate">{meta(member)}</span>}
                 trailing={rolePill(member)}
               />
@@ -595,7 +598,7 @@ export default function AddAgentsPage() {
                   <div className="grid h-14 grid-cols-[minmax(0,300px)_90px_minmax(0,1fr)_120px_44px] items-center text-md">
                     <span className="flex min-w-0 items-center gap-2.5">
                       <Avatar name={member.fullName} seed={member.membershipId} size={36} />
-                      <span className="truncate font-bold uppercase tracking-[0.2px] text-ink">{member.fullName}</span>
+                      <PersonName name={member.fullName} role={member.role} rungCode={member.orgLevelCode} />
                     </span>
                     <span><span className="sr-only">{t.columns.code}: </span>{member.agentCode}</span>
                     <span className="truncate text-muted">

@@ -1,212 +1,156 @@
-import { screen, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import AdminLayout from '@/app/(admin)/layout';
-import { atWidth, makeMe, renderInLayout, renderWithSession, stubFetch, wears } from '@test/harness';
-import AdminOverviewPage from './page';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { axe } from 'vitest-axe';
+import { atWidth, renderInIndonesian, renderWithSession, stubFetch } from '@test/harness';
+import { englishOnly, englishShown } from '@test/english-left';
+import { adminConsoleMessages } from '@/i18n/messages/admin-console';
+import { CEMPAKA, CONSOLE_SUPER_ADMIN, DASHBOARD, GADING, MAGNI } from '@test/console-fixtures';
+import { enteredKpmId, enterKpm, leaveKpm } from '@/lib/super-admin-kpm';
+import ConsoleDashboardPage from './page';
 
-const replace = vi.fn();
 vi.mock('next/navigation', () => ({
-  useRouter: () => ({ push: vi.fn(), replace }),
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn(), back: vi.fn(), prefetch: vi.fn() }),
   usePathname: () => '/admin',
+  useSearchParams: () => new URLSearchParams(),
 }));
 
-const SUPER_ADMIN = makeMe({
-  user: {
-    id: 'u-root', email: 'root@agencyboost.test', fullName: 'Root', preferredName: null,
-    pronoun: 'they', initials: 'R', platformRole: 'super_admin',
-  },
-  membership: null,
-  permissions: ['kpm:list_all', 'company:crud', 'platform_metrics:read'],
-});
+const RULES = { rules: { 'color-contrast': { enabled: false } } };
 
-const overview = (over: Record<string, unknown> = {}) => ({
-  tiles: { companies: 1, kpms: 8, totalMembers: 1340, agencyBuilders: 61 },
-  attention: [],
-  companies: [
-    { companyId: 'co-1', name: 'Prudential', initials: 'PR', kpmCount: 8, memberCount: 1340,
-      ladder: ['Agent', 'AAB', 'AB'] },
-  ],
-  ...over,
-});
-
-const UNOWNED = {
-  tag: 'KPM owner', severity: 'structural' as const,
-  title: '2 offices have no Owner',
-  detail: 'Nobody can administer an office until an Owner is assigned, and only the platform can assign one.',
-  href: '/admin/tenants', actionLabel: 'Review',
-};
-
-describe('admin overview', () => {
+/**
+ * ***Dashboard*** (P19.23-T1 AC-2 to AC-4; ADR-0277 §1, §2): the navy summary and its funnel against last month, *Perlu
+ * tindakan* one row per issue with the KPM's name and company and one button, and *Adopsi per KPM* by company, its numbers
+ * changing with *Semua · Leader · Agent* and coloured on the server's scale.
+ */
+describe('/admin — the console’s Dashboard (P19.23-T1)', () => {
+  beforeEach(() => {
+    atWidth(1024);
+    stubFetch({ '/admin/dashboard': { body: DASHBOARD } });
+  });
   afterEach(() => {
-    replace.mockClear();
+    leaveKpm();
     vi.unstubAllGlobals();
   });
 
-  it('AC-1: puts the queue above the tiles, because the console is a work list', async () => {
-    // `Superadmin.html:232` puts `Needs your attention` first in the DOM and its footer
-    // says why: nothing in it can be delegated. Tiles first reads as a dashboard.
-    stubFetch({ '/admin/overview': { body: overview({ attention: [UNOWNED] }) } });
-    renderInLayout(AdminLayout, <AdminOverviewPage />, { me: SUPER_ADMIN });
+  it('P19.23-T1 AC-2 Keseluruhan: KPM (+n bulan ini), Perusahaan, KPM aktif dari n, Anggota leader · agent', async () => {
+    renderInIndonesian(<ConsoleDashboardPage />, { me: CONSOLE_SUPER_ADMIN });
+    const summary = within(await screen.findByRole('region', { name: 'Keseluruhan' }));
+    expect(summary.getByText('+1 bulan ini')).toBeInTheDocument();
+    expect(summary.getByText('dari 5 KPM')).toBeInTheDocument();
+    expect(summary.getByText('11 leader · 22 agent')).toBeInTheDocument();
+    // The insurers with the most KPMs first.
+    expect(summary.getByText('Prudential · Sejahtera · Allianz')).toBeInTheDocument();
+  });
 
-    const headings = await screen.findAllByRole('heading', { level: 2 });
-    expect(headings.map((h) => h.textContent)).toEqual([
-      'Needs your attention', 'At a glance', 'Companies',
+  it('P19.23-T1 AC-2 the funnel: count, share, and the change on last month — points for Pakai 14 hari terakhir', async () => {
+    renderInIndonesian(<ConsoleDashboardPage />, { me: CONSOLE_SUPER_ADMIN });
+    expect(await screen.findByText('Pemakaian AgencyBoost · dari 33 anggota')).toBeInTheDocument();
+    const funnel = document.querySelector('[data-console-funnel]')!;
+    const rows = Array.from(funnel.querySelectorAll('li')).map((li) => li.textContent);
+    expect(rows[1]).toContain('Pernah pakai');
+    expect(rows[1]).toContain('82%');
+    expect(rows[1]).toContain('▲ 3');
+    expect(rows[2]).toContain('▲ 7 poin');
+    // A step that held says no change at all.
+    expect(rows[3]).not.toMatch(/[▲▼]/);
+    // Said in words to a screen reader, after the figure.
+    expect(within(funnel as HTMLElement).getAllByText('▲ 3 dari bulan lalu').length).toBeGreaterThan(0);
+  });
+
+  it('P19.23-T1 AC-3 Perlu tindakan: one row per issue, the KPM’s name and company, never a suspended KPM', async () => {
+    renderInIndonesian(<ConsoleDashboardPage />, { me: CONSOLE_SUPER_ADMIN });
+    expect(await screen.findByRole('heading', { name: 'Perlu tindakan · 5' })).toBeInTheDocument();
+    const rows = Array.from(document.querySelectorAll('[data-attention-row]')).map((r) => r.textContent ?? '');
+    expect(rows).toEqual([
+      expect.stringContaining('Kelapa Gading Branch · Prudential: langganan berakhir'),
+      expect.stringContaining('Magni · Prudential: belum punya anggota'),
+      expect.stringContaining('Cempaka Putih Branch · Sejahtera Baru Life: owner belum diundang'),
+      expect.stringContaining('Data Okt belum diunggah: Cempaka Putih Branch · Sejahtera Baru Life'),
+      expect.stringContaining('3 persetujuan menunggu'),
     ]);
+    expect(rows.join(' ')).not.toContain('Suspended Branch');
   });
 
-  it('AC-2: shows the four tiles the prototype names, headcounts included', async () => {
-    stubFetch({ '/admin/overview': { body: overview() } });
-    renderInLayout(AdminLayout, <AdminOverviewPage />, { me: SUPER_ADMIN });
-
-    // `Companies` and `KPMs` are also a section heading and a sidebar group, so match
-    // each tile by its own number rather than by the word.
-    expect(await screen.findByText('Total members')).toBeInTheDocument();
-    expect(screen.getByText('ABs')).toBeInTheDocument();
-    expect(screen.getByText('61')).toBeInTheDocument();
-    // `KPMs` is a tile label, a section in the sidebar and a figure on the company card,
-    // so it appears more than once by design.
-    expect(screen.getAllByText('KPMs').length).toBeGreaterThan(1);
-    // Grouped — `1.340`, not `1340`: `id-ID`'s dot since ADR-0167 §1, where the prototype wrote `1,340`; `1,340` in the
-    // English figures a spec reads (P18.10-T6, the console's figures wired; the Indonesian spec reads `1.340`). It appears on the tile
-    // and again on the company card, which is why this counts rather than picks.
-    expect(screen.getAllByText('1,340').length).toBeGreaterThan(0);
-    expect(screen.queryByText('1340')).toBeNull();
+  it('P19.23-T1 AC-3 each row’s one button goes straight to the right page — inside the KPM for an owner page', async () => {
+    renderInIndonesian(<ConsoleDashboardPage />, { me: CONSOLE_SUPER_ADMIN });
+    await screen.findByRole('heading', { name: 'Perlu tindakan · 5' });
+    const row = (key: string) => within(document.querySelector(`[data-attention-row="${key}"]`) as HTMLElement);
+    expect(row(`${MAGNI}-no_members`).getByRole('link', { name: 'Buka People' })).toHaveAttribute('href', '/people/import');
+    expect(row(`${CEMPAKA}-data_missing`).getByRole('link', { name: 'Buka' })).toHaveAttribute('href', '/kpm/data-upload');
+    expect(row('approvals').getByRole('link', { name: 'Buka' })).toHaveAttribute('href', '/admin/approvals');
+    expect(row(`${CEMPAKA}-owner_not_invited`).getByRole('button', { name: /Kirim undangan/ })).toBeInTheDocument();
+    // *Perpanjang* opens *Langganan*'s calculator for that KPM over the Dashboard (ADR-0279's dialog).
+    expect(row(`${GADING}-subscription_ended`).getByRole('button', { name: 'Perpanjang' })).toBeInTheDocument();
+    // Going inside enters the KPM: every request from then on names it.
+    await userEvent.click(row(`${MAGNI}-no_members`).getByRole('link', { name: 'Buka People' }));
+    expect(enteredKpmId()).toBe(MAGNI);
   });
 
-  it('AC-3: no longer claims it never reads an office\'s business data — and, since UI-136, no sub-line at all', async () => {
-    // ADR-0011 retracted that clause: two of the tiles are cross-tenant headcounts. P19.2-T2 AC-7 (UI-136, Appendix A)
-    // then removed the page's sub-line at every size.
-    stubFetch({ '/admin/overview': { body: overview() } });
-    renderInLayout(AdminLayout, <AdminOverviewPage />, { me: SUPER_ADMIN });
-
-    expect(await screen.findByText('Prudential')).toBeInTheDocument();
-    expect(screen.queryByText('Every company and KPM on AgencyBoost')).toBeNull();
-    expect(screen.queryByText(/never reads an office/)).toBeNull();
+  it('P19.23-T1 AC-4 Adopsi per KPM: companies with their totals, the active KPMs beneath with the code small', async () => {
+    renderInIndonesian(<ConsoleDashboardPage />, { me: CONSOLE_SUPER_ADMIN });
+    const table = await screen.findByRole('table');
+    const prudential = table.querySelector('[data-adoption-company="Prudential"]') as HTMLElement;
+    // BSD and Magni: 31 members; the ended and the suspended KPM are not in the tree.
+    expect(within(prudential).getByText('2 KPM')).toBeInTheDocument();
+    expect(within(prudential).getAllByRole('link').map((a) => a.textContent)).toEqual(['BSD City BranchKPM 0417', 'MagniKPM 1234']);
+    expect(prudential.textContent).toContain('27 dari 31');
+    // The Allianz row says it holds none.
+    expect(within(table.querySelector('[data-adoption-company="Allianz Life"]') as HTMLElement).getByText('Belum ada KPM')).toBeInTheDocument();
+    expect(within(table).getByRole('link', { name: 'Masuk ke BSD City Branch' })).toHaveAttribute('href', expect.stringContaining('/admin/tenants/'));
   });
 
-  it('AC-4: gives a company its office and member totals', async () => {
-    stubFetch({ '/admin/overview': { body: overview() } });
-    renderInLayout(AdminLayout, <AdminOverviewPage />, { me: SUPER_ADMIN });
-
-    expect(await screen.findByText('Prudential')).toBeInTheDocument();
-    expect(screen.getByText('PR')).toBeInTheDocument();
+  it('P19.23-T1 AC-4 Semua · Leader · Agent changes every number, and the pills follow the scale', async () => {
+    renderInIndonesian(<ConsoleDashboardPage />, { me: CONSOLE_SUPER_ADMIN });
+    const table = await screen.findByRole('table');
+    const bsd = () => table.querySelector('[data-adoption-kpm]') as HTMLElement;
+    expect(Array.from(bsd().querySelectorAll('[data-pct]')).map((p) => p.getAttribute('data-pct'))).toEqual(['87', '57', '20']);
+    expect(bsd().querySelector('[data-pct="87"] span')).toHaveClass('bg-pill-green');
+    expect(bsd().querySelector('[data-pct="57"] span')).toHaveClass('bg-pill-amber');
+    expect(bsd().querySelector('[data-pct="20"] span')).toHaveClass('bg-pill-red');
+    await userEvent.click(screen.getByRole('tab', { name: 'Leader' }));
+    await waitFor(() => expect(Array.from(bsd().querySelectorAll('[data-pct]')).map((p) => p.getAttribute('data-pct'))).toEqual(['100', '90', '40']));
+    await userEvent.click(screen.getByRole('tab', { name: 'Agent' }));
+    await waitFor(() => expect(bsd().textContent).toContain('16 dari 20'));
   });
 
-  it('raises an office with no owner, since nobody can administer it until one exists', async () => {
-    stubFetch({ '/admin/overview': { body: overview({ attention: [UNOWNED] }) } });
-    renderInLayout(AdminLayout, <AdminOverviewPage />, { me: SUPER_ADMIN });
-
-    expect(await screen.findByText('2 offices have no Owner')).toBeInTheDocument();
-    expect(screen.getByText(/nothing here can be delegated/)).toBeInTheDocument();
+  it('P19.23-T1 AC-4 ⓘ beside a total says Leader x · Agent y', async () => {
+    renderInIndonesian(<ConsoleDashboardPage />, { me: CONSOLE_SUPER_ADMIN });
+    const table = await screen.findByRole('table');
+    await userEvent.click(within(table).getByRole('button', { name: 'BSD City Branch: leader dan agent' }));
+    expect(within(table).getByRole('status')).toHaveTextContent('Leader 10 · Agent 20');
   });
 
-  it('P19.2-T2 AC-8 hides Needs your attention while nothing needs handling, at every size (UI-137, D-08)', async () => {
-    for (const px of [375, 768, 1280]) {
-      atWidth(px);
-      stubFetch({ '/admin/overview': { body: overview() } });
-      const { unmount } = renderWithSession(<AdminOverviewPage />, { me: SUPER_ADMIN });
-
-      expect(await screen.findByText('Prudential')).toBeInTheDocument();
-      expect(screen.queryByRole('heading', { name: 'Needs your attention' })).toBeNull();
-      expect(screen.queryByText('Nothing needs the platform right now.')).toBeNull();
-      expect(screen.queryByText(/needs Superadmin action/)).toBeNull();
-      unmount();
-    }
+  it('P19.23-T1 the Dashboard is outside every KPM: arriving leaves the one the tab had entered', async () => {
+    enterKpm(MAGNI);
+    renderWithSession(<ConsoleDashboardPage />, { me: CONSOLE_SUPER_ADMIN });
+    await screen.findByRole('table');
+    expect(enteredKpmId()).toBeNull();
   });
 
-  it('P19.2-T2 AC-8 lists what needs handling when something does', async () => {
-    stubFetch({ '/admin/overview': { body: overview({ attention: [UNOWNED] }) } });
-    renderWithSession(<AdminOverviewPage />, { me: SUPER_ADMIN });
-
-    const queue = (await screen.findByRole('heading', { name: 'Needs your attention' })).parentElement!;
-    expect(within(queue).getAllByRole('listitem')).toHaveLength(1);
+  it('P19.23-T1 the error state: the server’s refusal in its own words', async () => {
+    stubFetch({ '/admin/dashboard': { status: 403, body: { error: { code: 'PERM_DENIED', message: 'Anda tidak punya izin.', requestId: 'r-1' } } } });
+    renderInIndonesian(<ConsoleDashboardPage />, { me: CONSOLE_SUPER_ADMIN });
+    expect(await screen.findByText('Anda tidak punya izin.')).toBeInTheDocument();
   });
 
-  it('P19.2-T2 AC-8 lays the tiles 2×2 on a phone and four across on a tablet and a laptop', async () => {
-    stubFetch({ '/admin/overview': { body: overview() } });
-    renderWithSession(<AdminOverviewPage />, { me: SUPER_ADMIN });
-
-    const tiles = (await screen.findByText('Total members')).closest('[data-stat-tile]')!.parentElement!;
-    expect(wears(tiles, 375)).toContain('grid-cols-2');
-    expect(wears(tiles, 768)).toContain('grid-cols-4');
-    expect(wears(tiles, 1280)).toContain('grid-cols-[1.1fr_1fr_1fr_1fr]');
-    // The stat tile's ~68px on a phone: 12px inside, the 26px number.
-    const tile = tiles.firstElementChild!;
-    expect(wears(tile, 375)).toContain('p-3');
-    expect(wears(tile.lastElementChild!, 375)).toContain('text-[1.625rem]');
-    // The sections' grey lines from 1024px only, so 375 fits one screen with two companies and nothing to handle.
-    expect(wears(screen.getByText('Across every company on the platform'), 375)).toContain('hidden');
-    expect(wears(screen.getByText('Across every company on the platform'), 1280)).not.toContain('hidden');
+  it('P19.23-T7 AC-1 on a phone the tree is cards, each figure under its column’s name — no table', async () => {
+    atWidth(375);
+    renderInIndonesian(<ConsoleDashboardPage />, { me: CONSOLE_SUPER_ADMIN });
+    await screen.findByRole('table');
+    const cards = document.querySelector('[data-console-adoption-cards]') as HTMLElement;
+    expect(within(cards).getAllByText('Pakai 14 hari terakhir').length).toBeGreaterThan(0);
+    expect(document.querySelector('[data-console-adoption]')!.closest('.max-md\\:hidden')).not.toBeNull();
   });
 
-  it('signs out from the sidebar, without needing the account screen first', async () => {
-    // The console is where a Super Admin spends their session, so ending it has to be
-    // reachable from the sidebar rather than only from /profile.
-    stubFetch({ '/admin/tenants': { body: [] }, '/admin/companies': { body: [] } });
-    const { session } = renderInLayout(AdminLayout, <AdminOverviewPage />, { me: SUPER_ADMIN });
-
-    await userEvent.click(await screen.findByRole('button', { name: /Root/ }));
-    expect(screen.getByRole('link', { name: 'Your account' })).toHaveAttribute('href', '/profile');
-    await userEvent.click(screen.getByRole('button', { name: 'Sign out' }));
-
-    expect(session.signOut).toHaveBeenCalled();
-    await vi.waitFor(() => expect(replace).toHaveBeenCalledWith('/login'));
+  it('P19.23-T1 axe on the populated Dashboard', async () => {
+    const { container } = renderInIndonesian(<ConsoleDashboardPage />, { me: CONSOLE_SUPER_ADMIN });
+    await screen.findByRole('table');
+    expect((await axe(container, RULES)).violations).toEqual([]);
   });
 
-  it('names the account in the menu, so you can confirm it before leaving', async () => {
-    stubFetch({ '/admin/tenants': { body: [] }, '/admin/companies': { body: [] } });
-    renderInLayout(AdminLayout, <AdminOverviewPage />, { me: SUPER_ADMIN });
-
-    await userEvent.click(await screen.findByRole('button', { name: /Root/ }));
-    expect(screen.getByText('root@agencyboost.test')).toBeInTheDocument();
-  });
-
-  it('says it is loading rather than showing a misleading zero', () => {
-    stubFetch({ '/admin/overview': { body: overview() } });
-    renderInLayout(AdminLayout, <AdminOverviewPage />, { me: SUPER_ADMIN });
-
-    expect(screen.getByRole('status')).toHaveTextContent('Loading the platform overview');
-  });
-
-  /*
-   * **P19.4-T3 AC-1, AC-8 (SA UI-010, SA R5; ADR-0212):** *TOTAL MEMBERS* and *ABS* open *All members*; *Perlu perhatian
-   * Anda* lists each KPM not yet set up by its code — the API's rows, drawn as they come.
-   */
-  it.each([375, 1280])('P19.4-T3 AC-1 at %ipx: TOTAL MEMBERS opens All members unfiltered, ABS filtered to AB', async (px) => {
-    atWidth(px);
-    stubFetch({ '/admin/overview': { body: overview() } });
-    renderInLayout(AdminLayout, <AdminOverviewPage />, { me: SUPER_ADMIN });
-    const total = (await screen.findByText('Total members')).closest('a')!;
-    expect(total).toHaveAttribute('href', '/admin/members');
-    expect(total).toHaveTextContent('1,340');
-    expect(screen.getByText('ABs').closest('a')).toHaveAttribute('href', '/admin/members?role=AB');
-    // The two the list does not open stay figures.
-    expect(screen.getAllByText('KPMs').some((el) => el.closest('[data-stat-tile]')?.querySelector('a'))).toBe(false);
-  });
-
-  it('P19.4-T3 AC-8 lists “KPM {code} belum punya Owner” and “… belum punya anggota”, one row each, each opening its KPM', async () => {
-    const row = (title: string, tag: string, href: string) => ({
-      tag, severity: 'structural' as const, title, detail: 'x', href, actionLabel: 'Buka KPM',
-    });
-    stubFetch({
-      '/admin/overview': {
-        body: overview({
-          attention: [
-            row('KPM 0602 belum punya Owner', 'KPM Owner', '/admin/tenants/kpm-0602'),
-            row('KPM 0602 belum punya anggota', 'Anggota', '/admin/tenants/kpm-0602'),
-            row('KPM 0603 belum punya anggota', 'Anggota', '/admin/tenants/kpm-0603'),
-          ],
-        }),
-      },
-    });
-    renderInLayout(AdminLayout, <AdminOverviewPage />, { me: SUPER_ADMIN });
-    await screen.findByText('KPM 0603 belum punya anggota');
-    const items = screen.getAllByRole('listitem');
-    const queue = items.filter((li) => li.textContent?.includes('belum punya'));
-    expect(queue.map((li) => within(li).getByText(/^KPM 06/).textContent)).toEqual([
-      'KPM 0602 belum punya Owner', 'KPM 0602 belum punya anggota', 'KPM 0603 belum punya anggota',
-    ]);
-    expect(within(queue[2]).getByRole('link', { name: /Buka KPM/ })).toHaveAttribute('href', '/admin/tenants/kpm-0603');
+  it('P18.10-T7 AC-1 in Indonesian, no English of the console’s own is left', async () => {
+    renderInIndonesian(<ConsoleDashboardPage />, { me: CONSOLE_SUPER_ADMIN });
+    await screen.findByRole('table');
+    expect(englishShown(document.body, englishOnly(adminConsoleMessages))).toEqual([]);
   });
 });

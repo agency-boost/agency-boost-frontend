@@ -10,8 +10,11 @@ import { useFigureLanguage, useMessages } from '@/i18n/language-provider';
 import { settingsMessages } from '@/i18n/messages/settings';
 import { trainingSettingsMessages } from '@/i18n/messages/training-settings';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
-import { HTML_ACCEPT, HTML_MIME_TYPE, isHtmlDocument, isHtmlFile } from '@/lib/html-document';
+import { HTML_MIME_TYPE, isHtmlDocument } from '@/lib/html-document';
 import { formatFileSize } from '@/lib/recruitment-pitch';
+import {
+  TRAINING_FILE_ACCEPT, TRAINING_FILE_TYPES, TRAINING_VIDEO_ACCEPT, trainingFileType,
+} from '@/lib/training-view';
 import {
   confirmTrainingUpload, moduleContentUrl, readModuleContent, requestTrainingUpload,
   resetModuleContent, saveModuleContent, signedUploadForm,
@@ -20,25 +23,21 @@ import {
 
 /**
  * What the API accepts, mirrored so a file is refused here before it costs anybody's data. Shared with the template's
- * material (ADR-0208 §1), which takes the same files. **An HTML lesson among them** since P19.6-T2 (ADR-0217 §1,
- * `TRAINING_FILE_MIME_TYPES`): pinned to the API's list by `lib/contract.spec.ts`.
+ * material (ADR-0208 §1), which takes the same files. **An HTML lesson among them** since P19.6-T2 (ADR-0217 §1), and
+ * **any format the owner named** since P19.25-T4 (ADR-0282 §3) — PowerPoint, Word, WebM and MOV: `TRAINING_FILE_TYPES`,
+ * pinned to the API's list by `lib/contract.spec.ts`.
  */
-export const ALLOWED = [
-  'image/jpeg', 'image/png', 'image/webp',
-  'application/pdf',
-  'video/mp4',
-  'text/csv', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  HTML_MIME_TYPE,
-];
+export const ALLOWED: string[] = TRAINING_FILE_TYPES.map((t) => t.mimeType);
 
-/** The *File* picker's offer: today's files, and an HTML lesson (`.html`, `.htm`). */
-export const FILE_ACCEPT = `.pdf,.png,.jpg,.jpeg,.webp,.csv,.xlsx,${HTML_ACCEPT}`;
+/** The *File* picker's offer: every material type but a video. */
+export const FILE_ACCEPT = TRAINING_FILE_ACCEPT;
 
 /**
- * The type a chosen file is sent as: its own, or `text/html` for a lesson a desktop reports with no type
- * (`isHtmlFile`). Storage still confirms its first bytes before anything is attachable (ADR-0040, ADR-0217 §2).
+ * The type a chosen file is sent as: its own, or the one its extension names where a desktop reports none — a lesson's
+ * `text/html`, a `.pptx`'s (`trainingFileType`). Storage still confirms its bytes before anything is attachable
+ * (ADR-0040, ADR-0217 §2).
  */
-export const sentTypeOf = (file: File): string => (isHtmlFile(file) ? HTML_MIME_TYPE : file.type);
+export const sentTypeOf = (file: File): string => trainingFileType(file) ?? file.type;
 export const MAX_BYTES = 25 * 1024 * 1024;
 
 /** An address's start, shown as the field's example: the same in both languages, never words. */
@@ -341,7 +340,7 @@ export function ModuleContentEditor({
         'videos', t.videos,
         t.videosHint,
         videoInput,
-        '.mp4',
+        TRAINING_VIDEO_ACCEPT,
       )}
 
       <Card className="p-0">

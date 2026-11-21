@@ -16,8 +16,9 @@ const EMPTY = {
   tiles: {
     team: { total: 0, direct: 0, units: 0, underUnits: 0, newHires: 0 },
     directGroupProduction: { targetMinor: null, actualMinor: null, attainmentPct: null, missing: 0, gapMinor: null, overMinor: null, period: 'month' },
-    potentialActive: { count: 0, of: 0, unit: { count: 0, of: 0 }, aab: { count: 0, of: 0 } },
-    potentialRecruits: { yourUnit: 0, aabs: 0 },
+    // P19.18-T1 AC-3: the server's empty tiles since ADR-0271 §3.
+    activeAgent: { month: '2026-11', held: false, count: null, people: [] },
+    recruitment: { month: '2026-11', count: 0, people: [] },
   },
   yourUnit: { rows: [], total: {} }, units: [],
   production: { month: '2026-11', revision: 0, locked: false, canUpdate: true },

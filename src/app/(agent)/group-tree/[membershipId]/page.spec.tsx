@@ -15,7 +15,7 @@ const OWNER = makeMe({
     membershipId: 'mem-owner', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab', status: 'active',
     isKpmOwner: true, isKpmAdmin: false, directCount: 5,
   },
-  permissions: ['org_tree:read', 'kpm_analytics:read'],
+  permissions: ['org_tree:read', 'kpm_overview:read'],
 });
 
 /** A Core Leader AB: Agus, above Sari. */
@@ -24,7 +24,7 @@ const AGUS = makeMe({
     membershipId: 'mem-agus', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab', status: 'active',
     isKpmOwner: false, isKpmAdmin: false, directCount: 3, isCoreLeader: true,
   },
-  permissions: ['org_tree:read', 'kpm_analytics:read'],
+  permissions: ['org_tree:read', 'kpm_overview:read'],
 });
 
 const node = (over: Record<string, unknown>) => ({
@@ -103,7 +103,7 @@ describe('P19.3-T3 a leader’s Group Tree, read-only, as that leader sees it', 
   it('P19.3-T3 AC-16 outside the reader’s reach, gone or another office’s: not found, with the way back', async () => {
     open({ status: 404, body: { error: { code: 'NOT_FOUND', message: 'Member not found.', requestId: 'r' } } });
     expect(await screen.findByText('This Group Tree is not one you can open.')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Back to KPM Analytics' })).toHaveAttribute('href', '/kpm/analytics');
+    expect(screen.getByRole('link', { name: 'Back to the Overview' })).toHaveAttribute('href', '/kpm/overview');
   });
 
   it('P19.3-T3 AC-16 an Agent refused (403) reads the server’s words', async () => {

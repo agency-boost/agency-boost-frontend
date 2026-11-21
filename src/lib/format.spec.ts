@@ -1070,7 +1070,7 @@ describe('P18.10-T3 figures the guard: a formatter is handed the figures’ lang
     expect(wired).toEqual(expect.arrayContaining([
       'components/ui/date-field.tsx', 'components/ui/decimal-input.tsx', 'components/ui/progress-bar.tsx',
       'components/notification-list.tsx', 'app/(tenant)/kpm/data-upload/page.tsx', 'components/coaching-session.tsx',
-      'components/goal-calculator.tsx', 'components/leader-forum/scorecard.tsx', 'components/calendar/month-grid.tsx',
+      'components/goal-calculator.tsx', 'components/leader-forum/forum-list.tsx', 'components/calendar/month-grid.tsx',
     ]));
   });
 });

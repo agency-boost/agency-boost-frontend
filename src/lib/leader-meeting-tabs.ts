@@ -1,25 +1,19 @@
 'use client';
 
-import { useCallback, useRef, useState } from 'react';
-import { ApiRequestError } from './api-client';
 import { messagesIn } from '@/i18n/catalogue';
 import { kept } from '@/i18n/kept';
 import { DEFAULT_LANGUAGE, SOURCE_LANGUAGE, type Language } from '@/i18n/language';
-import { forumMessages } from '@/i18n/messages/forum';
-import { forumMinutesMessages } from '@/i18n/messages/forum-minutes';
 import { forumStatsMessages } from '@/i18n/messages/forum-stats';
 import {
   type CompactUnit, formatCalendarDay, formatDecimalInput, formatMoneyUnit, formatMonth, formatMonthName, formatNumber, formatPercent,
   MINOR_UNITS_PER_MAJOR, parseDecimal, RUPIAH_PER_UNIT,
 } from './format';
-import type {
-  ActionItem, ActionStatus, AgendaItem, AgendaSection, ColumnKey, ColumnPeriod, MeetingView, MeetingWriter, MonthlyTarget,
-  RowKey, Scorecard, ScorecardCell, ScorecardDefinitions, ScorecardRow, TargetRowKey, YtdChange,
-} from './leader-meetings';
+
 
 /**
- * **A meeting's three tabs and its print** (`functional/leader-forum.md`, *Overview & Stats*, *Agenda*, *Action
- * Items*, *Saving*, *Printing*): their words, how a figure is written, and how a field's write is sent.
+ * **The MAPA scorecard's words and figures** (`functional/leader-forum.md` before P19.22, *Overview & Stats*): how a
+ * figure of the forum's old scorecard is written — what Advanced analytics' *MAPA driver* reads (`rowName`, `cellText`)
+ * since the forum's own *Overview & Stats* tab went (P19.22-T8; ADR-0276). The scorecard's shapes live here with them.
  *
  * The figures are the server's, exact (OD-144, ADR-0129); this file only rounds them for display, as the spec
  * says each row is drawn. Nothing here decides a figure, who may edit or a bound (`limits`) — the places a target's
@@ -27,12 +21,119 @@ import type {
  */
 
 /*
+ * ── The scorecard's shapes ──────────────────────────────────────────────────────────────────────
+ */
+
+/**
+ * The six computed columns, in the client's reference slide's order (ADR-0175 §1): the *Full Year & YTD View* — *Full
+ * Year {Y−1}*, ***YTD {Y−1}***, *YTD {Y}* — then the *Monthly View*'s three months; *Monthly Target* is typed.
+ */
+export type ColumnKey = 'fy' | 'ytdLastYear' | 'ytd' | 'thisMonthLastYear' | 'lastMonth' | 'thisMonth';
+export const COLUMN_KEYS: readonly ColumnKey[] = ['fy', 'ytdLastYear', 'ytd', 'thisMonthLastYear', 'lastMonth', 'thisMonth'];
+/** *Full Year & YTD View*. */
+export const YEAR_COLUMN_KEYS: readonly ColumnKey[] = ['fy', 'ytdLastYear', 'ytd'];
+/** *Monthly View*'s computed three; *Monthly Target* closes the group. */
+export const MONTH_COLUMN_KEYS: readonly ColumnKey[] = ['thisMonthLastYear', 'lastMonth', 'thisMonth'];
+
+/** The nine rows, in the slide's order. `producing_agents` is *Annual Active Agents*: the key is the stored one. */
+export type RowKey =
+  | 'ape' | 'manpower' | 'flc' | 'producing_agents' | 'new_agent_3m'
+  | 'avg_monthly_aa' | 'case_submission' | 'cases_per_producing_agent' | 'average_case_size';
+
+/** The five rows whose *Monthly Target* is typed, as a rate per unit; the others take none. */
+export type TargetRowKey = 'ape' | 'manpower' | 'flc' | 'avg_monthly_aa' | 'case_submission';
+
+export type ScorecardCell =
+  /** `value` exact: minor units for `idr_minor`, a whole or fractional count, a whole percentage, a ratio. */
+  | { kind: 'figure'; value: number; leavesOut: string[] /* YYYY-MM months of the period not held */ }
+  /** *pending data*: no source holds the figure for its period. */
+  | { kind: 'pending' }
+  /** *—*: a ratio over nothing whose months are held (*Avg. Case Size* over no policies, *Cases/producing agents* over nobody). */
+  | { kind: 'none' }
+  /** *Not tracked*: a row the table leaves empty in this column. */
+  | { kind: 'blocked' }
+  /** *—*: a column or a row a scorecard kept before it existed does not hold (ADR-0175 §8). */
+  | { kind: 'unrecorded' }
+  /**
+   * *—*, *Not uploaded yet* to a screen reader: a *Full Year* or *YTD* column of last year with no month of its period
+   * uploaded (P19.3-T1; ADR-0203 §8, *"Show '—' until uploaded"*). Every other cell keeps *pending data*.
+   */
+  | { kind: 'not_uploaded' };
+
+/**
+ * **Which definitions a scorecard's rows follow** (P19.3-T1; ADR-0202 §4) — what its footnotes say: `data_sources`, the
+ * owner's data sources of 3 November (live, or kept since), or `reference_slide`, a scorecard kept before them. Served.
+ */
+export type ScorecardDefinitions = 'data_sources' | 'reference_slide';
+
+/** The months a column names, `YYYY-MM` to `YYYY-MM`, from the meeting's month: its header's second line. */
+export interface ColumnPeriod {
+  from: string;
+  to: string;
+}
+
+/**
+ * A *Monthly Target*, typed as a rate per unit (ADR-0175 §4): the rate in the row's unit — IDR minor units for *APE*,
+ * a count for the others — and the server's **value**, `rate × # of units`; or, with no rate, a target typed as text
+ * before rates, shown as typed. Never typed: version 0.
+ */
+export interface MonthlyTarget {
+  rate: number | null;
+  value: number | null;
+  typed: string | null;
+  version: number;
+}
+
+/**
+ * What a phone's card reads beside *YTD {Y}* and *YTD {Y−1}*: the change the server computed, whole and signed, in its
+ * `unit` — `percent`, a percentage of last year's figure, or `points`, the difference in percentage points on a row
+ * whose own figure is a percentage (*3M new agent %*; P18.9-T8 F1, parity F-256).
+ */
+export type YtdChange = { kind: 'figure'; value: number; unit: 'percent' | 'points' } | { kind: 'none' };
+
+export interface ScorecardRow {
+  key: RowKey;
+  unit: 'idr_minor' | 'count' | 'percentage' | 'ratio';
+  cells: Record<ColumnKey, ScorecardCell>;
+  ytdChange: YtdChange;
+  /** `null` on a row the table does not track month by month. */
+  monthlyTarget: MonthlyTarget | null;
+}
+
+/** *AS OF*: a day; none while the office has no file (nothing drawn); unrecorded on a scorecard kept before it (*—*). */
+export type ScorecardAsOf = { kind: 'date'; date: string } | { kind: 'none' } | { kind: 'unrecorded' };
+
+/** A period a figure of which leaves months out: its *(\*)* note. */
+export interface PartialPeriod {
+  column: ColumnKey;
+  leavesOut: string[];
+}
+
+export interface Scorecard {
+  periods: Record<ColumnKey, ColumnPeriod>;
+  /**
+   * `units` is the AB and AAB who lead somebody (P19.3-T1, ADR-0203 §1) — or, on a scorecard kept before that, the number
+   * it was kept with. The server's; the *Monthly Target*'s multiplier.
+   */
+  chips: { manpower: number; agents: number; units: number; ab: number; aab: number };
+  /** Nine, in the slide's order. */
+  rows: ScorecardRow[];
+  asOf: ScorecardAsOf;
+  /** In column order; empty when every figure covers its whole period. */
+  partialPeriods: PartialPeriod[];
+  /** `null` while live; the instant it was frozen onto the meeting otherwise. */
+  frozenAt: string | null;
+  /** The definitions its rows follow, so the footnotes drawn are true of them (P19.3-T1). */
+  definitions: ScorecardDefinitions;
+}
+
+/*
  * ── The words ───────────────────────────────────────────────────────────────────────────────────
  */
 
 /**
  * **The tabs' words are the catalogue's** (P18.10-T4): *Overview & Stats*' in `i18n/messages/forum-stats.ts`, the
- * agenda's and the tracker's in `forum-minutes.ts`, English the source and Indonesian the approved glossary's. A screen
+ * agenda's and the tracker's went with the forum's 19 November redo (ADR-0276); English the source and Indonesian the approved glossary's. A screen
  * reads the reader's with `useMessages`; a function here that writes words takes the reader's language (`useLanguage()`)
  * as `words`, English when given none, and one that writes a figure too takes the figures' (`useFigureLanguage()`) as
  * `language`, before it.
@@ -42,7 +143,6 @@ import type {
  * reads and scans them. Nothing on a screen reads them.
  */
 const STATS = forumStatsMessages.en;
-const MINUTES = forumMinutesMessages.en;
 
 /** The strip's chips in the slide's order (UI-011). */
 const CHIP_KEYS = ['manpower', 'agents', 'units', 'ab', 'aab'] as const satisfies readonly (keyof Scorecard['chips'])[];
@@ -57,30 +157,19 @@ export const TABS_COPY = {
   pending: STATS.pending,
   none: '—',
   tbd: STATS.tbd,
-  sections: MINUTES.sections satisfies Record<AgendaSection, string>,
-  pic: `${MINUTES.pic}:`,
-  addItem: MINUTES.addItem,
-  tracker: MINUTES.tracker,
-  dragHint: MINUTES.dragHint,
-  headers: MINUTES.headers,
-  addAction: MINUTES.addAction,
-  statuses: MINUTES.statuses satisfies Record<ActionStatus, string>,
-  statusUpdated: MINUTES.statusUpdated,
-  rowRemoved: MINUTES.rowRemoved,
-  reordered: MINUTES.reordered,
 } as const;
 
 /** *—*: a figure there is none of, in both languages. */
 export const NONE = '—';
 
+/** `a`, `a and b`, `a, b and c` — `a, b, dan c` in Indonesian. */
+export function listed(items: readonly string[], words: Language = SOURCE_LANGUAGE): string {
+  return messagesIn(forumStatsMessages, words).list({ items });
+}
+
 /** The chips in the slide's order, each with its label in a language (UI-011). */
 export const chipsIn = (words: Language = SOURCE_LANGUAGE) =>
   CHIP_KEYS.map((key) => ({ key, label: messagesIn(forumStatsMessages, words).chips[key] }));
-
-/** `a`, `a and b`, `a, b and c` — `a, b, dan c` in Indonesian. */
-export function listed(items: readonly string[], words: Language = SOURCE_LANGUAGE): string {
-  return messagesIn(forumMessages, words).list({ items });
-}
 
 /**
  * The module's own (*The module's own strings*, D-copy), English, as the old copy's positional functions read: none
@@ -96,28 +185,9 @@ export const TABS_OWN_COPY = {
   asOf: STATS.asOf,
   asOfUnrecorded: STATS.asOfUnrecorded,
   change: STATS.change,
-  statusName: (status: string, next: string) => MINUTES.statusName({ status, next }),
-  handleName: (n: number, initiative: string) => MINUTES.handleName({ n, initiative }),
-  removeName: (n: number) => MINUTES.removeName({ n }),
-  cellName: (column: string, n: number) => MINUTES.cellName({ column, n }),
-  agendaText: (section: string, n: number) => MINUTES.agendaText({ section, n }),
-  agendaPic: (section: string, n: number) => MINUTES.agendaPic({ section, n }),
-  addPic: MINUTES.addPic,
   targetName: (row: string) => STATS.targetName({ row }),
   notARate: (example: string) => STATS.notARate({ example }),
-  done: MINUTES.done,
-  accessNote: (names: readonly string[]) => MINUTES.accessNote({ names, list: (items) => listed(items) }),
 } as const;
-
-/**
- * The access note (F-188): who may edit **now**, the Owner first, then each Admin, then the tag. *"shown above"*
- * dropped, because a past meeting's chips are its frozen record.
- */
-export const accessNoteText = (note: MeetingView['accessNote'], words: Language = SOURCE_LANGUAGE) =>
-  messagesIn(forumMinutesMessages, words).accessNote({
-    names: [...(note.ownerName ? [note.ownerName] : []), ...note.adminNames],
-    list: (items) => listed(items, words),
-  });
 
 /*
  * ── The scorecard ───────────────────────────────────────────────────────────────────────────────
@@ -436,236 +506,3 @@ export function rateFromTyped(row: TargetRowKey, typed: string): { rate: number 
 
 /** The half a rate's hint offers as its example, written as the field takes it: *0,5*, *0.5* in English. */
 export const rateExample = (language: Language = DEFAULT_LANGUAGE) => formatDecimalInput(0.5, language);
-
-/*
- * ── The tracker ─────────────────────────────────────────────────────────────────────────────────
- */
-
-/** One step round, as drawn (`:2573`, `:2865`): *Implemented* goes back to *Not yet planned*. */
-const STATUS_ORDER: readonly ActionStatus[] = ['not_planned', 'planned', 'implemented'];
-export const nextStatus = (status: ActionStatus): ActionStatus =>
-  STATUS_ORDER[(STATUS_ORDER.indexOf(status) + 1) % STATUS_ORDER.length];
-
-/**
- * The pills (`:564-568`): red, amber, green, each on its own tint. *Planned* is navy on the amber tint, not the
- * prototype's amber-dark, which clears no contrast floor as text (`tokens.md`; the `watch` pill, I-116).
- */
-export const STATUS_TONE: Record<ActionStatus, string> = {
-  not_planned: 'bg-alert/10 text-alert',
-  planned: 'bg-primary/15 text-navy',
-  implemented: 'bg-success/10 text-success',
-};
-
-/** The tracker's typed columns, in order, with the bound each takes. */
-export const TRACKER_COLUMNS = ['initiative', 'metric', 'action', 'pic', 'remarks'] as const;
-export type TrackerColumn = (typeof TRACKER_COLUMNS)[number];
-
-/** As the prototype drops a row (`:2894-2898`): out of `from`, into `to`'s place. */
-export function moveTo<T>(list: readonly T[], from: number, to: number): T[] {
-  const next = [...list];
-  if (from === to || from < 0 || to < 0 || from >= list.length || to >= list.length) return next;
-  const [moved] = next.splice(from, 1);
-  next.splice(to, 0, moved);
-  return next;
-}
-
-/*
- * ── What a landed write says ────────────────────────────────────────────────────────────────────
- *
- * Each returns the meeting with the server's answer in it. A write in the agenda, the tracker or a target is
- * the meeting's minutes, so it is no longer one nobody has written in (`writtenAt`): *Delete meeting* is
- * withdrawn (`can.delete`, which the server would now refuse `409 LEADER_MEETING_HAS_MINUTES`). The open items
- * are the rows not *Implemented* (`:2586`).
- */
-
-const written = (meeting: MeetingView): MeetingView => ({ ...meeting, writtenIn: true, can: { ...meeting.can, delete: false } });
-
-export function withAgendaItem(meeting: MeetingView, section: AgendaSection, itemId: string, saved: AgendaItem | null): MeetingView {
-  const items = meeting.agenda[section];
-  const next = saved === null
-    ? items.filter((it) => it.id !== itemId)
-    : items.some((it) => it.id === itemId)
-      ? items.map((it) => (it.id === itemId ? saved : it))
-      : [...items, saved];
-  return { ...written(meeting), agenda: { ...meeting.agenda, [section]: next } };
-}
-
-export function withActionItems(meeting: MeetingView, actionItems: ActionItem[]): MeetingView {
-  return {
-    ...written(meeting),
-    actionItems,
-    openItems: actionItems.filter((a) => a.status !== 'implemented').length,
-  };
-}
-
-export const withActionItem = (meeting: MeetingView, saved: ActionItem) =>
-  withActionItems(
-    meeting,
-    meeting.actionItems.some((a) => a.id === saved.id)
-      ? meeting.actionItems.map((a) => (a.id === saved.id ? saved : a))
-      : [...meeting.actionItems, saved],
-  );
-
-export function withTarget(meeting: MeetingView, row: TargetRowKey, target: MonthlyTarget): MeetingView {
-  return {
-    ...written(meeting),
-    scorecard: {
-      ...meeting.scorecard,
-      rows: meeting.scorecard.rows.map((r) => (r.key === row ? { ...r, monthlyTarget: target } : r)),
-    },
-  };
-}
-
-/*
- * ── Sending a write ─────────────────────────────────────────────────────────────────────────────
- */
-
-/** How a write ended: landed with the server's answer, refused because the item changed since, or failed. */
-export type Outcome<T> = { kind: 'landed'; answer: T } | { kind: 'conflict' } | { kind: 'failed' };
-
-/**
- * One write through the page's writer (which announces it, and reads the meeting again on a conflict), told
- * apart by how it ended: a field shows the saved value once its write lands, what the other person saved after a
- * conflict, and **what was typed** after any other failure (*"It's still here — try again"*).
- */
-export async function runWrite<T>(
-  writer: Pick<MeetingWriter, 'run'>,
-  write: () => Promise<T>,
-  options?: { done?: string },
-): Promise<Outcome<T>> {
-  let conflict = false;
-  const answer = await writer.run(async () => {
-    try {
-      return await write();
-    } catch (err) {
-      conflict = err instanceof ApiRequestError && err.status === 409 && err.error.code === 'VERSION_CONFLICT';
-      throw err;
-    }
-  }, options);
-  if (answer !== undefined) return { kind: 'landed', answer };
-  return conflict ? { kind: 'conflict' } : { kind: 'failed' };
-}
-
-/**
- * **Writes to one item go one after another**, each chained to the version the reader's own last write left.
- *
- * The server answers `409 VERSION_CONFLICT` when *that item* changed since the version a write sends. A write
- * sends **the version its field was read at** — captured when the field was focused, or the control pressed —
- * or, when one of the reader's own writes to the item has landed since, the version that write answered. Never
- * the version the page holds when the write goes: the page may have been read again under a field being typed
- * in, and sending the newer version would overwrite somebody else's change the reader never saw.
- *
- * Two cells of one row changed in quick succession — a PIC, then its remarks — would otherwise both send the
- * version read, and the second would conflict with the reader's own first. So the second waits for the first.
- */
-export class ItemWrites {
-  private readonly tails = new Map<string, Promise<unknown>>();
-  private readonly left = new Map<string, number>();
-
-  run<T>(
-    key: string,
-    /** The item's version when the field was focused, or the control pressed. */
-    read: number,
-    write: (version: number) => Promise<T>,
-    /** The version the answer leaves the item at, when it says. */
-    answered: (answer: T) => number | undefined = () => undefined,
-  ): Promise<T> {
-    const go = async () => {
-      const answer = await write(Math.max(read, this.left.get(key) ?? 0));
-      const version = answered(answer);
-      if (version !== undefined) this.left.set(key, Math.max(version, this.left.get(key) ?? 0));
-      return answer;
-    };
-    const tail = this.tails.get(key);
-    const result = tail ? tail.then(go) : go();
-    this.tails.set(key, result.catch(() => undefined));
-    return result;
-  }
-}
-
-/**
- * **A typed field's text between the saved value and the server** (*Saving*, L-110). Its text is its own,
- * whatever else is written to the same item.
- *
- * - While focused it shows what is being typed. Focusing captures the item's version: the field's writes
- *   send it (`ItemWrites`).
- * - On leaving, `leave()` says what to write, or `null` — when the trimmed text is what is saved, or what the
- *   field's own write still out is about to save: a blur that changes nothing writes nothing and says nothing.
- * - **The field keeps what was typed until its own write settles** — not until the item's version moves, which
- *   another field's write to the same row also does. `settle()` then shows the saved value once it landed,
- *   what the other person saved after a conflict, and keeps what was typed after any other failure, so leaving
- *   the field again sends it again.
- */
-export function useDraft(value: string, version: number) {
-  const [edit, setEdit] = useState<{ text: string; focused: boolean; read: number } | null>(null);
-  /** The value the field's latest write out will save, and how many of its writes are out. */
-  const out = useRef<{ value: string; count: number } | null>(null);
-
-  const focus = useCallback(() => {
-    setEdit((e) => (e ? { ...e, focused: true } : { text: value, focused: true, read: version }));
-  }, [value, version]);
-
-  const change = useCallback((text: string) => {
-    setEdit((e) => ({ text, focused: true, read: e?.read ?? version }));
-  }, [version]);
-
-  /** What to write and the version it was read at, or `null`; either way the field is no longer focused. */
-  const leave = useCallback((): { text: string; read: number } | null => {
-    const text = (edit?.text ?? value).trim();
-    const read = edit?.read ?? version;
-    if (text === (out.current ? out.current.value : value)) {
-      // Nothing new: back to the saved value, unless a write is still out to show what was typed until it lands.
-      setEdit(out.current && edit ? { ...edit, focused: false } : null);
-      return null;
-    }
-    out.current = { value: text, count: (out.current?.count ?? 0) + 1 };
-    setEdit({ text: edit?.text ?? value, focused: false, read });
-    return { text, read };
-  }, [edit, value, version]);
-
-  /** One of the field's writes has settled. */
-  const settle = useCallback((kind: Outcome<unknown>['kind']) => {
-    if (kind === 'conflict') {
-      // Read again: what is saved now is somebody else's, and every write still out was sent against an older one.
-      out.current = null;
-    } else if (out.current && --out.current.count <= 0) {
-      out.current = null;
-    }
-    if (kind === 'failed' || out.current) return;
-    setEdit((e) => (e && !e.focused ? null : e));
-  }, []);
-
-  return { value: edit ? edit.text : value, focus, change, leave, settle };
-}
-
-/**
- * **A control's state while its write is out** — a box ticked, a status moved on, the rows' order — shown at
- * once, as the prototype redraws at once, and dropped when the last of its writes settles: the page then
- * holds what the server answered, or, after a conflict, what it read again.
- */
-export function usePending<T>() {
-  const [pending, setPending] = useState<Record<string, { value: T; count: number }>>({});
-  const count = useRef(new Map<string, number>());
-
-  const begin = useCallback((key: string, value: T) => {
-    count.current.set(key, (count.current.get(key) ?? 0) + 1);
-    setPending((p) => ({ ...p, [key]: { value, count: count.current.get(key)! } }));
-  }, []);
-
-  const end = useCallback((key: string) => {
-    const left = (count.current.get(key) ?? 1) - 1;
-    if (left > 0) {
-      count.current.set(key, left);
-      return;
-    }
-    count.current.delete(key);
-    setPending((p) => {
-      const { [key]: _gone, ...rest } = p;
-      return rest;
-    });
-  }, []);
-
-  const of = useCallback((key: string): T | undefined => pending[key]?.value, [pending]);
-
-  return { of, begin, end };
-}

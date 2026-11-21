@@ -126,6 +126,15 @@ export interface AuditGroupSpan {
   count: number;
   /** The oldest row's time; `createdAt` is the newest's. */
   oldestAt: string;
+  /**
+   * **What changed, before → after, in words** (P19.23-T6 AC-1): *"6 → 8"*, or *"status: active → suspended · …"*; null
+   * when the row records no such pair. Absent from a server before P19.23.
+   */
+  change?: string | null;
+  /** The KPM the row is in or about (P19.23-T6 AC-1: *KPM · company*); null for a platform row about none. */
+  kpm?: { id: string; code: string; branch: string } | null;
+  /** Its company; null when none. */
+  company?: { id: string; name: string } | null;
 }
 
 /** One actor the *Pelaku* chip offers. */
@@ -157,8 +166,13 @@ export interface AuditPage {
   facets: AuditFacets | null;
 }
 
-/** The page's filters. Each one absent narrows nothing; `kpmId` absent is the platform-level log. */
+/**
+ * The page's filters. Each one absent narrows nothing; `kpmId` absent is *Semua KPM* — the platform's log and every Super
+ * Admin change inside a KPM (P19.23-T6 AC-1).
+ */
 export interface AuditQuery {
+  /** *Cari perubahan* (P19.23-T6 AC-1): words a line says, read as text; at most 100 characters. */
+  q?: string;
   kpmId?: string;
   companyId?: string;
   action?: string;
@@ -275,6 +289,8 @@ export interface KpmRequestRow {
   status: 'pending' | 'approved' | 'declined';
   requestedAt: string;
   decidedAt: string | null;
+  /** *Persetujuan* › *Sudah diputuskan* (P19.23-T3 AC-2): who decided, by name; `null` while it waits. */
+  decidedByName: string | null;
   reason: string | null;
   createdKpmId: string | null;
   /** What an approval made (P19-T3 AC-3); `deleted` once that office has been deleted. */
@@ -303,11 +319,12 @@ export const readKpmRequests = () => api<KpmRequestRow[]>('/admin/kpm-requests')
  * **"Setujui & jadikan Owner"** (ADR-0191 §3, P19-T3 AC-3): the office and its Owner in one step, or nothing. `companyId`
  * when the Super Admin corrected the company on the card. A second press answers the same office.
  */
-export const approveKpmRequest = (requestId: string, code: string, companyId?: string, startFrom?: StartFrom) =>
+export const approveKpmRequest = (requestId: string, code?: string, companyId?: string, startFrom?: StartFrom) =>
   api<KpmRequestRow[]>(`/admin/kpm-requests/${requestId}/approve`, {
     method: 'POST',
-    // *Mulai dari* (ADR-0213 §3): offered on the card only when the company has no template.
-    body: { code, ...(companyId ? { companyId } : {}), ...(startFrom ? { startFrom } : {}) },
+    // *Mulai dari* (ADR-0213 §3): offered on the card only when the company has no template. No code: the server makes
+    // the company's next free one (P19.23-T3 AC-2).
+    body: { ...(code ? { code } : {}), ...(companyId ? { companyId } : {}), ...(startFrom ? { startFrom } : {}) },
   });
 
 /** *Hapus*: a wrong or duplicate request, soft-deleted and audited (P19-T3 AC-7). Answers the queue. */
@@ -491,7 +508,8 @@ export interface OwnerInput {
 
 export interface CreateKpmInput {
   companyId: string;
-  code: string;
+  /** Absent: made automatically, the company's next free code (P19.23-T2 AC-3; ADR-0277 §3). */
+  code?: string;
   branchName: string;
   address?: string;
   contactPhone?: string;
@@ -514,10 +532,6 @@ export const assignOwner = (
   id: string,
   who: { email?: string; userId?: string; owner?: OwnerInput; sendInvitation?: boolean },
 ) => api<TenantRow>(`/admin/tenants/${id}/owner`, { method: 'PATCH', body: who });
-
-/** *Kirim ulang undangan* (ADR-0212 §2): a new link to the Owner's email, the old revoked. */
-export const resendOwnerInvitation = (id: string) =>
-  api<TenantRow>(`/admin/tenants/${id}/owner/invitation`, { method: 'POST' });
 
 export const setTenantStatus = (id: string, status: TenantStatus, reason?: string) =>
   api<Kpm>(`/admin/tenants/${id}/status`, { method: 'PATCH', body: { status, reason } });

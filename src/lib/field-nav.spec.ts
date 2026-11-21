@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { makeMe } from '@test/harness';
 import type { Me } from '@/lib/session';
-import { adminNav, fieldNav, isUnder, type AdminWords } from './field-nav';
+import { adminNav, extrasOf, fieldNav, insideKpmNav, isUnder, SETTINGS_HUB, type AdminWords } from './field-nav';
 
 /** A member of the office, with only what a case is about spelled out. */
 function member(over: Partial<NonNullable<Me['membership']>> = {}, me: Partial<Me> = {}): Me {
@@ -38,6 +38,12 @@ const NO_KPM = makeMe({ membership: null, permissions: ['kpm:read_directory', 'p
 
 /** *Tim saya* for a leader by role (UI-159 item 1, OD-247's default), in the client's order. */
 const TIM_SAYA = ['unit', 'coaching', 'newHires', 'userManagement', 'groupTree'];
+/** *Tim saya* for the Owner and the Admins (P19.17-T3 AC-4): one tree, Org tree, so no *Group Tree*. */
+const TIM_SAYA_OFFICE = ['unit', 'coaching', 'newHires', 'userManagement'];
+/** The extras' groups (P19.17-T3 AC-4; `PERMISSIONS.md` *Menu*), in the part E order: KPM · People · Pengaturan last. */
+const KPM_ITEMS = ['kpmOverview', 'advancedAnalytics', 'forum', 'dataUpload'];
+const PEOPLE_OWNER = ['allMembers', 'importPeople', 'orgTree', 'kpmAdmins'];
+const PEOPLE_CORE_LEADER = ['allMembers', 'importPeople', 'orgTree'];
 /** Every item an Agent has (D-37, UI-166 item 1): the bar, and the sheet's and the sidebar's groups. */
 const AGENT_NAV = {
   tabs: ['activity', 'calendar', 'home', 'summary'],
@@ -96,7 +102,7 @@ describe('UI-004 fieldNav: the tab bar, the Lainnya sheet and the sidebar, from 
     expect(nav.groups.find((g) => g.id === 'timSaya')?.items.map((i) => i.id)).toEqual(TIM_SAYA);
   });
 
-  it('P19.13-T2 AC-4 D-20 gives a Core Leader every group, in the owner’s order, the first section Home · Activity · Calendar · Unit Dashboard, and Search agent', () => {
+  it('P19.17-T3 AC-4 gives a core leader every group, in part E’s order — KPM · People without KPM admins · Pengaturan last — and keeps Group Tree', () => {
     expect(ids(fieldNav(CORE_LEADER, '/goals'))).toEqual({
       tabs: ['activity', 'calendar', 'home', 'unit'],
       top: ['home', 'activity', 'calendar', 'unit'],
@@ -106,7 +112,9 @@ describe('UI-004 fieldNav: the tab bar, the Lainnya sheet and the sidebar, from 
         aktivitas: ['sales', 'recruitment'],
         timSaya: TIM_SAYA,
         program: ['campaign', 'event'],
-        kpm: ['forum', 'kpmAnalytics', 'advancedAnalytics'],
+        kpm: KPM_ITEMS,
+        people: PEOPLE_CORE_LEADER,
+        pengaturan: ['settings'],
       },
     });
   });
@@ -116,7 +124,8 @@ describe('UI-004 fieldNav: the tab bar, the Lainnya sheet and the sidebar, from 
     const all = [...nav.top, ...nav.groups.flatMap((g) => g.items)];
     const named = (id: string) => all.find((d) => d.id === id)!;
     expect([named('userManagement').short, named('userManagement').label]).toEqual(['User Mgmt', 'User Management']);
-    expect([named('forum').short, named('forum').label]).toEqual(['Leader Forum', 'Strategic Leader Forum']);
+    // P19.17-T3 AC-7 (`lainnya-owner-mobile`): the tile names it in full, on two lines.
+    expect([named('forum').short, named('forum').label]).toEqual(['Strategic Leader Forum', 'Strategic Leader Forum']);
     expect([named('unit').short, named('unit').label]).toEqual(['Unit Dashboard', 'Unit Dashboard']);
     expect([nav.tabs[3].short, nav.tabs[3].label]).toEqual(['Unit', 'Unit Dashboard']);
     // P19.5-T3 AC-1: a working item, opening the page's index — the template's first section that is on.
@@ -129,7 +138,7 @@ describe('UI-004 fieldNav: the tab bar, the Lainnya sheet and the sidebar, from 
     for (const me of [AGENT, AB, AAB, CORE_LEADER, OWNER, ADMIN, NO_KPM]) {
       expect(fieldNav(me, '/home').groups[0].items.map((i) => i.id)).toContain('surveys');
     }
-    const en = fieldNav(AGENT, '/surveys/run-1', 'self', { surveys: 'Surveys' });
+    const en = fieldNav(AGENT, '/surveys/run-1', { surveys: 'Surveys' });
     expect(en.groups[0].items.find((i) => i.id === 'surveys')).toMatchObject({ label: 'Surveys', active: true });
     expect(en.inSheet).toBe(true);
     expect(fieldNav(CORE_LEADER, '/kpm/advanced-analytics/qual').groups.flatMap((g) => g.items)
@@ -147,6 +156,8 @@ describe('UI-004 fieldNav: the tab bar, the Lainnya sheet and the sidebar, from 
 
   it('D-20 hides the KPM group from a leader who is no Core Leader, and Tim saya’s leader items from an Agent', () => {
     expect(ids(fieldNav(AB, '/goals')).groups.kpm).toBeUndefined();
+    // P19.17-T3 AC-4 (`lainnya-owner-mobile` f06): a normal AB or AAB has Saya · Aktivitas · Tim saya · Program only.
+    expect(Object.keys(ids(fieldNav(AB, '/goals')).groups)).toEqual(['saya', 'aktivitas', 'timSaya', 'program']);
     const agent = ids(fieldNav(AGENT, '/goals')).groups;
     // An Agent keeps User Management — it is where they find their office and their leader — and nothing else there.
     expect(agent.timSaya).toEqual(['userManagement']);
@@ -225,13 +236,14 @@ describe('UI-004 fieldNav: the tab bar, the Lainnya sheet and the sidebar, from 
     expect(fieldNav(AB, '/unit/dashboards').tabs[3].active).toBe(false);
   });
 
-  it('every destination opens a route the app has, or the Home another task builds', () => {
+  it('every destination opens a route the app has, or the Pengaturan hub Phase 19.21 builds', () => {
     const nav = fieldNav(CORE_LEADER, '/goals');
     const hrefs = [...nav.tabs, ...nav.top, ...nav.groups.flatMap((g) => g.items)].map((d) => d.href);
     expect(new Set(hrefs)).toEqual(new Set([
       '/activity/log', '/calendar', '/home', '/unit/dashboard', '/group-tree', '/leads', '/goals', '/summary', '/training',
       '/attack-plan', '/recruitment/attack-plan', '/coaching', '/new-hires', '/user-management/add', '/campaigns', '/events',
-      '/leader-meetings', '/kpm/analytics', '/kpm/advanced-analytics', '/surveys',
+      '/kpm/overview', '/kpm/advanced-analytics', '/leader-meetings', '/kpm/data-upload', '/people/members',
+      '/people/import', '/people/org-tree', SETTINGS_HUB, '/surveys',
     ]));
   });
   /*
@@ -286,8 +298,13 @@ describe('UI-004 fieldNav: the tab bar, the Lainnya sheet and the sidebar, from 
       ['a KPM Owner on the AB rung, with no team', OWNER],
       ['a KPM Admin on the agent rung, with no team', ADMIN],
       ['a KPM Owner with a team', member({ orgLevelCode: 'AB', hierarchyRole: 'ab', isKpmOwner: true, directCount: 6 })],
-    ])('P19-T4 AC-6 %s, in the field view, sees a leader’s items', (_, me) => {
-      expect(ids(fieldNav(me, '/goals'))).toEqual(LEADER_NAV);
+    ])('P19-T4 AC-6, P19.17-T3 AC-4 %s sees a leader’s items, without Group Tree, and the extras', (_, me) => {
+      expect(ids(fieldNav(me, '/goals'))).toEqual({
+        ...LEADER_NAV,
+        groups: {
+          ...LEADER_NAV.groups, timSaya: TIM_SAYA_OFFICE, kpm: KPM_ITEMS, people: PEOPLE_OWNER, pengaturan: ['settings'],
+        },
+      });
     });
 
     it('P19-T4 AC-4 somebody in no office sees every Agent item, User Management opening on Register KPM', () => {
@@ -300,11 +317,13 @@ describe('UI-004 fieldNav: the tab bar, the Lainnya sheet and the sidebar, from 
       expect(ids(fieldNav(member({ hierarchyRole: 'ab', status }), '/goals'))).toEqual(AGENT_NAV);
     });
 
-    it('P19-T4 AC-6 every item of every role opens a route the app has', () => {
+    it('P19-T4 AC-6 every item of every role opens a route the app has (the Pengaturan hub: Phase 19.21)', () => {
       const routes = new Set([
         '/activity/log', '/calendar', '/home', '/unit/dashboard', '/group-tree', '/leads', '/goals', '/summary', '/training',
         '/attack-plan', '/recruitment/attack-plan', '/coaching', '/new-hires', '/user-management/add', '/user-management/kpm',
-        '/campaigns', '/events', '/leader-meetings', '/kpm/analytics', '/kpm/advanced-analytics', '/activation', '/surveys',
+        '/campaigns', '/events', '/leader-meetings', '/kpm/advanced-analytics', '/activation', '/surveys',
+        '/kpm/overview', '/kpm/data-upload', '/people/members', '/people/import', '/people/org-tree', '/people/admins',
+        SETTINGS_HUB,
       ]);
       for (const me of [AGENT, AAB_ALONE, AB_ALONE, AAB, AB, CORE_LEADER, OWNER, ADMIN, NO_KPM, NEW_HIRE]) {
         const nav = fieldNav(me, '/home');
@@ -314,152 +333,198 @@ describe('UI-004 fieldNav: the tab bar, the Lainnya sheet and the sidebar, from 
   });
 });
 
-describe('P19.2-T1 AC-6 the office view’s menu (UI-147; ADR-0198 §2)', () => {
+/*
+ * **P19.17-T3: one login, one menu, decided by the role** (AC-1, AC-4; ADR-0269 §1, §4; `PERMISSIONS.md` *Menu*; the
+ * brief's part B and part E). The office view (P19.2-T1 AC-6, ADR-0198 §2) is gone: whoever runs the office has their
+ * field menu and the extras after it, on every page, and so has a core leader.
+ */
+describe('P19.17-T3 AC-4 one menu, by role: the field menu and the extras', () => {
   const groupsOf = (nav: ReturnType<typeof fieldNav>) => nav.groups.map((g) => g.id);
   const itemsOf = (nav: ReturnType<typeof fieldNav>, id: string) =>
     nav.groups.find((g) => g.id === id)?.items.map((d) => d.label) ?? [];
   const CORE_OWNER = member({ orgLevelCode: 'AB', hierarchyRole: 'ab', isKpmOwner: true, isCoreLeader: true });
 
-  it('P19.2-T1 AC-6 adds, after Program, KPM · Pengaturan · People for the Owner, in the console’s order', () => {
-    const nav = fieldNav(OWNER, '/kpm/overview', 'kpm_owner');
-    expect(groupsOf(nav)).toEqual(['saya', 'aktivitas', 'timSaya', 'program', 'kpm', 'pengaturan', 'people']);
-    expect(itemsOf(nav, 'kpm')).toEqual(['Overview', 'KPM Analytics', 'Advanced analytics', 'Strategic Leader Forum', 'Data upload']);
-    expect(itemsOf(nav, 'pengaturan')).toEqual([
-      'Activity types', 'Lead statuses', 'Activation checklist', 'Training', 'Capability Mapping', 'Events', 'Campaigns',
-      'Products', 'Recruitment pitch', 'Branch info',
-      // P19.6-T1 (ADR-0218 §1; §B7): *Pengaturan → Tampilan KPM*, after *Branch info*.
-      'Tampilan KPM',
+  it('P19.17-T3 AC-4 the Owner: Saya · Aktivitas · Tim saya · Program · KPM · People · Pengaturan, on every page', () => {
+    for (const path of ['/home', '/kpm/overview', '/goals', '/people/members']) {
+      const nav = fieldNav(OWNER, path);
+      expect(groupsOf(nav)).toEqual(['saya', 'aktivitas', 'timSaya', 'program', 'kpm', 'people', 'pengaturan']);
+    }
+    const nav = fieldNav(OWNER, '/home');
+    expect(itemsOf(nav, 'kpm')).toEqual(['Overview', 'Advanced analytics', 'Strategic Leader Forum', 'Data upload']);
+    expect(itemsOf(nav, 'people')).toEqual(['All members', 'Import people', 'Org tree', 'KPM admins']);
+    expect(itemsOf(nav, 'pengaturan')).toEqual(['Pengaturan']);
+    // P19.5-T3 AC-1: Advanced analytics opens the page's index.
+    expect(nav.groups.flatMap((g) => g.items).find((d) => d.id === 'advancedAnalytics'))
+      .toMatchObject({ href: '/kpm/advanced-analytics', active: false });
+  });
+
+  it('P19.17-T3 AC-4 an Admin has the Owner’s menu, KPM admins included (an Admin reads it, ADR-0268 §2)', () => {
+    expect(ids(fieldNav(ADMIN, '/home'))).toEqual(ids(fieldNav(OWNER, '/home')));
+    expect(itemsOf(fieldNav(ADMIN, '/home'), 'people')).toContain('KPM admins');
+  });
+
+  it('P19.17-T3 AC-4 a core leader: KPM, People without KPM admins, Pengaturan — and their Group Tree', () => {
+    const nav = fieldNav(CORE_LEADER, '/home');
+    expect(groupsOf(nav)).toEqual(['saya', 'aktivitas', 'timSaya', 'program', 'kpm', 'people', 'pengaturan']);
+    expect(itemsOf(nav, 'people')).toEqual(['All members', 'Import people', 'Org tree']);
+    expect(nav.groups.find((g) => g.id === 'timSaya')!.items.map((d) => d.id)).toEqual(TIM_SAYA);
+  });
+
+  it('P19.17-T3 AC-4 one tree for the Owner and the Admins: no Group Tree; the Owner who is a core leader is the Owner', () => {
+    for (const me of [OWNER, ADMIN, CORE_OWNER]) {
+      expect(fieldNav(me, '/home').groups.flatMap((g) => g.items).map((d) => d.id)).not.toContain('groupTree');
+    }
+    expect(itemsOf(fieldNav(CORE_OWNER, '/home'), 'people')).toContain('KPM admins');
+  });
+
+  it('P19.17-T3 AC-4 no KPM Analytics, no Core leaders & groups, no settings page but the hub, for anybody', () => {
+    for (const me of [OWNER, ADMIN, CORE_LEADER, CORE_OWNER, AB, AGENT]) {
+      const all = JSON.stringify(fieldNav(me, '/home'));
+      expect(all).not.toContain('/kpm/analytics');
+      expect(all).not.toContain('/people/core-leaders');
+      expect(all).not.toContain('/kpm/settings/');
+    }
+  });
+
+  it('P19.17-T3 AC-4 nobody else has an extra: an AB, an AAB, an Agent, somebody in no office, a pending Owner', () => {
+    for (const me of [AB, AAB, AGENT, NO_KPM, member({ isKpmOwner: true, status: 'pending' }), member({ isCoreLeader: true, status: 'pending' })]) {
+      expect(groupsOf(fieldNav(me, '/home'))).toEqual(['saya', 'aktivitas', 'timSaya', 'program']);
+      expect(extrasOf(me.membership)).toBeNull();
+    }
+  });
+
+  it('P19.17-T3 AC-5, AC-7 the extras carry their tag — owner for the Owner and the Admins, coreLeader for a core leader', () => {
+    expect(extrasOf(OWNER.membership)).toBe('owner');
+    expect(extrasOf(ADMIN.membership)).toBe('owner');
+    expect(extrasOf(CORE_OWNER.membership)).toBe('owner');
+    expect(extrasOf(CORE_LEADER.membership)).toBe('coreLeader');
+    const tags = (me: Me) => fieldNav(me, '/home').groups.map((g) => [g.id, g.tag ?? null]);
+    expect(tags(OWNER)).toEqual([
+      ['saya', null], ['aktivitas', null], ['timSaya', null], ['program', null],
+      ['kpm', 'owner'], ['people', 'owner'], ['pengaturan', 'owner'],
     ]);
-    // P19.13-T3 AC-1 (UI-199): *Core leaders & groups* fifth, last.
-    expect(itemsOf(nav, 'people')).toEqual(['All members', 'Import people', 'Org tree', 'Manage KPM admins', 'Core leaders & groups']);
-    // P19.5-T3 AC-1: Advanced analytics opens the page's index (no longer *Segera hadir*, nor the survey tabs alone).
-    const advanced = nav.groups.flatMap((g) => g.items).find((d) => d.id === 'advancedAnalytics')!;
-    expect(advanced).toMatchObject({ href: '/kpm/advanced-analytics', active: false });
+    expect(tags(CORE_LEADER).slice(4)).toEqual([['kpm', 'coreLeader'], ['people', 'coreLeader'], ['pengaturan', 'coreLeader']]);
   });
 
-  it('P19.2-T1 AC-6 gives an Admin KPM · Pengaturan · People without Manage KPM admins (§1.6)', () => {
-    const nav = fieldNav(ADMIN, '/kpm/overview', 'kpm_admin');
-    expect(groupsOf(nav)).toEqual(['saya', 'aktivitas', 'timSaya', 'program', 'kpm', 'pengaturan', 'people']);
-    // P19.13-T3 AC-1: an Admin has *Core leaders & groups* too, with the Owner's rights.
-    expect(itemsOf(nav, 'people')).toEqual(['All members', 'Import people', 'Org tree', 'Core leaders & groups']);
+  it('P19.17-T3 AC-5, AC-6 Pengaturan is one item, the hub, pinned and last; every other group has its rail icon', () => {
+    const nav = fieldNav(OWNER, '/home', { surveys: 'Survei', settings: 'Pengaturan', settingsTile: 'Pengaturan KPM' });
+    const last = nav.groups.at(-1)!;
+    expect(last).toMatchObject({ id: 'pengaturan', pinned: true });
+    expect(last.items).toEqual([expect.objectContaining({
+      id: 'settings', href: '/kpm/settings', icon: 'ti-settings', label: 'Pengaturan', short: 'Pengaturan KPM',
+    })]);
+    expect(nav.groups.filter((g) => g.pinned)).toHaveLength(1);
+    expect(nav.groups.map((g) => g.railIcon ?? null)).toEqual([
+      'ti-user-circle', 'ti-activity', 'ti-users-group', 'ti-trophy', 'ti-building-skyscraper', 'ti-address-book', null,
+    ]);
   });
 
-  /*
-   * P19.15-T4 AC-2 (ADR-0260 §5; the P1b spec's *Giving access*): ***Data produk*** after *Products*, for an Owner or an
-   * Admin whose *Kelola data produk* ticks an insurer — `productDataCompanyIds` on the session — and for nobody else; on a
-   * phone it is in *Lainnya*, the sheet holding the office's groups.
-   */
-  it('P19.15-T4 AC-2 gives a holder of Kelola data produk Data produk after Products, current on /kpm/data-produk', () => {
-    const holder = member({ isKpmAdmin: true, directCount: 0 }, { productDataCompanyIds: ['co-pru'] });
-    const nav = fieldNav(holder, '/kpm/data-produk', 'kpm_admin', { surveys: 'Survei', productData: 'Data produk' });
-    expect(itemsOf(nav, 'pengaturan').slice(7, 9)).toEqual(['Products', 'Data produk']);
-    expect(nav.groups.flatMap((g) => g.items).find((d) => d.id === 'productData'))
-      .toMatchObject({ href: '/kpm/data-produk', active: true, icon: 'document' });
-    expect(nav.inSheet).toBe(true);
-    expect(itemsOf(fieldNav(member({ isKpmOwner: true, hierarchyRole: 'ab' }, { productDataCompanyIds: ['co-pru'] }),
-      '/home', 'kpm_owner'), 'pengaturan')).toContain('Data produk');
+  it.each(['/kpm/settings', '/kpm/settings/products', '/kpm/settings/training/mod-1', '/kpm/data-produk'])(
+    'P19.17-T3 AC-4 Pengaturan is current on %s — the hub, the pages under it and Data produk — and Lainnya holds it',
+    (path) => {
+      const nav = fieldNav(ADMIN, path);
+      expect(nav.groups.flatMap((g) => g.items).filter((d) => d.active).map((d) => d.id)).toEqual(['settings']);
+      expect(nav.inSheet).toBe(true);
+    },
+  );
+
+  it('P19.17-T3 AC-5 every item, the tab bar’s too, wears a Tabler outline icon, one per item (part E, brief line 140)', () => {
+    const nav = fieldNav(OWNER, '/home');
+    const icons = Object.fromEntries([...nav.top, ...nav.groups.flatMap((g) => g.items)].map((d) => [d.id, d.icon]));
+    expect(icons).toEqual({
+      home: 'ti-home', activity: 'ti-list-check', calendar: 'ti-calendar', unit: 'ti-chart-bar',
+      leads: 'ti-address-book', goals: 'ti-target', summary: 'ti-report', training: 'ti-school', surveys: 'ti-clipboard-list',
+      sales: 'ti-compass', recruitment: 'ti-user-search',
+      coaching: 'ti-messages', newHires: 'ti-user-plus', userManagement: 'ti-users-group',
+      campaign: 'ti-trophy', event: 'ti-calendar-event',
+      kpmOverview: 'ti-layout-dashboard', advancedAnalytics: 'ti-chart-dots', forum: 'ti-presentation', dataUpload: 'ti-upload',
+      allMembers: 'ti-users', importPeople: 'ti-file-import', orgTree: 'ti-hierarchy-2', kpmAdmins: 'ti-user-shield',
+      settings: 'ti-settings',
+    });
+    expect(fieldNav(AB, '/home').groups.flatMap((g) => g.items).find((d) => d.id === 'groupTree')!.icon).toBe('ti-sitemap');
+    expect(nav.tabs.map((t) => t.icon)).toEqual(['ti-list-check', 'ti-calendar', 'ti-home', 'ti-chart-bar']);
   });
 
-  it('P19.15-T4 AC-3 offers Data produk to no Owner or Admin without it, and to nobody in the field view', () => {
-    expect(itemsOf(fieldNav(OWNER, '/kpm/overview', 'kpm_owner'), 'pengaturan')).not.toContain('Data produk');
-    expect(itemsOf(fieldNav(ADMIN, '/kpm/overview', 'kpm_admin'), 'pengaturan')).not.toContain('Data produk');
-    const holder = member({ isKpmAdmin: true, directCount: 0 }, { productDataCompanyIds: ['co-pru'] });
-    expect(fieldNav(holder, '/home').groups.flatMap((g) => g.items).some((d) => d.id === 'productData')).toBe(false);
-  });
-
-  it('P19.13-T3 AC-1 Core leaders & groups opens /people/core-leaders, current there, from Lainnya (the sheet holds it)', () => {
-    const nav = fieldNav(OWNER, '/people/core-leaders', 'kpm_owner');
-    const item = nav.groups.flatMap((g) => g.items).find((d) => d.id === 'coreLeaders')!;
-    expect(item).toMatchObject({ href: '/people/core-leaders', active: true, icon: 'star' });
-    expect(nav.inSheet).toBe(true);
-  });
-
-  it('P19.2-T1 AC-6 keeps the leader bar in the office view: Activity · Calendar · Home · Unit, and Lainnya current on an office page', () => {
-    const nav = fieldNav(ADMIN, '/kpm/settings/products', 'kpm_admin');
+  it('P19.17-T3 AC-4 the Owner keeps the leader bar: Activity · Calendar · Home · Unit, and Lainnya current on an office page', () => {
+    const nav = fieldNav(OWNER, '/people/org-tree');
     expect(nav.tabs.map((t) => t.short)).toEqual(['Activity', 'Calendar', 'Home', 'Unit']);
     expect(nav.inSheet).toBe(true);
-    expect(nav.groups.flatMap((g) => g.items).filter((d) => d.active).map((d) => d.id)).toEqual(['products']);
   });
 
-  it('P19.2-T1 AC-6 the office’s KPM takes the place of a Core Leader’s: one KPM group, the forum and analytics in it once', () => {
-    const nav = fieldNav(CORE_OWNER, '/home', 'kpm_owner');
-    expect(groupsOf(nav).filter((g) => g === 'kpm')).toHaveLength(1);
-    expect(itemsOf(nav, 'kpm')).toContain('Strategic Leader Forum');
-    expect(nav.groups.flatMap((g) => g.items).filter((d) => d.id === 'forum')).toHaveLength(1);
-  });
-
-  it('P19.2-T1 AC-6 Akun saya keeps the field menu the rung gives: no office group for the Owner or the Admin there', () => {
-    for (const me of [OWNER, ADMIN]) {
-      const nav = fieldNav(me, '/home', 'self');
-      expect(groupsOf(nav)).not.toContain('pengaturan');
-      expect(groupsOf(nav)).not.toContain('people');
-      expect(nav.groups.find((g) => g.id === 'timSaya')!.items.map((d) => d.id)).toEqual(TIM_SAYA);
-    }
-    // A Core Leader who is the Owner keeps their own KPM group in Akun saya, as before.
-    expect(itemsOf(fieldNav(CORE_OWNER, '/home', 'self'), 'kpm')).toEqual(['Strategic Leader Forum', 'KPM Analytics', 'Advanced analytics']);
-  });
-
-  it('P19.2-T1 AC-6 an office view the reader does not hold draws the field menu: the view is a menu, never a grant', () => {
-    for (const me of [AB, AGENT, member({ isKpmOwner: true, status: 'pending' })]) {
-      expect(groupsOf(fieldNav(me, '/home', 'kpm_owner'))).not.toContain('pengaturan');
-    }
-  });
-
-  it('P19.2-T1 AC-6 every office page is two taps away at most: Lainnya, then its tile', () => {
-    const nav = fieldNav(OWNER, '/home', 'kpm_owner');
-    const hrefs = nav.groups.flatMap((g) => g.items).filter((d) => !d.soon).map((d) => d.href);
+  it('P19.17-T3 AC-4 every extra page is two taps away at most: Lainnya, then its tile', () => {
+    const nav = fieldNav(OWNER, '/home');
+    const hrefs = nav.groups.flatMap((g) => g.items).map((d) => d.href);
     for (const href of [
-      '/kpm/overview', '/kpm/analytics', '/kpm/data-upload', '/leader-meetings', '/kpm/settings/activity-types',
-      '/kpm/settings/lead-statuses', '/kpm/settings/activation-checklist', '/kpm/settings/training',
-      '/kpm/settings/capability-mapping', '/kpm/settings/events', '/kpm/settings/campaigns', '/kpm/settings/products',
-      '/kpm/settings/recruitment-pitch', '/kpm/settings/branch-info', '/people/members', '/people/import',
-      '/people/org-tree', '/people/admins',
+      '/kpm/overview', '/kpm/advanced-analytics', '/leader-meetings', '/kpm/data-upload', '/people/members',
+      '/people/import', '/people/org-tree', '/people/admins', '/kpm/settings',
     ]) expect(hrefs).toContain(href);
   });
 });
 
-describe('P19.2-T1 AC-9 the Super Admin’s menu (UI-127; ADR-0197 §3)', () => {
+describe('P19.23-T1 AC-1 the Super Admin’s console menu (ADR-0277 §1)', () => {
   const WORDS = {
-    overview: 'Overview', manageCompanies: 'Manage companies', orgRoleLadder: 'Org role ladder', allKpms: 'All KPMs',
-    allMembers: 'All members', pendingKpmRequests: 'Pending KPM requests', leadersPastTheLimit: 'Leaders past the limit',
-    billing: 'Billing & subscription', tenantAdmins: 'KPM Owners & Admins', audit: 'Audit / role change log',
-    crossPlatformAnalytics: 'Cross-platform analytics', barKpms: 'KPMs', barCompanies: 'Perusahaan', barAnalytics: 'Analytics',
+    dashboard: 'Dashboard', kpm: 'KPM', members: 'Anggota', companies: 'Perusahaan', companiesTile: 'Perusahaan & template',
+    approvals: 'Persetujuan', billing: 'Langganan', platform: 'Platform',
   } as unknown as AdminWords;
 
-  it('P19.2-T1 AC-9 the bar: Overview /admin · KPMs /admin/tenants · Perusahaan /admin/companies · Analytics /admin/analytics', () => {
+  it('P19.23-T1 AC-1 the rail: Dashboard · KPM · Anggota · Perusahaan · Persetujuan · Langganan, Platform pinned last', () => {
+    const nav = adminNav('/admin', WORDS, { approvalsPending: 3 });
+    expect(nav.top.map((d) => [d.label, d.href, d.icon])).toEqual([
+      ['Dashboard', '/admin', 'ti-layout-dashboard'], ['KPM', '/admin/tenants', 'ti-building'],
+      ['Anggota', '/admin/members', 'ti-users'], ['Perusahaan', '/admin/companies', 'ti-briefcase'],
+      ['Persetujuan', '/admin/approvals', 'ti-checklist'], ['Langganan', '/admin/billing', 'ti-credit-card'],
+    ]);
+    // The sidebar pins its pinned group's last item: *Platform*, with the line above it.
+    const pinned = nav.groups.find((g) => g.pinned)!;
+    expect(pinned.items[pinned.items.length - 1]).toMatchObject({ label: 'Platform', href: '/admin/platform', icon: 'ti-settings' });
+    expect(nav.top.find((d) => d.id === 'consoleApprovals')!.badge).toBe(3);
+    // No agent picker on the platform.
+    expect(nav.search).toBeNull();
+  });
+
+  it('P19.23-T1 AC-1 the phone: Dashboard · KPM · Anggota · Langganan, and Lainnya’s Perusahaan & template · Persetujuan · Platform', () => {
     const nav = adminNav('/admin', WORDS);
     expect(nav.tabs.map((t) => [t.short, t.href])).toEqual([
-      ['Overview', '/admin'], ['KPMs', '/admin/tenants'], ['Perusahaan', '/admin/companies'], ['Analytics', '/admin/analytics'],
+      ['Dashboard', '/admin'], ['KPM', '/admin/tenants'], ['Anggota', '/admin/members'], ['Langganan', '/admin/billing'],
+    ]);
+    expect(nav.groups.map((g) => [g.id, g.items.map((d) => d.short)])).toEqual([
+      ['console', ['Perusahaan & template', 'Persetujuan', 'Platform']],
     ]);
     expect(nav.tabs[0].active).toBe(true);
+  });
+
+  it('P19.23-T1 AC-1 each item is current beneath it, Dashboard on /admin alone, and Lainnya on the sheet’s pages', () => {
     expect(adminNav('/admin/tenants/kpm-1', WORDS).tabs.map((t) => t.active)).toEqual([false, true, false, false]);
+    expect(adminNav('/admin/tenant-admins', WORDS).tabs.map((t) => t.active)).toEqual([false, false, true, false]);
+    for (const [path, id] of [
+      ['/admin/org-levels', 'consoleCompanies'], ['/admin/kpm-requests', 'consoleApprovals'],
+      ['/admin/leader-limit-requests', 'consoleApprovals'], ['/admin/audit', 'consolePlatform'], ['/admin/platform/team', 'consolePlatform'],
+    ] as const) {
+      const nav = adminNav(path, WORDS);
+      expect(nav.inSheet).toBe(true);
+      expect(nav.groups[0].items.find((d) => d.id === id)!.active).toBe(true);
+      expect(nav.tabs[0].active).toBe(false);
+    }
   });
+});
 
-  it('P19.2-T1 AC-9 the sheet and the laptop sidebar: the sidebar’s groups unchanged, Overview alone at its top', () => {
-    const nav = adminNav('/admin', WORDS, { leaderLimitPending: 2 });
-    expect(nav.top.map((d) => d.label)).toEqual(['Overview']);
-    // P19.13-T2 AC-3 (UI-196): no agent picker on the platform, so no *Search agent* field.
-    expect(nav.search).toBeNull();
-    expect(nav.groups.map((g) => [g.id, g.items.map((d) => d.label)])).toEqual([
-      ['companies', ['Manage companies', 'Org role ladder']],
-      // P19.4-T3 AC-1 (SA UI-010): *All members* after *All KPMs*.
-      ['kpms', ['All KPMs', 'All members', 'Pending KPM requests', 'Leaders past the limit', 'Billing & subscription']],
-      ['platformAdmin', ['KPM Owners & Admins', 'Audit / role change log']],
-      ['reporting', ['Cross-platform analytics']],
+describe('P19.23-T2 AC-5 the Owner’s menu for a Super Admin inside a KPM (ADR-0277 §3)', () => {
+  it('P19.23-T2 AC-5 KPM · People · Pengaturan as the Owner has them, tagged; none of a member’s own groups', () => {
+    const nav = insideKpmNav('/kpm/overview', { surveys: 'Survei', settings: 'Pengaturan', settingsTile: 'Pengaturan KPM' });
+    expect(nav.groups.map((g) => [g.id, g.tag, g.items.map((d) => d.href)])).toEqual([
+      ['kpm', 'owner', ['/kpm/overview', '/kpm/advanced-analytics', '/leader-meetings', '/kpm/data-upload']],
+      ['people', 'owner', ['/people/members', '/people/import', '/people/org-tree', '/people/admins']],
+      ['pengaturan', 'owner', ['/kpm/settings']],
     ]);
-    expect(nav.groups[1].items[1].href).toBe('/admin/members');
-    expect(nav.groups[1].items[3].badge).toBe(2);
+    expect(nav.top).toEqual([]);
+    expect(nav.search).toBeNull();
+    expect(nav.tabs.map((t) => t.href)).toEqual(['/kpm/overview', '/people/members', '/kpm/data-upload', '/kpm/settings']);
+    expect(nav.tabs[0].active).toBe(true);
   });
 
-  it('P19.2-T1 AC-9 every Super Admin page in two taps: on the bar, or Lainnya then a tile — and Lainnya current there', () => {
-    const nav = adminNav('/admin/audit', WORDS);
+  it('P19.23-T2 AC-5 an owner page off the bar is Lainnya’s', () => {
+    const nav = insideKpmNav('/people/org-tree', { surveys: 'Survei' });
     expect(nav.inSheet).toBe(true);
-    const reach = new Set([...nav.tabs, ...nav.groups.flatMap((g) => g.items)].map((d) => d.href));
-    for (const href of [
-      '/admin', '/admin/companies', '/admin/org-levels', '/admin/tenants', '/admin/members', '/admin/kpm-requests',
-      '/admin/leader-limit-requests', '/admin/billing', '/admin/tenant-admins', '/admin/audit', '/admin/analytics',
-    ]) expect(reach).toContain(href);
-    // Overview is current on /admin alone: every other admin route starts with it.
-    expect(nav.tabs[0].active).toBe(false);
+    expect(nav.tabs.some((t) => t.active)).toBe(false);
   });
 });

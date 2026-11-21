@@ -137,7 +137,11 @@ describe('P19.6-T2 an HTML lesson in a template module’s material', () => {
       [`GET ${BASE}/files/url`]: { body: { url: LESSON_URL } },
     });
     const dialog = within(screen.getByRole('dialog', { name: 'Material: Daftar prospek' }));
-    expect(dialog.getByLabelText('Add to Files').getAttribute('accept')).toBe('.pdf,.png,.jpg,.jpeg,.webp,.csv,.xlsx,text/html,.html,.htm');
+    // The office's list (`TRAINING_FILE_ACCEPT`): an HTML lesson, and since P19.25-T4 (ADR-0282 §3) PowerPoint and Word too.
+    const accept = dialog.getByLabelText('Add to Files').getAttribute('accept')!.split(',');
+    for (const ext of ['.pdf', '.png', '.jpg', '.jpeg', '.webp', '.csv', '.xlsx', 'text/html', '.html', '.htm', '.pptx', '.docx']) {
+      expect(accept).toContain(ext);
+    }
     await userEvent.upload(dialog.getByLabelText('Add to Files'), new File(['<!doctype html>'], 'Pelajaran 01.html', { type: 'text/html' }));
     expect(await dialog.findByText('Pelajaran 01.html')).toBeInTheDocument();
     const signRequest = stub.calls.find((c) => c.url.endsWith('/training/uploads'))!;

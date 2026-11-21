@@ -23,15 +23,21 @@ const SETTINGS = {
   shown: { kpmId: 'k', version: 'v', palette: null, logo: null, logoSquare: false, icons: false, mascotPoses: [], lesson: null, source: { logos: null, colours: null, mascot: null } },
 };
 
-/** **P19.6-T1, *Tampilan KPM* in ID mode** (§B7's own words): the fields, the preview and the two actions in Indonesian. */
+/**
+ * **P19.6-T1, *Tampilan KPM* in ID mode** — *redrawn by P19.21-T4*: the rows, the phone and the two actions in the 19
+ * November mockup's Indonesian (frame 24).
+ */
 describe('P19.6-T1 Tampilan KPM in Indonesian', () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it('P19.6-T1 AC-2 names the page, its five fields and its actions in §B7’s Indonesian', async () => {
+  it('P19.21-T4 AC-2 P19.6-T1 AC-2 names the page, its six rows, the phone and its actions in the mockup’s Indonesian', async () => {
     stubFetch({ '/kpm/settings/branding': { body: SETTINGS } });
     const { container } = renderInIndonesian(<BrandingPage />, { me: OWNER });
     expect(await screen.findByRole('heading', { name: 'Tampilan KPM' })).toBeInTheDocument();
-    for (const words of ['Warna utama', 'Warna kedua', 'Maskot', 'Logo (persegi, opsional)', 'Pratinjau langsung', 'Simpan', 'Kembalikan ke default']) {
+    for (const words of [
+      'Nama sistem', 'Warna utama', 'Warna kedua', 'Maskot', 'Logo persegi', 'Pratinjau langsung', 'Simpan', 'Kembalikan ke default',
+      'Target bulan ini', 'Catat aktivitas',
+    ]) {
       expect(screen.getAllByText(words).length).toBeGreaterThan(0);
     }
     expect(englishShown(container, englishOnly(brandingMessages))).toEqual([]);

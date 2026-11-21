@@ -1,49 +1,52 @@
-import { StatTile } from '@/components/ui/stat-tile';
+'use client';
+
+import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { TippedGlyph } from '@/components/ui/tipped-glyph';
 import { messagesIn } from '@/i18n/catalogue';
-import { kept } from '@/i18n/kept';
 import { SOURCE_LANGUAGE, type Language } from '@/i18n/language';
 import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
 import { unitDashboardMessages } from '@/i18n/messages/unit-dashboard';
-import { formatMonthLong, formatMonthName, formatNumber, formatPercent, formatRupiahCompact, percentOf } from '@/lib/format';
+import { cn } from '@/lib/cn';
+import { formatMonthLong, formatMonthName, formatNumber, formatPercent, formatRupiahCompact } from '@/lib/format';
 import {
-  everyRow, goalShare, missingWords, namesMissing, namesNewHires, newHireWords, splitMoney, totalNote,
+  everyRow, goalShare, missingWords, namesMissing, namesNewHires, newHireWords, totalNote,
   type UnitDashboardView, type UnitPeriod,
 } from '@/lib/unit-dashboard';
 
+/** Which sheet a navy tile opens (P19.18-T1 AC-4). */
+export type UnitTileSheetKind = 'activeAgent' | 'recruitment';
+
+/** The three numbers' size, in px: 24, stepping down together to 16 (the brief: *"must fit 4 digits"*). */
+export const PANEL_NUMBER_MAX_PX = 24;
+export const PANEL_NUMBER_MIN_PX = 16;
+
 /**
- * **The four stat tiles** (UI V1, UI-003; `unit-dashboard-mobile` screen 1, `unit-dashboard-desktop` *Overview*): the
- * shared `StatTile`, ~90px, a 12px label, one number with its unit small and grey, one row of chips — *Unit* first, then
- * *AAB*. **Two by two below 1024px** (a tablet keeps its 2×2, the labels new), **one row of four from 1024px**; no names
- * in a tile.
+ * **The orange panel** (P19.18-T1 AC-3; ADR-0271 §3; the brief of 19 November 2026, part A; `unit-overview-*` frame 3,
+ * laptop frame 1): one panel in the accent, its words in the accent's contrast (navy).
  *
- * | Tile | Number | Extra | Chips |
- * |---|---|---|---|
- * | *Tim Anda* | 12 agent | — | 4 langsung · 8 AAB |
- * | *Produksi Group* | Rp 333,5 Jt | *54%* badge, the bar, *dari Rp 612,3 Jt* | — |
- * | *Active Agent {Bulan}* | 4 dari 12 | the ring, *33%* (UI-013: out of manpower) | Unit 1/4 · AAB 3/8 |
- * | *Recruitment {Bulan}* | 2 kandidat | — | Unit 1 · AAB 1 |
+ * - ***Produksi Group*** with the navy % pill, *Rp 2,2 M* realised ***dari*** *Rp 8,2 M* and a navy bar — the server's
+ *   paired total (ADR-0165 §1). *Belum diunggah* with nothing held, *Goal belum diatur* with no target; never 0. The ⓘ
+ *   still names who holds no figure and the new hires it leaves out.
+ * - **Three short tiles**: ***Tim Anda*** (white), ***Active Agent · Nov*** and ***Recruitment · Nov*** (navy, the number in
+ *   the accent) — one number and one label each; **no split chips** (the downline filter does that), **no "/total"**.
+ *   Columns 0.86 : 1.07 : 1.07, 6px apart. **The three numbers share one size** — 24px, stepping down together to 16px
+ *   until all three fit (`useSharedFit`, the mockup's `fitNums`), so four digits line up. The month chip sits at the right
+ *   of the number row, centred.
+ * - ***Active Agent*** is the upload's count for the office's month (ADR-0267 §2): *–* while the month is not uploaded.
+ *   ***Recruitment*** is the new hires who joined this month (ADR-0267 §3). Each navy tile is a button that opens the
+ *   people behind its number (`onOpen`).
+ * - **Phone**: the production on top and the tiles under it; **from 1024px** Produksi left and the tiles right, 400px.
  *
- * **Every figure is the server's** (`GET /unit/dashboard`'s `tiles`); the ring's share is the two figures it shows, by
- * the shared `percentOf`, whole (UI-080). The production's ⓘ still names who holds no figure and the new hires before a
- * first sale it leaves out (the report's *Don't change*: *missing-upload explanations behind ⓘ*). The month in two
- * labels is the office's, in full, in the figures' language — **on a phone a 12px grey chip of it, *Nov***, as the
- * owner's mobile mockup draws both labels (P19.8-T4, `unit-mobile-stopmotion-2026-11-07`; MOB UI-167's chip on Home).
- *
- * **An empty unit** (P19.8-T4 AC-11, MOB UI-181; ADR-0229 §9): *Active Agent* reads ***0 dari –*** as Home does, with *–*
- * in its ring and its chips (*Unit 0/–*, *AAB 0/–*), where it read *0 dari 0*.
- *
- * **An AB below is never an AAB** (the client's message of 11 November 2026, item 5; ADR-0249 §3): the *AAB* chips count
- * the head's *Grup langsung* only, and while the view holds anybody outside it — *Grup informal*, *Semua downline* — a
- * third chip, ***AB***, counts them, on all three tiles. The chips add up to each tile's number.
+ * Every figure is the server's (`GET /unit/dashboard`'s `tiles`).
  */
-export function UnitTiles({ view, period }: { view: UnitDashboardView; period: UnitPeriod }) {
+export function UnitTiles({
+  view, period, onOpen,
+}: { view: UnitDashboardView; period: UnitPeriod; onOpen?: (kind: UnitTileSheetKind) => void }) {
   const language = useLanguage();
   const figures = useFigureLanguage();
   const t = useMessages(unitDashboardMessages);
-  const { team, directGroupProduction: production, potentialActive: active, potentialRecruits } = view.tiles;
+  const { team, directGroupProduction: production, activeAgent, recruitment } = view.tiles;
   const rows = everyRow(view);
-  const month = formatMonthLong(view.month, figures);
   const number = (n: number) => formatNumber(n, {}, figures);
 
   const missing = totalNote(
@@ -51,106 +54,172 @@ export function UnitTiles({ view, period }: { view: UnitDashboardView; period: U
     newHireWords(team.newHires, namesNewHires(rows, language), language),
   );
   const held = production.actualMinor !== null;
-  const money = held ? splitMoney(formatRupiahCompact(production.actualMinor!, {}, figures)) : null;
   const target = production.targetMinor;
   const sub = !held
     ? target !== null && target > 0 ? t.goal.ofTarget({ sum: formatRupiahCompact(target, {}, figures) }) : null
     : target === null ? t.own.noGoal
       : target === 0 ? t.own.targetMade
         : t.v1.of({ of: formatRupiahCompact(target, {}, figures) });
-  const recruits = potentialRecruits.yourUnit + potentialRecruits.aabs + potentialRecruits.abs;
-  // ADR-0249 §3: the *AB* chip, while the view holds somebody outside the head's *Grup langsung*.
-  const withAb = team.ab > 0;
-  // Nobody to count (MOB UI-181): *–*, never a denominator of 0.
-  const of = (n: number) => (view.empty ? '–' : number(n));
-  const short = formatMonthName(view.month, figures);
-  const productionHeading = (
-    <span className="inline-flex items-center gap-1">
-      <span>{t.v1.groupProduction}</span>
-      {missing && <TippedGlyph glyph="ⓘ" name={missing} tip={missing} align="fit" className="-my-1" />}
-    </span>
-  );
+  const pct = held && production.attainmentPct !== null && target ? production.attainmentPct : null;
+  const bar = goalShare({ ...production, set: target !== null });
+  const monthShort = formatMonthName(view.month, figures);
+  const monthLong = formatMonthLong(view.month, figures);
+  // Nobody to count, or the month not uploaded (MOB UI-181; ADR-0267 §2): *–*, never a 0 that was not counted.
+  const activeValue = view.empty || activeAgent.count === null ? '–' : number(activeAgent.count);
+  const recruitValue = view.empty ? '–' : number(recruitment.count);
+  const values = [view.empty ? '0' : number(team.total), activeValue, recruitValue];
+  const [box, size] = useSharedFit(values.join('|'));
 
   return (
-    // 16px between the tiles from 1024px (P19.13-T1 AC-4; UI-194: the Unit Dashboard's were 12px).
-    <div data-unit-tiles="" className="grid grid-cols-2 gap-2 lg:grid-cols-4 lg:gap-cards">
-      <StatTile
-        label={t.prototype.yourTeam}
-        value={number(team.total)}
-        unit={t.v1.agentUnit({ n: team.total })}
-        chips={teamChips(team, language, figures)}
-      />
-      <StatTile
-        label={productionHeading}
-        value={money ? money.value : <span className="text-lg font-semibold text-muted">{t.own.notUploaded}</span>}
-        unit={money?.unit ?? undefined}
-        badge={held && production.attainmentPct !== null && target ? formatPercent(production.attainmentPct, {}, figures) : undefined}
-        bar={goalShare({ ...production, set: target !== null })}
-        sub={sub === null ? undefined : period === '7d' ? `${sub} · ${t.own.thisMonth}` : sub}
-      />
-      <StatTile
-        label={<MonthLabel short={t.v1.activeAgentShort} month={short} long={t.v1.activeAgent({ month })} />}
-        value={number(active.count)}
-        unit={t.v1.of({ of: of(active.of) })}
-        ring={{ percent: view.empty ? null : percentOf(active.count, active.of) }}
-        chips={[
-          { key: 'unit', label: <>{t.v1.scope.unit} <b>{number(active.unit.count)}</b>/{of(active.unit.of)}</> },
-          { key: 'aab', label: <>{AAB} <b>{number(active.aab.count)}</b>/{of(active.aab.of)}</> },
-          ...(withAb ? [{ key: 'ab', label: <>{AB} <b>{number(active.ab.count)}</b>/{of(active.ab.of)}</> }] : []),
-        ]}
-      />
-      <StatTile
-        label={<MonthLabel short={t.v1.recruitmentShort} month={short} long={t.v1.recruitment({ month })} />}
-        value={number(recruits)}
-        unit={t.v1.candidateUnit({ n: recruits })}
-        chips={[
-          { key: 'unit', label: <>{t.v1.scope.unit} <b>{number(potentialRecruits.yourUnit)}</b></> },
-          { key: 'aab', label: <>{AAB} <b>{number(potentialRecruits.aabs)}</b></> },
-          ...(withAb ? [{ key: 'ab', label: <>{AB} <b>{number(potentialRecruits.abs)}</b></> }] : []),
-        ]}
-      />
-    </div>
+    <section
+      aria-label={t.overview.panelLabel}
+      data-unit-panel=""
+      className="rounded-[20px] bg-primary px-3 pb-3 pt-3.5 text-primary-contrast lg:grid lg:grid-cols-[minmax(0,1fr)_25rem] lg:items-center lg:gap-4 lg:p-4"
+    >
+      <div className="min-w-0 px-0.5">
+        <div className="flex items-center gap-2">
+          <h2 className="inline-flex min-w-0 items-center gap-1 text-[0.9375rem] font-bold">
+            <span>{t.v1.groupProduction}</span>
+            {missing && <TippedGlyph glyph="ⓘ" name={missing} tip={missing} align="fit" className="-my-1" />}
+          </h2>
+          {pct !== null && (
+            <span data-panel-pct="" className="ml-auto shrink-0 rounded-pill bg-secondary px-2.5 py-1 text-base font-bold leading-none text-secondary-contrast">
+              {formatPercent(pct, {}, figures)}
+            </span>
+          )}
+        </div>
+        <p className="mt-1.5 flex min-w-0 flex-wrap items-baseline gap-x-1.5">
+          <b data-panel-production="" className={cn('font-extrabold', held ? 'text-[1.625rem] leading-tight' : 'text-lg')}>
+            {held ? formatRupiahCompact(production.actualMinor!, {}, figures) : t.own.notUploaded}
+          </b>
+          {sub !== null && (
+            <span className="text-base font-semibold">{period === '7d' ? `${sub} · ${t.own.thisMonth}` : sub}</span>
+          )}
+        </p>
+        <div aria-hidden="true" data-panel-bar={bar ?? 'none'} className="mb-3 mt-2 h-2 overflow-hidden rounded bg-card/55 lg:mb-0.5">
+          {bar !== null && <span className="block h-full rounded bg-secondary" style={{ width: `${bar}%` }} />}
+        </div>
+      </div>
+
+      <div ref={box} data-panel-tiles="" className="grid grid-cols-[0.86fr_1.07fr_1.07fr] gap-1.5">
+        <PanelTile tone="white" value={values[0]} size={size} label={t.prototype.yourTeam} />
+        <PanelTile
+          tone="navy"
+          value={activeValue}
+          size={size}
+          month={monthShort}
+          label={t.v1.activeAgentShort}
+          name={`${t.v1.activeAgent({ month: monthLong })}: ${activeValue}`}
+          onOpen={onOpen && !view.empty ? () => onOpen('activeAgent') : undefined}
+          sheet="activeAgent"
+        />
+        <PanelTile
+          tone="navy"
+          value={recruitValue}
+          size={size}
+          month={monthShort}
+          label={t.v1.recruitmentShort}
+          name={`${t.v1.recruitment({ month: monthLong })}: ${recruitValue}`}
+          onOpen={onOpen && !view.empty ? () => onOpen('recruitment') : undefined}
+          sheet="recruitment"
+        />
+      </div>
+    </section>
   );
 }
 
 /**
- * **A tile's label and its month** (the Unit mockup, `unit-mobile-stopmotion-2026-11-07`): on a phone one line — *Active
- * Agent* and a 12px grey chip, *Nov* — as Home's (MOB UI-167); from 768px *Active Agent November*, as before. A screen
- * reader hears the month in full at every size.
+ * **One of the panel's three tiles**: the number and the month chip on one row, the label under it on one line. A navy
+ * tile that opens a sheet is a button, named by its label, its month in full and its number.
  */
-function MonthLabel({ short, month, long }: { short: string; month: string; long: string }) {
-  return (
+function PanelTile({
+  tone, value, size, month, label, name, onOpen, sheet,
+}: {
+  tone: 'white' | 'navy';
+  value: string;
+  size: number;
+  month?: string;
+  label: ReactNode;
+  name?: string;
+  onOpen?: () => void;
+  sheet?: UnitTileSheetKind;
+}) {
+  const body = (
     <>
-      <span data-label-short="" aria-hidden="true" className="inline-flex items-center gap-1 whitespace-nowrap md:hidden">
-        {short}
-        <span data-month-chip="" className="rounded-pill bg-hover-row px-[7px] text-sm font-semibold text-muted">{month}</span>
+      <span data-panel-number="" className="flex h-[1.875rem] min-w-0 items-center gap-0.5 overflow-hidden">
+        <b
+          data-number-size={size}
+          className={cn('whitespace-nowrap font-extrabold leading-none tabular-nums', tone === 'navy' ? 'text-primary-on-secondary' : 'text-ink')}
+          style={{ fontSize: size }}
+        >
+          {value}
+        </b>
+        {month && (
+          <em
+            aria-hidden="true"
+            className={cn(
+              'ml-auto shrink-0 self-center rounded-pill px-[5px] text-xs font-bold not-italic leading-[1.125rem]',
+              tone === 'navy' ? 'bg-card/15 text-secondary-muted' : 'bg-hover-row text-muted',
+            )}
+          >
+            {month}
+          </em>
+        )}
       </span>
-      <span data-label-long="" className="max-md:sr-only">{long}</span>
+      <span className="mt-0.5 block whitespace-nowrap text-sm font-bold">{label}</span>
     </>
   );
+  const face = cn(
+    'min-w-0 rounded-[14px] py-2 pl-2.5 pr-2 text-left',
+    tone === 'navy' ? 'bg-secondary text-secondary-contrast' : 'bg-card text-ink',
+  );
+  if (!onOpen) {
+    return <div data-panel-tile={sheet ?? 'team'} className={face}>{body}</div>;
+  }
+  return (
+    <button
+      type="button"
+      data-panel-tile={sheet}
+      aria-haspopup="dialog"
+      aria-label={name}
+      onClick={onOpen}
+      className={cn(face, 'hover:bg-secondary-hover')}
+    >
+      {body}
+    </button>
+  );
 }
 
-/** *AAB* and *AB*, roles, kept in both languages (§A.5). */
-const AAB = kept('AAB');
-const AB = kept('AB');
-
 /**
- * *Tim Anda*'s chips (UI-003; P18.7-T7 AC-1's line, row 19): *4 langsung · 8 AAB* — the head's own unit, the head
- * included, then the rest of their *Grup langsung* — and ***· 3 AB*** while the view holds anybody outside it (ADR-0249
- * §3): an AB below and their people. **An AB is never counted as an AAB.** The chips add up to the number.
+ * **One size for the three numbers** (the brief: *"the three numbers always share one size (24px, all three step down
+ * together, minimum 16px) so they line up"*; the mockup's `fitNums`): the largest size at which none of the three rows
+ * overflows its tile, measured after each layout and on every resize. A browser that cannot measure (a test) keeps 24.
  */
-export function teamChips(
-  team: { direct: number; aab: number; ab: number },
-  language: Language = SOURCE_LANGUAGE,
-  figures: Language = language,
-) {
-  const t = messagesIn(unitDashboardMessages, language);
-  const number = (n: number) => formatNumber(n, {}, figures);
-  return [
-    { key: 'direct', label: <><b>{number(team.direct)}</b> {t.v1.direct}</> },
-    { key: 'aab', label: <><b>{number(team.aab)}</b> {AAB}</> },
-    ...(team.ab > 0 ? [{ key: 'ab', label: <><b>{number(team.ab)}</b> {AB}</> }] : []),
-  ];
+function useSharedFit(key: string): [React.RefObject<HTMLDivElement | null>, number] {
+  const box = useRef<HTMLDivElement>(null);
+  const [size, setSize] = useState(PANEL_NUMBER_MAX_PX);
+  useLayoutEffect(() => {
+    const root = box.current;
+    if (!root) return undefined;
+    const fit = () => {
+      const rowsOf = () => [...root.querySelectorAll<HTMLElement>('[data-panel-number]')];
+      const numbers = () => [...root.querySelectorAll<HTMLElement>('[data-number-size]')];
+      let next = PANEL_NUMBER_MAX_PX;
+      const apply = (px: number) => numbers().forEach((n) => { n.style.fontSize = `${px}px`; });
+      apply(next);
+      while (next > PANEL_NUMBER_MIN_PX && rowsOf().some((row) => row.scrollWidth > row.clientWidth)) {
+        next -= 1;
+        apply(next);
+      }
+      setSize(next);
+    };
+    fit();
+    if (typeof ResizeObserver === 'undefined') return undefined;
+    const watch = new ResizeObserver(fit);
+    watch.observe(root);
+    return () => watch.disconnect();
+  }, [key]);
+  return [box, size];
 }
 
 /** *4 direct · 8 under AABs*: the head's own unit, then the rest of their *Grup langsung*, heads included (row 19). */

@@ -18,6 +18,7 @@ import { minuteInZone, OFFICE_TIME_ZONE } from '@/lib/format';
 import { dayPartOf, firstNameOf, readHome, type HomeView } from '@/lib/home';
 import type { Lead } from '@/lib/leads';
 import { useCan, useSession } from '@/lib/session';
+import type { TeamView } from '@/lib/team-views';
 import { useOfficeMinute } from '@/lib/use-office-minute';
 import { HomeActions } from './home-actions';
 import { HomeButtons } from './home-buttons';
@@ -59,6 +60,9 @@ const LeadSheet = dynamic(() => import('@/components/lead-sheet').then((m) => m.
  *   *Tugas* chip counting open tasks alone (AC-2) — and its › opens the lead's sheet over Home, as in the Calendar.
  * - **Home reads itself again after the office's midnight** (P19.11-T1 AC-5): the read's clock moved on each minute, as
  *   the Calendar's (`useOfficeMinute`), so a page left open overnight shows the new day's list, never yesterday's.
+ * - **The KPM Owner and an Admin read the whole office** (P19.18-T4; ADR-0271 §7): *Laporan aktivitas tim*'s *Semua
+ *   downline ⌄* narrows the team parts — Home reads itself again over the view chosen (`GET /home?scope=`), the page kept
+ *   on screen until it answers. The view lasts as long as the visit.
  */
 export function HomeScreen() {
   const t = useMessages(homeMessages);
@@ -70,6 +74,8 @@ export function HomeScreen() {
   const [editing, setEditing] = useState<CalendarEntry | null>(null);
   const [entryError, setEntryError] = useState<ApiError | null>(null);
   const [sheetLead, setSheetLead] = useState<Lead | null>(null);
+  /** *Semua downline ⌄*'s choice (P19.18-T4 AC-2): `null` is the server's default, the whole office. */
+  const [scope, setScope] = useState<TeamView | null>(null);
   const { toast, show } = useToast();
   const taskWords = useMessages(calendarMessages);
 
@@ -83,11 +89,11 @@ export function HomeScreen() {
 
   useEffect(() => {
     let live = true;
-    readHome()
+    readHome(scope)
       .then((next) => { if (live) { setView(next); setError(null); } })
       .catch((err) => { if (live) setError(toDisplayError(err)); });
     return () => { live = false; };
-  }, [reload]);
+  }, [reload, scope]);
 
   const again = useCallback(() => setReload((n) => n + 1), []);
   // The Calendar's own ticks (P19.11-T1 AC-3): its rights, and never a coaching item in a support session (T16, L3).
@@ -154,7 +160,15 @@ export function HomeScreen() {
             </div>
             <div className="contents lg:flex lg:min-w-0 lg:flex-col lg:gap-cards">
               {/* Every leader's by role (P19.8-T2 AC-9): with nobody, its one line *Tambah agent pertama →*. */}
-              {leader && <HomeTeam team={leader.team} leaderName={me?.user.fullName ?? ''} className="mt-1.5 lg:mt-0" />}
+              {leader && (
+                <HomeTeam
+                  team={leader.team}
+                  office={leader.office ?? null}
+                  onScope={setScope}
+                  leaderName={me?.user.fullName ?? ''}
+                  className="mt-1.5 lg:mt-0"
+                />
+              )}
               <HomeChart activity={view.activity} className={cn('mt-1.5 lg:mt-0 lg:flex lg:flex-1 lg:flex-col', !leader && 'md:max-lg:col-span-2')} />
             </div>
           </div>

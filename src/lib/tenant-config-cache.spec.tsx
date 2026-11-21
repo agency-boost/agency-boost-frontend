@@ -1,8 +1,9 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { makeSession, stubFetch } from '@test/harness';
+import { makeMe, makeSession, stubFetch } from '@test/harness';
 import { SessionContext, type SessionValue } from './session';
+import { enterKpm, leaveKpm } from './super-admin-kpm';
 import {
   TenantConfigProvider, useActivityType, useTenantConfig,
 } from './tenant-config-cache';
@@ -116,6 +117,34 @@ describe('the shared tenant configuration (P4-T7)', () => {
       render(inSession(makeSession({ me: null, loading: false })));
       expect(await screen.findByText('vnone')).toBeInTheDocument();
       expect(calls).toHaveLength(0);
+    });
+
+    /*
+     * Found 2026-11-20: a Super Admin outside every KPM who opened an owner page's address drew a 403 on `/kpm/config`
+     * before the shell sent them on. They read an office's configuration once they have entered one.
+     */
+    it('reads nothing for a Super Admin outside every KPM, and reads once they enter one', async () => {
+      const { calls } = stubFetch({ '/kpm/config': { body: CONFIG }, '/kpm/org-levels': { body: LADDER } });
+      const superAdmin = makeMe({
+        user: {
+          id: 'u-root', email: 'root@agencyboost.test', fullName: 'Root', preferredName: null,
+          pronoun: 'they', initials: 'R', platformRole: 'super_admin',
+        },
+        membership: null,
+      });
+      const { rerender } = render(inSession(makeSession({ me: superAdmin, loading: false })));
+      expect(await screen.findByText('vnone')).toBeInTheDocument();
+      expect(calls).toHaveLength(0);
+
+      enterKpm('66f0000000000000000002a1');
+      try {
+        // Entering re-reads the session (`onKpmChange`): a new `me`.
+        rerender(inSession(makeSession({ me: { ...superAdmin }, loading: false })));
+        expect(await screen.findByText('v1')).toBeInTheDocument();
+        expect(calls.map((c) => c.url.split('/api/v1')[1])).toEqual(['/kpm/config', '/kpm/org-levels']);
+      } finally {
+        leaveKpm();
+      }
     });
   });
 

@@ -57,6 +57,11 @@ export function unitRow(membershipId: string, name: string, over: Partial<UnitRo
       touches: { logged: 85, target: 95 },
     },
     lastOneOnOne: { days: 4, date: '2026-10-04', overdue: false, coach: { membershipId: 'mem-agus', name: 'Agus Santoso' } },
+    // P19.18-T1 AC-8 (ADR-0267 §5): the coaching status tile, the period's leads, and the person card's figures.
+    coaching: { status: 'recent', days: 4, coach: { membershipId: 'mem-agus', name: 'Agus Santoso' } },
+    periodLeads: { sales: 5, recruitment: 2 },
+    potensi: { sales: 1, recruitment: 0 },
+    activity7d: 12,
     status: 'watch_closely',
     pacingToMaa: true,
     newHireBeforeFirstSale: false,
@@ -87,11 +92,13 @@ const SPRINT = { code: 'APE_SPRINT', title: 'Q4 APE Sprint' };
 export const AGUS_ROW = unitRow('mem-agus', 'Agus Santoso', {
   chasingMdrt: true, campaigns: [MDRT],
   isReader: true, depth: 0, leads: true, rung: { code: 'AB', label: 'Agency Builder' }, lastOneOnOne: null, status: 'on_track',
+  coaching: { status: 'never', days: null, coach: null },
   goal: goalCell({ actualMinor: rp(108), attainmentPct: 135, targetMet: true, overMinor: rp(28), gapMinor: 0, policiesNeeded: 0 }),
 });
 export const DIMAS = unitRow('mem-dimas', 'Dimas Pratama', {
   chasingMdrt: true, campaigns: [MDRT, SPRINT],
   lastOneOnOne: { days: 12, date: '2026-09-26', overdue: true, coach: { membershipId: 'mem-agus', name: 'Agus Santoso' } },
+  coaching: { status: 'recent', days: 12, coach: { membershipId: 'mem-agus', name: 'Agus Santoso' } },
   followUp: { text: 'Role-play objection handling before next presentation', dueDate: '2026-10-05', overdueDays: 3 },
 });
 export const INDAH = unitRow('mem-indah', 'Indah Lestari', {
@@ -106,7 +113,7 @@ export const INDAH = unitRow('mem-indah', 'Indah Lestari', {
   followUp: { text: 'Send the illustration to Pak Hendra', dueDate: '2026-10-12', overdueDays: null },
 });
 export const SITI = unitRow('mem-siti', 'Siti Rahma', {
-  status: 'needs_attention', pacingToMaa: false, lastOneOnOne: null,
+  status: 'needs_attention', pacingToMaa: false, lastOneOnOne: null, coaching: { status: 'never', days: null, coach: null },
   goal: goalCell({ actualMinor: null, attainmentPct: null, gapMinor: rp(80), policiesNeeded: 5, source: null }),
 });
 
@@ -118,6 +125,7 @@ export const SARI = unitRow('mem-sari', 'Sari Wulandari', {
   rung: AAB, leads: true, status: 'no_goal_set', pacingToMaa: null,
   goal: goalCell({ set: false, targetMinor: null, attainmentPct: null, gapMinor: null, policiesNeeded: null }),
   lastOneOnOne: { days: 12, date: '2026-09-26', overdue: true, coach: { membershipId: 'mem-agus', name: 'Agus Santoso' } },
+  coaching: { status: 'lapsed', days: 22, coach: { membershipId: 'mem-agus', name: 'Agus Santoso' } },
 });
 export const BUDI = unitRow('mem-budi', 'Budi Santoso', {
   depth: 2, status: 'needs_attention', leadsCounts: { salesOpen: 3, salesClosing: 1, recruitOpen: 1, recruitNominated: 1 },
@@ -164,14 +172,26 @@ export function dashboard(over: Partial<UnitDashboardView> = {}): UnitDashboardV
     head: { membershipId: 'mem-agus', name: 'Agus Santoso', isReader: true },
     empty: false,
     readOnly: false,
+    personCard: false,
     tiles: {
       team: { total: 16, direct: 4, units: 3, underUnits: 9, aab: 12, ab: 0, newHires: 0 },
       directGroupProduction: {
         targetMinor: rp(1280), actualMinor: rp(1000), attainmentPct: 78, missing: 2, gapMinor: rp(280), overMinor: 0, period: 'month',
       },
-      // UI-013: out of manpower, split Unit (Agus and his three) / AAB (the twelve below).
-      potentialActive: { count: 12, of: 16, unit: { count: 3, of: 4 }, aab: { count: 9, of: 12 }, ab: { count: 0, of: 0 } },
-      potentialRecruits: { yourUnit: 1, aabs: 1, abs: 0 },
+      // P19.18-T1 AC-3 (ADR-0267 §2–3): from the upload, the people behind it; the new hires who joined this month.
+      activeAgent: {
+        month: '2026-10', held: true, count: 2,
+        people: [
+          { membershipId: 'mem-agus', name: 'Agus Santoso', photoUrl: null, unit: { membershipId: 'mem-agus', name: 'Agus Santoso', isReader: true }, apeMinor: rp(12), policies: 1 },
+          { membershipId: 'mem-novi', name: 'Novi Anggraini', photoUrl: null, unit: { membershipId: 'mem-arief', name: 'Arief Wibowo', isReader: false }, apeMinor: rp(6), policies: 1 },
+        ],
+      },
+      recruitment: {
+        month: '2026-10', count: 1,
+        people: [
+          { membershipId: 'mem-tono', name: 'Tono Saputra', photoUrl: null, recruitedBy: { membershipId: 'mem-sari', name: 'Sari Wulandari' }, joinDate: '2026-10-03' },
+        ],
+      },
     },
     yourUnit: { rows: [AGUS_ROW, DIMAS, INDAH, SITI], total: total() },
     units: UNITS,
@@ -196,8 +216,8 @@ export const EMPTY = dashboard({
     directGroupProduction: {
       targetMinor: null, actualMinor: null, attainmentPct: null, missing: 0, gapMinor: null, overMinor: null, period: 'month',
     },
-    potentialActive: { count: 0, of: 0, unit: { count: 0, of: 0 }, aab: { count: 0, of: 0 }, ab: { count: 0, of: 0 } },
-    potentialRecruits: { yourUnit: 0, aabs: 0, abs: 0 },
+    activeAgent: { month: '2026-10', held: false, count: null, people: [] },
+    recruitment: { month: '2026-10', count: 0, people: [] },
   },
   yourUnit: { rows: [], total: total({ potentialActive: { count: 0, of: 0 } }) },
   units: [],
@@ -212,8 +232,8 @@ export const SARI_UNIT = dashboard({
     directGroupProduction: {
       targetMinor: rp(240), actualMinor: rp(131.2), attainmentPct: 55, missing: 1, gapMinor: rp(108.8), overMinor: 0, period: 'month',
     },
-    potentialActive: { count: 4, of: 6, unit: { count: 3, of: 4 }, aab: { count: 1, of: 2 }, ab: { count: 0, of: 0 } },
-    potentialRecruits: { yourUnit: 1, aabs: 0, abs: 0 },
+    activeAgent: { month: '2026-10', held: true, count: 0, people: [] },
+    recruitment: { month: '2026-10', count: 0, people: [] },
   },
   yourUnit: {
     rows: [{ ...SARI, depth: 0 }, { ...BUDI, depth: 1 }, { ...RINA, depth: 1 }, { ...YANTI, depth: 1 }],
@@ -235,8 +255,8 @@ export const NEW_HIRE_VIEW = dashboard({
     directGroupProduction: {
       targetMinor: rp(1200), actualMinor: rp(1000), attainmentPct: 83, missing: 1, gapMinor: rp(200), overMinor: 0, period: 'month',
     },
-    potentialActive: { count: 11, of: 16, unit: { count: 3, of: 4 }, aab: { count: 8, of: 12 }, ab: { count: 0, of: 0 } },
-    potentialRecruits: { yourUnit: 1, aabs: 1, abs: 0 },
+    activeAgent: { month: '2026-10', held: true, count: 2, people: [] },
+    recruitment: { month: '2026-10', count: 0, people: [] },
   },
   units: [
     UNITS[0],

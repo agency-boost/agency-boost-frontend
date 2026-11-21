@@ -599,7 +599,13 @@ function GoalSection({
    * office (ADR-0084), and the figures are the member's to enter.
    */
   const uploadLink = none && canUpload ? (
-    <Link href="/kpm/data-upload" className="inline-flex min-h-11 items-center font-semibold text-navy underline lg:min-h-8">{t.goal.upload}</Link>
+    // P19.21-T1 AC-9: Data upload on the current month, the search filled with the reader's name — their row shown.
+    <Link
+      href={`/kpm/data-upload?month=${summary.period.thisMonth}&q=${encodeURIComponent(me?.user.fullName ?? '')}`}
+      className="inline-flex min-h-11 items-center font-semibold text-navy underline lg:min-h-8"
+    >
+      {t.goal.upload}
+    </Link>
   ) : null;
   const note = own && (monthBack || estimateRow || uploadLink || replaced || error) ? (
     <>

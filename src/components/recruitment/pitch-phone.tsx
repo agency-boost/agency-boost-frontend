@@ -1,16 +1,15 @@
 'use client';
 
-import { useId, useState } from 'react';
+import { useId } from 'react';
 import { PlanIcon } from '@/components/plan/plan-icons';
-import { useSandboxedDocument } from '@/components/sandboxed-document';
+import { usePitchOpen } from '@/components/recruitment/pitch-open';
 import { ErrorBanner } from '@/components/ui/field';
 import { useFigureLanguage, useMessages } from '@/i18n/language-provider';
 import { recruitmentPitchMessages } from '@/i18n/messages/recruitment-pitch';
-import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
 import { formatShortDay } from '@/lib/format';
 import { isHtmlDocument } from '@/lib/html-document';
-import { pitchDocumentUrl, pitchRing, type PitchMaterialsView, type PitchSlot } from '@/lib/recruitment-pitch';
+import { pitchRing, type PitchMaterialsView, type PitchSlot } from '@/lib/recruitment-pitch';
 
 /**
  * **Pitch Materials on a phone** (UI V1, UI-107; `attack-plan-mobile` 6; Mobile only, the agents' tab): a progress ring
@@ -28,7 +27,7 @@ export function PhonePitch({ view }: { view: PitchMaterialsView }) {
   const t = useMessages(recruitmentPitchMessages);
   const required = view.slots.filter((s) => s.required);
   const optional = view.slots.filter((s) => !s.required);
-  const uploaded = required.filter((s) => s.file !== null).length;
+  const uploaded = required.filter((s) => s.file !== null || !!s.link).length;
   const missing = required.length - uploaded;
   const share = required.length === 0 ? 1 : uploaded / required.length;
   return (
@@ -74,35 +73,12 @@ function Group({ label, slots }: { label: string; slots: readonly PitchSlot[] })
 function Row({ slot }: { slot: PitchSlot }) {
   const t = useMessages(recruitmentPitchMessages);
   const figures = useFigureLanguage();
-  const [opening, setOpening] = useState(false);
-  const [error, setError] = useState<ApiError | null>(null);
-  const page = useSandboxedDocument();
-  // An HTML page opens in the window, never a tab (P19.6-T2, ADR-0217 §4).
+  // A link, a page, a download or a file in a tab, by what the material is (P19.21-T3 AC-6, ADR-0274).
+  const opener = usePitchOpen(slot);
+  const { opening, error } = opener;
   const html = isHtmlDocument(slot.file?.mimeType);
-
-  const open = async () => {
-    if (opening) return;
-    setOpening(true);
-    setError(null);
-    if (html) {
-      await page.open(slot.title, async () => (await pitchDocumentUrl(slot.slot)).url)
-        .catch((err: unknown) => setError(toDisplayError(err)))
-        .finally(() => setOpening(false));
-      return;
-    }
-    const tab = window.open('', '_blank');
-    if (tab) tab.opener = null;
-    try {
-      const { url } = await pitchDocumentUrl(slot.slot);
-      if (tab) tab.location.href = url;
-      else window.open(url, '_blank', 'noopener');
-    } catch (err) {
-      tab?.close();
-      setError(toDisplayError(err));
-    } finally {
-      setOpening(false);
-    }
-  };
+  const has = slot.file !== null || !!slot.link;
+  const open = opener.open;
 
   return (
     <li className="border-t border-divider px-3 py-2 first:border-t-0" data-slot={slot.slot}>
@@ -111,24 +87,28 @@ function Row({ slot }: { slot: PitchSlot }) {
           aria-hidden="true"
           className={cn(
             'flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px]',
-            slot.file ? 'bg-pill-red text-pill-red-ink' : 'bg-pill-grey text-signal-grey',
+            has ? 'bg-pill-red text-pill-red-ink' : 'bg-pill-grey text-signal-grey',
           )}
         >
-          <PlanIcon name={slot.file ? 'file' : 'fileOff'} className="h-[1.125rem] w-[1.125rem]" />
+          <PlanIcon name={has ? 'file' : 'fileOff'} className="h-[1.125rem] w-[1.125rem]" />
         </span>
         <div className="min-w-0 flex-1">
           <p className="m-0 text-md font-bold text-ink">{slot.title}</p>
           <p className="m-0 mt-0.5 truncate text-sm text-muted">
-            {slot.file
-              ? `${slot.file.name} · ${formatShortDay(slot.file.uploadedOn, { year: true }, figures)}`
-              : t.noFile}
+            {slot.link
+              ? t.linkLine({ day: formatShortDay(slot.link.addedOn, { year: true }, figures) })
+              : slot.file
+                ? `${slot.file.name} · ${formatShortDay(slot.file.uploadedOn, { year: true }, figures)}`
+                : t.noFile}
           </p>
         </div>
-        {slot.file && (
+        {has && (
           <button
             type="button"
             onClick={() => void open()}
-            aria-label={html ? t.viewPageName({ title: slot.title }) : t.viewName({ title: slot.title })}
+            aria-label={opener.kind === 'link' ? t.openLinkName({ title: slot.title })
+              : opener.kind === 'download' ? t.downloadName({ title: slot.title })
+                : html ? t.viewPageName({ title: slot.title }) : t.viewName({ title: slot.title })}
             aria-disabled={opening || undefined}
             className="relative flex h-[2.125rem] shrink-0 items-center rounded-pill border-[1.5px] border-hairline px-3 text-base font-bold text-navy after:absolute after:-inset-y-[5px] after:inset-x-0 after:content-['']"
           >
@@ -137,7 +117,7 @@ function Row({ slot }: { slot: PitchSlot }) {
         )}
       </div>
       {error && <div className="mt-2"><ErrorBanner {...error} /></div>}
-      {html && page.dialog}
+      {opener.dialog}
     </li>
   );
 }

@@ -6,15 +6,19 @@ import { MemberContactButtons } from '@/components/contact-buttons';
 import { HEADER_CONTROL } from '@/components/ui/header-control';
 import { LineIcon } from '@/components/ui/line-icon';
 import { PersonRow } from '@/components/ui/person-row';
+import { PickerMenu } from '@/components/ui/picker-menu';
+import { RungTag, useIsLeaderRung } from '@/components/ui/rung-tag';
 import { SectionHead } from '@/components/ui/section-title';
-import { useFigureLanguage, useMessages } from '@/i18n/language-provider';
+import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
 import { homeMessages } from '@/i18n/messages/home';
 import { cn } from '@/lib/cn';
 import { formatNumber } from '@/lib/format';
 import {
-  FIRST_AGENT_HREF, firstNameOf, HOME_TEAM_SHOWN, logLink, reportedOn, teamIn, type HomeScope, type HomeTeamPerson,
+  FIRST_AGENT_HREF, firstNameOf, HOME_TEAM_SHOWN, logLink, reportedOn, teamByUnit, teamIn,
+  type HomeOfficeTeam, type HomeScope, type HomeTeamPerson, type HomeTeamUnit,
 } from '@/lib/home';
 import { useCan } from '@/lib/session';
+import { teamViewOptions, type TeamView } from '@/lib/team-views';
 
 /**
  * ***Laporan aktivitas tim*** (UI-101, D-22 as updated; P19.8-T2 AC-8, AC-9; ADR-0228 §6; MOB UI-165, UI-166): **every
@@ -40,34 +44,109 @@ import { useCan } from '@/lib/session';
  *   by the reader's first name. **No number**: *Isi nomor WhatsApp*, saved on their account (`member:update_phone`:
  *   every leader for their own people, the Owner and the Admins for the office — ADR-0263, the client's request of 17
  *   November); a reader who may not save one gets no button on a row with none.
+ *
+ * **The KPM Owner and an Admin read the whole office** (P19.18-T4 AC-2; ADR-0271 §7; the brief's part B, gap 1;
+ * `home-owner-mobile` frame 3) — the server sends `leader.office`:
+ *
+ * - ***Semua downline ⌄*** in place of *Unit | Group*: the views the server offers (*Direct Unit · Grup langsung · Grup
+ *   informal · Semua downline*), each re-reading Home (`GET /home?scope=`); hidden with one.
+ * - **Grouped by unit**: an orange-tint line per unit — *Unit AGUS PRASETYO*, *Unit Anda*, *Belum punya leader* — then its
+ *   people in the server's order (AB, AAB, then agents), **each leader with the orange AB / AAB label before the NAME**
+ *   (the naming rule); five people shown, their lines with them, then *Semua ›*, as a leader's list.
  */
 export function HomeTeam({
-  team, leaderName, className,
-}: { team: readonly HomeTeamPerson[]; leaderName: string; className?: string }) {
+  team, leaderName, office = null, onScope, className,
+}: {
+  team: readonly HomeTeamPerson[];
+  leaderName: string;
+  /** The whole office for the KPM Owner or an Admin (P19.18-T4); `null` for a leader's own *Unit | Group* list. */
+  office?: HomeOfficeTeam | null;
+  /** *Semua downline ⌄* chose another view: Home reads itself again over it. */
+  onScope?: (scope: TeamView) => void;
+  className?: string;
+}) {
   const t = useMessages(homeMessages).team;
+  const language = useLanguage();
   const [scope, setScope] = useState<HomeScope>('unit');
   /** *Semua ›* pressed (P19.9-T2 AC-1): every row of the scope, in place. */
   const [all, setAll] = useState(false);
   const [phones, setPhones] = useState<Record<string, string>>({});
-  const people = useMemo(() => teamIn(team, scope), [team, scope]);
+  const people = useMemo(() => (office ? [...team] : teamIn(team, scope)), [team, scope, office]);
   const shown = all ? people : people.slice(0, HOME_TEAM_SHOWN);
+  const groups = office ? teamByUnit(team, office.units, all ? null : HOME_TEAM_SHOWN) : null;
   const listId = useId();
   const host = typeof window === 'undefined' ? '' : window.location.host;
   const leader = firstNameOf(leaderName);
   // Saving somebody's missing number (`member:update_phone`): every leader for their downline, the Owner and the Admins for
   // the office (ADR-0263). A reader without it reminds those whose number is on file, offered no sheet the API would refuse.
   const canSavePhone = useCan('member:update_phone');
+  const isLeader = useIsLeaderRung();
+
+  const row = (person: HomeTeamPerson) => {
+    const both = !reportedOn(person.yesterday) && !reportedOn(person.today);
+    return (
+      <li key={person.membershipId} className="border-t border-divider first:border-t-0">
+        <PersonRow
+          name={person.name}
+          photoUrl={person.photoUrl}
+          seed={person.membershipId}
+          height={60}
+          avatarSize={32}
+          className="gap-2.5 rounded-none bg-transparent py-1.5 lg:hover:bg-transparent"
+          nameClassName="text-md max-md:text-base md:max-lg:text-md lg:text-md"
+          // P19.18-T4 AC-2: the whole office's list labels its leaders (the naming rule); a leader's own list draws none (UX-15).
+          tag={office && isLeader(person.rung) ? <RungTag rung={person.rung} className="mr-1.5" /> : undefined}
+          trailing={(
+            <div className="flex shrink-0 items-center gap-2.5">
+              <DayCell label={t.yesterdayLong} count={person.yesterday} notReported={t.notReported} />
+              <DayCell label={t.today} count={person.today} notReported={t.notReported} />
+              {(canSavePhone || phones[person.membershipId] || person.phone) ? (
+                // A 36px circle in a 36px column; its 44px target reaches 4px into the 10px gap either side.
+                <span className="-mx-1 flex">
+                <MemberContactButtons
+                  membershipId={person.membershipId}
+                  name={person.name}
+                  phone={phones[person.membershipId] ?? person.phone}
+                  channels={['whatsapp']}
+                  size={36}
+                  whatsAppText={t.reminder({ name: firstNameOf(person.name), both, link: logLink(host), leader })}
+                  onSaved={(stored) => setPhones((was) => ({ ...was, [person.membershipId]: stored }))}
+                />
+                </span>
+              ) : <span className="w-9" aria-hidden="true" />}
+            </div>
+          )}
+        />
+      </li>
+    );
+  };
+  const unitLabel = (unit: HomeTeamUnit) => (unit.isReader
+    ? t.yourUnit
+    : unit.leader === null ? t.unled : t.unitOf({ name: unit.leader.name.toUpperCase() }));
+
+  const control = office ? (
+    office.scopes.offered.length > 1 && onScope ? (
+      <PickerMenu
+        label={t.viewLabel}
+        value={office.scope}
+        options={teamViewOptions(office.scopes.offered, language)}
+        onChange={(next) => { setAll(false); onScope(next); }}
+        align="end"
+        className="shrink-0"
+      />
+    ) : null
+  ) : (
+    <ScopePill
+      label={t.scopeLabel}
+      value={scope}
+      onChange={(next) => { setScope(next); setAll(false); }}
+      options={[{ id: 'unit', label: t.unit }, { id: 'group', label: t.group }]}
+    />
+  );
 
   return (
-    <section data-home-team="" aria-labelledby="home-team" className={className}>
-      <SectionHead id="home-team" title={t.heading}>
-        <ScopePill
-          label={t.scopeLabel}
-          value={scope}
-          onChange={(next) => { setScope(next); setAll(false); }}
-          options={[{ id: 'unit', label: t.unit }, { id: 'group', label: t.group }]}
-        />
-      </SectionHead>
+    <section data-home-team="" data-office={office ? '' : undefined} aria-labelledby="home-team" className={className}>
+      <SectionHead id="home-team" title={t.heading}>{control}</SectionHead>
       <div className="overflow-hidden rounded-lg bg-card">
         {people.length === 0 ? (
           <p className="px-3.5 py-3 text-center">
@@ -86,45 +165,26 @@ export function HomeTeam({
               <span className="w-[3.25rem] text-center">{t.today}</span>
               <span className="w-9" />
             </div>
-            {/* Named only for *Semua ›*'s `aria-controls`: with five or fewer the list is drawn as it was. */}
-            <ul id={people.length > HOME_TEAM_SHOWN ? listId : undefined}>
-              {shown.map((person) => {
-                const both = !reportedOn(person.yesterday) && !reportedOn(person.today);
-                return (
-                  <li key={person.membershipId} className="border-t border-divider first:border-t-0">
-                    <PersonRow
-                      name={person.name}
-                      photoUrl={person.photoUrl}
-                      seed={person.membershipId}
-                      height={60}
-                      avatarSize={32}
-                      className="gap-2.5 rounded-none bg-transparent py-1.5 lg:hover:bg-transparent"
-                      nameClassName="text-md max-md:text-base md:max-lg:text-md lg:text-md"
-                      trailing={(
-                        <div className="flex shrink-0 items-center gap-2.5">
-                          <DayCell label={t.yesterdayLong} count={person.yesterday} notReported={t.notReported} />
-                          <DayCell label={t.today} count={person.today} notReported={t.notReported} />
-                          {(canSavePhone || phones[person.membershipId] || person.phone) ? (
-                            // A 36px circle in a 36px column; its 44px target reaches 4px into the 10px gap either side.
-                            <span className="-mx-1 flex">
-                            <MemberContactButtons
-                              membershipId={person.membershipId}
-                              name={person.name}
-                              phone={phones[person.membershipId] ?? person.phone}
-                              channels={['whatsapp']}
-                              size={36}
-                              whatsAppText={t.reminder({ name: firstNameOf(person.name), both, link: logLink(host), leader })}
-                              onSaved={(stored) => setPhones((was) => ({ ...was, [person.membershipId]: stored }))}
-                            />
-                            </span>
-                          ) : <span className="w-9" aria-hidden="true" />}
-                        </div>
-                      )}
-                    />
+            {groups ? (
+              // P19.18-T4 AC-2: one orange-tint line per unit, then its people; the five shown carry their lines with them.
+              <ul id={people.length > HOME_TEAM_SHOWN ? listId : undefined} className="mt-2">
+                {groups.map(({ unit, people: members }) => (
+                  <li key={unit?.key ?? 'none'} data-team-unit={unit?.key ?? ''}>
+                    {unit && (
+                      <h3 className="border-t border-divider bg-primary/[0.12] px-3.5 py-2 text-sm font-bold text-ink">
+                        {unitLabel(unit)}
+                      </h3>
+                    )}
+                    <ul>{members.map(row)}</ul>
                   </li>
-                );
-              })}
-            </ul>
+                ))}
+              </ul>
+            ) : (
+              // Named only for *Semua ›*'s `aria-controls`: with five or fewer the list is drawn as it was.
+              <ul id={people.length > HOME_TEAM_SHOWN ? listId : undefined}>
+                {shown.map(row)}
+              </ul>
+            )}
             {people.length > HOME_TEAM_SHOWN && (
               <button
                 type="button"

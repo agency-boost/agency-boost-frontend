@@ -262,3 +262,22 @@ describe('register KPM (P3-T3)', () => {
     });
   });
 });
+
+describe('P19.20-T6 AC-1 the KPM Owner on Register KPM', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('P19.20-T6 AC-1 reads “You are the KPM Owner · <company> — KPM <code> · <branch>”, not “ask whoever administers”', async () => {
+    const owner = makeMe({
+      membership: {
+        membershipId: 'mem-wilson', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab',
+        isKpmOwner: true, isKpmAdmin: false, status: 'active', directCount: 4,
+      },
+      permissions: ['kpm:read_directory'],
+    });
+    stubFetch({ '/join/me': { body: { ...REGISTERED, status: 'active' } }, '/join/kpm-request': { body: { request: null } }, '/join/kpms': { body: OFFICES } });
+    renderInLayout(AgentLayout, <RegisterKpmPage />, { me: owner });
+
+    expect(await screen.findByTestId('owner-line')).toHaveTextContent('You are the KPM Owner · Prudential — KPM 0417 · BSD City Branch');
+    expect(screen.queryByText(/ask whoever administers your office/)).not.toBeInTheDocument();
+  });
+});

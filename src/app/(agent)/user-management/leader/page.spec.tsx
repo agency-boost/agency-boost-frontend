@@ -233,3 +233,24 @@ describe('find your leader (P3-T3)', () => {
     expect(screen.queryByText('Request sent ✓')).not.toBeInTheDocument();
   });
 });
+
+describe('P19.20-T6 AC-1 the KPM Owner on Find Your Leader', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const OWNER = makeMe({
+    membership: {
+      membershipId: 'mem-wilson', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab',
+      isKpmOwner: true, isKpmAdmin: false, status: 'active', directCount: 4,
+    },
+    permissions: ['leader:search_directory', 'leader_request:create', 'leader_request:cancel', 'leader_request:read_inbox'],
+  });
+
+  it('P19.20-T6 AC-1 reads “You are at the top of the KPM — you have no leader”, with no search and no code to use', async () => {
+    stubFetch({ '/join/requests/count': { body: { count: 0 } }, '/join/me': { body: { ...REGISTERED, status: 'active' } }, '/join/leaders': { body: LEADERS } });
+    renderInLayout(AgentLayout, <FindLeaderPage />, { me: OWNER });
+
+    expect(await screen.findByText('You are at the top of the KPM — you have no leader')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Search by name')).not.toBeInTheDocument();
+    expect(screen.queryByText(/This office has no/)).not.toBeInTheDocument();
+  });
+});

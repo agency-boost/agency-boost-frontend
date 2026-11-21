@@ -60,7 +60,7 @@ describe('landing', () => {
     expect(replace).toHaveBeenCalledWith('/admin');
   });
 
-  it('P19.2-T1 AC-4 sends a KPM Owner to their own Home, in Akun saya (their office overview until UI-169)', () => {
+  it('P19.17-T3 AC-8 sends a KPM Owner to the KPM Overview (their Home from UI-169 to P19.17; ADR-0269 §6)', () => {
     renderWithSession(<Home />, {
       me: makeMe({
         membership: {
@@ -69,7 +69,7 @@ describe('landing', () => {
         },
       }),
     });
-    expect(replace).toHaveBeenCalledWith('/home');
+    expect(replace).toHaveBeenCalledWith('/kpm/overview');
   });
 
   it('UI-100 sends a leader to Home (their Unit Dashboard until ADR-0180 §10)', () => {

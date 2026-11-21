@@ -9,8 +9,8 @@ describe('where sign-in returns to (P18.1-T3 AC-2)', () => {
   it('returns to the page that sent the reader to sign in, its query and hash kept', () => {
     expect(returnPathFrom('?next=%2Fleader-meetings%2Fshared%2Fabc')).toBe('/leader-meetings/shared/abc');
     expect(returnPathFrom('?next=/leader-meetings')).toBe('/leader-meetings');
-    expect(returnPathFrom('?next=%2Fkpm%2Fanalytics%3Fperiod%3Dprevious_month%23units'))
-      .toBe('/kpm/analytics?period=previous_month#units');
+    expect(returnPathFrom('?next=%2Fkpm%2Fdata-upload%3Fmonth%3D2026-09%23units'))
+      .toBe('/kpm/data-upload?month=2026-09#units');
   });
 
   it('falls back to / with no next, an empty one, or one that is not a path in this app', () => {
@@ -31,9 +31,9 @@ describe('where sign-in returns to (P18.1-T3 AC-2)', () => {
 
 describe('where a signed-out reader is sent (P18.1-T3 AC-2)', () => {
   it('to sign in, carrying the page they were on', () => {
-    expect(signInPathFrom({ pathname: '/kpm/analytics', search: '?period=previous_month' }))
-      .toBe('/login?next=%2Fkpm%2Fanalytics%3Fperiod%3Dprevious_month');
-    expect(returnPathFrom('?next=%2Fkpm%2Fanalytics%3Fperiod%3Dprevious_month')).toBe('/kpm/analytics?period=previous_month');
+    expect(signInPathFrom({ pathname: '/kpm/data-upload', search: '?month=2026-09' }))
+      .toBe('/login?next=%2Fkpm%2Fdata-upload%3Fmonth%3D2026-09');
+    expect(returnPathFrom('?next=%2Fkpm%2Fdata-upload%3Fmonth%3D2026-09')).toBe('/kpm/data-upload?month=2026-09');
   });
 
   it('to plain sign-in from the home page or the sign-in page itself', () => {
@@ -44,14 +44,14 @@ describe('where a signed-out reader is sent (P18.1-T3 AC-2)', () => {
 
 describe('a reader who signed out themselves (2026-10-11)', () => {
   it('is sent to plain sign-in from any page: they are leaving, not on their way back', () => {
-    expect(signInPathFrom({ pathname: '/kpm/analytics/compliance', search: '?category=training' }, { signedOut: true }))
+    expect(signInPathFrom({ pathname: '/kpm/data-upload', search: '?month=2026-10' }, { signedOut: true }))
       .toBe('/login');
     expect(signInPathFrom({ pathname: '/leader-meetings/shared/abc', search: '' }, { signedOut: true })).toBe('/login');
   });
 
   it('an involuntary end still carries the page: an expired session, a link opened signed out', () => {
-    expect(signInPathFrom({ pathname: '/kpm/analytics/compliance', search: '' }, { signedOut: false }))
-      .toBe('/login?next=%2Fkpm%2Fanalytics%2Fcompliance');
+    expect(signInPathFrom({ pathname: '/kpm/data-upload', search: '' }, { signedOut: false }))
+      .toBe('/login?next=%2Fkpm%2Fdata-upload');
   });
 });
 
@@ -104,13 +104,13 @@ describe('where the person who just signed in goes (2026-10-11)', () => {
     },
     permissions,
   });
-  const owner = member({ isKpmOwner: true, directCount: 3 }, ['member:read_profile', 'kpm_analytics:read', 'kpm_overview:read']);
+  const owner = member({ isKpmOwner: true, directCount: 3 }, ['member:read_profile', 'data_upload:read', 'kpm_overview:read']);
   const agent = member({}, ['member:read_profile', 'leader_meeting:read_shared_link']);
   const leader = member({ directCount: 2 }, ['member:read_profile', 'unit_dashboard:read']);
-  const COMPLIANCE = '?next=%2Fkpm%2Fanalytics%2Fcompliance%3Fcategory%3Dtraining%23units';
+  const COMPLIANCE = '?next=%2Fkpm%2Fdata-upload%3Fmonth%3D2026-10%23units';
 
   it('back to next when they can open it, query and hash kept', () => {
-    expect(destinationAfterSignIn(COMPLIANCE, owner)).toBe('/kpm/analytics/compliance?category=training#units');
+    expect(destinationAfterSignIn(COMPLIANCE, owner)).toBe('/kpm/data-upload?month=2026-10#units');
     expect(destinationAfterSignIn('?next=%2Fleader-meetings%2Fshared%2Fabc', agent)).toBe('/leader-meetings/shared/abc');
   });
 
@@ -120,9 +120,10 @@ describe('where the person who just signed in goes (2026-10-11)', () => {
   });
 
   it('to their own landing with no next, an unsafe one, or one that is no page', () => {
-    expect(destinationAfterSignIn('', owner)).toBe('/home');
-    expect(destinationAfterSignIn('?next=%2F', owner)).toBe('/home');
-    expect(destinationAfterSignIn('?next=%2F%2Fevil.test%2Fkpm%2Foverview', owner)).toBe('/home');
+    // The Owner's landing is the KPM Overview since P19.17-T3 (AC-8; ADR-0269 §6).
+    expect(destinationAfterSignIn('', owner)).toBe('/kpm/overview');
+    expect(destinationAfterSignIn('?next=%2F', owner)).toBe('/kpm/overview');
+    expect(destinationAfterSignIn('?next=%2F%2Fevil.test%2Fkpm%2Foverview', owner)).toBe('/kpm/overview');
     expect(destinationAfterSignIn('?next=%2Fnope', agent)).toBe('/home');
   });
 
@@ -147,23 +148,23 @@ describe('where the person who just signed in goes (2026-10-11)', () => {
       expect(destinationAfterSignIn('?next=%2Fleader-meetings%2Fshared%2Fabc&reason=expired', agent)).toBe('/home');
     });
 
-    it('P19.2-T1 AC-4 an Owner or an Admin lands on their own Home (the office overview until UI-169), a Super Admin on /admin', () => {
-      expect(destinationAfterSignIn(`${COMPLIANCE}&reason=expired`, owner)).toBe('/home');
-      expect(destinationAfterSignIn(ended('/kpm/analytics'), member({ isKpmAdmin: true }, ['kpm_analytics:read'])))
-        .toBe('/home');
+    it('P19.17-T3 AC-8 an Owner or an Admin lands on the KPM Overview (their Home from UI-169 to P19.17), a Super Admin on /admin', () => {
+      expect(destinationAfterSignIn(`${COMPLIANCE}&reason=expired`, owner)).toBe('/kpm/overview');
+      expect(destinationAfterSignIn(ended('/kpm/data-upload'), member({ isKpmAdmin: true }, ['data_upload:read'])))
+        .toBe('/kpm/overview');
       expect(destinationAfterSignIn(ended('/admin/kpms'), superAdmin)).toBe('/admin');
     });
 
     it('the reason in either order, and with no page at all', () => {
       expect(destinationAfterSignIn('?reason=expired&next=%2Fgoals', agent)).toBe('/home');
-      expect(destinationAfterSignIn('?reason=expired', owner)).toBe('/home');
+      expect(destinationAfterSignIn('?reason=expired', owner)).toBe('/kpm/overview');
     });
 
     it('a link opened signed out, with no reason or another one, is still followed', () => {
       expect(destinationAfterSignIn('?next=%2Fleader-meetings%2Fshared%2Fabc', agent)).toBe('/leader-meetings/shared/abc');
       expect(destinationAfterSignIn('?next=%2Fleader-meetings%2Fshared%2Fabc&reason=EXPIRED', agent))
         .toBe('/leader-meetings/shared/abc');
-      expect(destinationAfterSignIn(`${COMPLIANCE}&reason=signed_out`, owner)).toBe('/kpm/analytics/compliance?category=training#units');
+      expect(destinationAfterSignIn(`${COMPLIANCE}&reason=signed_out`, owner)).toBe('/kpm/data-upload?month=2026-10#units');
     });
 
     it('to sign in when the session could not be read after all', () => {

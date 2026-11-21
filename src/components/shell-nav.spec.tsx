@@ -30,10 +30,11 @@ vi.mock('next/navigation', () => ({
 function navLabels() {
   // Group headings are buttons, not paragraphs: each group opens and closes on its own
   // (client feedback, 2026-09-24 and 2026-09-29). The chevron is part of the button's text.
-  // Since P19.13-T2 (UI-196) only the current page's group starts open, so every group is opened first.
+  // Every group is opened first (any a spec folded); since P19.17-T3 the extras' names end with their *Owner* tag, which
+  // is part of the name and is cut off here, so a group reads as its name.
   const nav = openEveryGroup();
   return Array.from(nav.querySelectorAll('[aria-controls^="nav-group"], a'))
-    .map((el) => (el.textContent ?? '').replace('\u25b8', '').trim());
+    .map((el) => (el.textContent ?? '').replace('\u25b8', '').replace(/Owner$/, '').trim());
 }
 
 /**
@@ -101,18 +102,22 @@ describe('the sidebar matches the prototype', () => {
    */
 
   /*
-   * *Changed 2026-11-05 (P19.2-T1 AC-6; UI-147, ADR-0198 §2):* the office console's sidebar — Overview alone, Reporting,
-   * Leader Meetings, Settings, People (`KPM_Owner.html:872-913`) — is the one shell's **office view**: the field's groups,
-   * then *KPM* (Overview first), *Pengaturan* and *People* last.
+   * *Changed 2026-11-20 (P19.17-T3 AC-4, AC-5; ADR-0269; part E):* the office view (P19.2-T1 AC-6, ADR-0198 §2) is gone:
+   * the Owner's menu is the field's groups, then *KPM* (Overview first) and *People*, on every page — and *Pengaturan*, one
+   * item, pinned below the groups (`data-sidebar-pinned`), not a group of its own in the part that scrolls.
    */
-  it('P19.2-T1 AC-6 KPM Owner: the field’s groups, then KPM · Settings · People, People last, and no invented Office group', () => {
-    route.path = '/kpm/overview';
-    renderWithSession(<TenantShell title="x">body</TenantShell>, { me: OWNER });
-    const labels = navLabels();
-    const sections = labels.filter((t) => ['Program', 'Programs', 'KPM', 'Settings', 'People', 'Office', 'Reporting'].includes(t));
-    expect(sections).toEqual(['Programs', 'KPM', 'Settings', 'People']);
-    // Overview is the KPM group's first item.
-    expect(labels.indexOf('Overview')).toBe(labels.indexOf('KPM') + 1);
+  it('P19.17-T3 AC-4 KPM Owner: the field’s groups, then KPM · People, Pengaturan pinned last, no invented Office group', () => {
+    for (const path of ['/kpm/overview', '/goals']) {
+      route.path = path;
+      const { unmount } = renderWithSession(<TenantShell title="x">body</TenantShell>, { me: OWNER });
+      const labels = navLabels();
+      const sections = labels.filter((t) => ['Program', 'Programs', 'KPM', 'Settings', 'People', 'Office', 'Reporting'].includes(t));
+      expect(sections).toEqual(['Programs', 'KPM', 'People', 'Settings']);
+      // Overview is the KPM group's first item; the last link of the nav is the pinned Pengaturan.
+      expect(labels.indexOf('Overview')).toBe(labels.indexOf('KPM') + 1);
+      expect(labels.at(-1)).toBe('Settings');
+      unmount();
+    }
   });
 
   it('KPM Owner: Overview is reachable — it is built', () => {
@@ -123,7 +128,6 @@ describe('the sidebar matches the prototype', () => {
 
   it('P18.1-T2: KPM › Strategic Leader Forum is live, with no pill (`KPM_Owner.html:887-890`)', async () => {
     route.path = '/leader-meetings/m-14';
-    window.sessionStorage.setItem('ab.view', 'kpm_owner');
     try {
       renderWithSession(<TenantShell title="x">body</TenantShell>, { me: OWNER });
       const item = (await everyItem()).find((a) => a.textContent?.trim() === 'Strategic Leader Forum');
@@ -150,66 +154,35 @@ describe('the sidebar matches the prototype', () => {
     expect(screen.queryByText('KPM OWNER')).not.toBeInTheDocument();
   });
 
-  it('Superadmin: five groups in the prototype order, and its own pill word', () => {
+  it('P19.23-T1 AC-1 Superadmin: the six in the rail’s order, Platform pinned, and its own pill word (ADR-0277 §1)', () => {
     route.path = '/admin';
     renderWithSession(
       <AdminShell title="x">body</AdminShell>,
       { me: makeMe({ user: { ...makeMe().user, platformRole: 'super_admin' }, membership: null, permissions: ['kpm:list_all'] }) },
     );
     const labels = navLabels();
-    expect(labels.filter((t) => ['Companies', 'KPMs', 'Platform admin', 'Reporting'].includes(t)))
-      .toEqual(['Companies', 'KPMs', 'Platform admin', 'Reporting']);
-    expect(labels.indexOf('Overview')).toBeLessThan(labels.indexOf('Companies'));
+    expect(labels.filter((t) => ['Dashboard', 'KPM', 'Members', 'Companies', 'Approvals', 'Subscriptions', 'Platform'].includes(t)))
+      .toEqual(['Dashboard', 'KPM', 'Members', 'Companies', 'Approvals', 'Subscriptions', 'Platform']);
     expect(screen.getByText('SUPERADMIN')).toBeInTheDocument();
     // P18.5-T6 AC-2: the platform shell's profile line is the role alone — a Super Admin has no office.
     expect(screen.getByText('Superadmin')).toHaveAttribute('title', 'Superadmin');
   });
 
-  it('P18-T8 AC-4: Cross-platform analytics is live, and the console says Soon nowhere', async () => {
-    // It was the console's last `Soon` (`Superadmin.html:204`). Built, it is a link like the
-    // rest, current on its own route, and no pill is left in `Reporting` or anywhere else.
-    route.path = '/admin/analytics';
-    try {
-      renderWithSession(
-        <AdminShell title="x">body</AdminShell>,
-        { me: makeMe({ user: { ...makeMe().user, platformRole: 'super_admin' }, membership: null, permissions: ['kpm:list_all'] }) },
-      );
-      const item = (await everyItem()).find((a) => a.textContent?.trim() === 'Cross-platform analytics');
-      expect(item).toHaveAttribute('href', '/admin/analytics');
-      expect(item).toHaveAttribute('aria-current', 'page');
-      expect(screen.queryByText('Soon')).not.toBeInTheDocument();
-    } finally {
-      route.path = '/group-tree';
-    }
-  });
-
-  it('every built Superadmin destination is a real link', async () => {
+  it('P19.23-T1 AC-1 every console destination is a real link, and the console says Soon nowhere', async () => {
     route.path = '/admin';
-    // `upcoming` renders an anchor with no href, so a flag left on after the screen
-    // shipped makes it reachable from nowhere. That is what happened to
-    // /admin/kpm-requests: the screen, its endpoints and its manual chapter all shipped
-    // in P3.1-T2 while the nav item stayed inert. Nothing caught it, because the nav
-    // spec asserted section order and the screen spec asserted screen behaviour.
+    // `upcoming` renders an anchor with no href, so a flag left on after the screen shipped makes it reachable from
+    // nowhere — what happened to /admin/kpm-requests in P3.1-T2. *Cross-platform analytics* is gone since P19.23
+    // (ADR-0277: the Dashboard's *Adopsi per KPM*).
     renderWithSession(
       <AdminShell title="x">body</AdminShell>,
       { me: makeMe({ user: { ...makeMe().user, platformRole: 'super_admin' }, membership: null, permissions: ['kpm:list_all'] }) },
     );
-
-    /*
-     * `Create / assign KPM` and `Product catalog` are deliberately **not** here since
-     * 2026-09-24. The first was a third route to a form `/admin/tenants` already offers
-     * twice; the second pointed at `/admin/products`, which ADR-0033 removed from the route
-     * registry when the catalog moved to the Company template's Products tab.
-     */
-    for (const name of [
-      'Overview', 'Manage companies', 'All KPMs',
-      'Pending KPM requests', 'KPM Owners & Admins',
-      'Audit / role change log', 'Cross-platform analytics',
-    ]) {
+    for (const name of ['Dashboard', 'KPM', 'Members', 'Companies', 'Approvals', 'Subscriptions', 'Platform']) {
       const item = (await everyItem()).find((a) => a.textContent?.trim() === name);
       expect(item, `${name} is not in the nav`).toBeDefined();
       expect(item).toHaveAttribute('href');
     }
+    expect(screen.queryByText('Soon')).not.toBeInTheDocument();
   });
 
   describe('every destination carries a glyph on the rail (client feedback, 2026-09-24)', () => {
@@ -218,8 +191,8 @@ describe('the sidebar matches the prototype', () => {
      * is a blank square nobody notices until they collapse the sidebar — which is exactly
      * when they most need to know where they are. Asserted rather than trusted.
      *
-     * *Changed 2026-11-12 (P19.13-T2 AC-4; UI-196):* the full sidebar draws a glyph beside the top section's rows and
-     * none beside a group's (the approved mockup's `.side a.sub`), so the rule is the rail's, where it always mattered.
+     * *Changed 2026-11-20 (P19.17-T3 AC-5, AC-6; part E):* **every row has its glyph** at full width again, and on the
+     * rail a group is one glyph of its own (a button) whose items open beside it.
      */
     const SUPER = makeMe({
       user: { ...makeMe().user, platformRole: 'super_admin' },
@@ -230,7 +203,7 @@ describe('the sidebar matches the prototype', () => {
     // key on a fixture says nothing about the thing under test.
     const shells = [
       ['the agent app', () => <AgentShell title="x">body</AgentShell>, AGENT, '/group-tree'],
-      ['the office view', () => <TenantShell title="x">body</TenantShell>, OWNER, '/kpm/overview'],
+      ['the Owner', () => <TenantShell title="x">body</TenantShell>, OWNER, '/kpm/overview'],
       ['the Super Admin', () => <AdminShell title="x">body</AdminShell>, SUPER, '/admin'],
     ] as const;
 
@@ -239,7 +212,7 @@ describe('the sidebar matches the prototype', () => {
       window.localStorage.setItem('ab.sidebar.rail', '1');
       try {
         renderWithSession(shell(), { me });
-        const items = Array.from(screen.getByRole('navigation', { name: 'Main' }).querySelectorAll('a'));
+        const items = Array.from(screen.getByRole('navigation', { name: 'Main' }).querySelectorAll('a, [data-rail-group] > button'));
         expect(items.length).toBeGreaterThan(3);
         for (const item of items) {
           const icon = item.querySelector('svg');
@@ -251,14 +224,12 @@ describe('the sidebar matches the prototype', () => {
       }
     });
 
-    it.each(shells)('P19.13-T2 AC-4 %s: the top section’s rows carry a glyph, a group’s rows their words alone', async (_name, shell, me, path) => {
+    it.each(shells)('P19.17-T3 AC-5 %s: every row, the top section’s and a group’s alike, carries its glyph', async (_name, shell, me, path) => {
       route.path = path;
       renderWithSession(shell(), { me });
       const nav = openEveryGroup();
-      const [top, ...groups] = Array.from(nav.children);
-      for (const a of Array.from(top.querySelectorAll('a'))) expect(a.querySelector('svg')).not.toBeNull();
-      for (const a of groups.flatMap((g) => Array.from(g.querySelectorAll('a')))) {
-        expect(a.querySelector('svg:not([data-mark])'), a.textContent ?? '').toBeNull();
+      for (const a of Array.from(nav.querySelectorAll('a'))) {
+        expect(a.querySelector('svg:not([data-mark])'), a.textContent ?? '').not.toBeNull();
       }
     });
   });
@@ -290,7 +261,8 @@ describe('one line, under the top section, in every shell (parity I-144; P19.13-
   it.each(SHELLS)('%s: the top section ends with the one line, and no group does', (_shell, render) => {
     render();
     const nav = screen.getByRole('navigation', { name: 'Main' });
-    const sections = Array.from(nav.children);
+    // P19.17-T3 AC-5: the groups sit in the part that scrolls; Pengaturan's line, pinned below it, is a border, not a rule.
+    const sections = Array.from(nav.querySelector('[data-sidebar-scroll]')!.children);
 
     expect(within(nav).getAllByRole('separator')).toHaveLength(1);
     sections.forEach((section, i) => {

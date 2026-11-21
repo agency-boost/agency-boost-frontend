@@ -95,6 +95,16 @@ const en = {
   pickScore: ({ min, max }: { min: string; max: string }) => `Pick a score from ${min}–${max} first`,
   feedbackSubmitted: 'Feedback submitted — thank you!',
   claimed: 'Marked as attended — you can now leave feedback',
+  /**
+   * *Tidak ikut*'s question (P19.25-T1 AC-3; ADR-0281 §2): the reason the office reads beside *Tidak ikut* in Advanced
+   * analytics › *Event*. Optional — a member may decline without one.
+   */
+  declineTitle: ({ title }: { title: string }) => `Not coming to ${title}?`,
+  declineReason: 'Reason',
+  declinePlaceholder: 'E.g. a client meeting',
+  declineHint: 'Your leaders see this beside your answer. You can leave it empty.',
+  declineSend: 'Send',
+  declineBack: 'Cancel',
   /** Our own (L-01): the states the prototype has none of, the ✕'s name and the not-found state. */
   closeModal: 'Close',
   loadingList: 'Loading events…',
@@ -164,6 +174,12 @@ const id: MessagesOf<typeof en> = {
   // No exclamation mark (§B.0 rule 7).
   feedbackSubmitted: `${kept('Feedback')} terkirim — terima kasih.`,
   claimed: `Ditandai hadir — sekarang Anda dapat memberikan ${kept('feedback')}`,
+  declineTitle: ({ title }) => `Tidak ikut ${title}?`,
+  declineReason: 'Alasan',
+  declinePlaceholder: 'Misalnya: ada janji nasabah',
+  declineHint: 'KPM Anda melihat alasan ini di samping jawaban Anda. Boleh dikosongkan.',
+  declineSend: 'Kirim',
+  declineBack: 'Batal',
   closeModal: 'Tutup',
   loadingList: `Memuat ${kept('event')}…`,
   loadingEvent: `Memuat detail ${kept('event')}…`,

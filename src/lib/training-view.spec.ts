@@ -1,227 +1,111 @@
-import { describe, expect, it } from 'vitest';
-import type { ConfigChange, TrainingCategoryRow } from '@/lib/tenant-config';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { ContentFile, TrainingCategoryRow } from '@/lib/tenant-config';
 import {
-  codeTaken, flattenTraining, isUnsaved, projectTraining, stageEdit, stageStatus, unstageTraining,
-} from '@/lib/training-view';
+  categoryCounts, codeTaken, flattenTraining, TRAINING_ACCEPT, TRAINING_FILE_ACCEPT, TRAINING_FILE_TYPES,
+  TRAINING_VIDEO_ACCEPT, trainingFileType, uploadTrainingFile, withUploaded,
+} from './training-view';
 
-const TREE: TrainingCategoryRow[] = [
-  {
-    id: 'c-sales', code: 'SALES', label: 'Sales', description: null, displayOrder: 1, version: 1, status: 'active',
-    skills: [
-      {
-        id: 's-prospecting', code: 'PROSPECTING', categoryCode: 'SALES', label: 'Prospecting',
-        displayOrder: 1, version: 2, status: 'active',
-        modules: [
-          {
-            id: 'm-list', code: 'PROSPECT_LIST', skillCode: 'PROSPECTING', title: 'Building Your Prospect List',
-            publishState: 'published', displayOrder: 1, version: 3, status: 'active',
-          },
-        ],
-      },
-    ],
-  },
-  {
-    id: 'c-product', code: 'PRODUCT', label: 'Product', description: 'What we sell.', displayOrder: 2, version: 1,
-    status: 'active', skills: [],
-  },
-];
+const moduleOf = (code: string, status: 'active' | 'archived' = 'active') => ({
+  id: `m-${code}`, code, skillCode: 'S', title: code, publishState: 'published' as const, displayOrder: 1, version: 1, status,
+});
+const tree: TrainingCategoryRow[] = [{
+  id: 'c1', code: 'SALES', label: 'Sales', description: null, displayOrder: 1, version: 1, status: 'active',
+  skills: [
+    { id: 's1', code: 'S', categoryCode: 'SALES', label: 'Prospecting', displayOrder: 1, version: 1, status: 'active', modules: [moduleOf('A'), moduleOf('B'), moduleOf('C', 'archived')] },
+    { id: 's2', code: 'T', categoryCode: 'SALES', label: 'Closing', displayOrder: 2, version: 1, status: 'active', modules: [moduleOf('D')] },
+    { id: 's3', code: 'U', categoryCode: 'SALES', label: 'Old', displayOrder: 3, version: 1, status: 'archived', modules: [moduleOf('E', 'archived')] },
+  ],
+}];
 
-const shownModule = (ops: ConfigChange[]) => projectTraining(TREE, ops).modules[0];
+const file = (label: string, mimeType = 'application/pdf'): ContentFile => ({ id: label, label, storageKey: `k-${label}`, mimeType, bytes: 1 });
 
-describe('the training taxonomy as it will be (P5-T1)', () => {
-  it('flattens the nested read into the three lists the batch addresses', () => {
-    const flat = flattenTraining(TREE);
-
-    expect(flat.categories.map((c) => c.code)).toEqual(['SALES', 'PRODUCT']);
-    expect(flat.skills.map((s) => s.code)).toEqual(['PROSPECTING']);
-    expect(flat.modules.map((m) => m.code)).toEqual(['PROSPECT_LIST']);
-    expect(flat.categories[0]).not.toHaveProperty('skills');
+describe('P19.25-T4 the tree’s helpers', () => {
+  it('P19.25-T4 AC-1 counts a category’s live skills and their live modules — "n skill · n modul"', () => {
+    expect(categoryCounts(tree[0])).toEqual({ skills: 2, modules: 3 });
   });
 
-  it('shows nothing staged as exactly what the office has', () => {
-    const view = projectTraining(TREE, []);
-
-    expect(view.categories.every((c) => c.staged === null && !c.archived)).toBe(true);
-    expect(shownModule([])).toMatchObject({ staged: null, archived: false, cascaded: false });
+  it('flattens the tree into three lists for a module’s page', () => {
+    const flat = flattenTraining(tree);
+    expect([flat.categories.length, flat.skills.length, flat.modules.length]).toEqual([1, 3, 5]);
   });
 
-  it('draws a staged category archive down through its skills and modules', () => {
-    const view = projectTraining(TREE, [{ op: 'trainingCategory.archive', id: 'c-sales', expectedVersion: 1 }]);
-
-    expect(view.categories[0]).toMatchObject({ staged: 'archived', archived: true, cascaded: false });
-    expect(view.skills[0]).toMatchObject({ staged: null, archived: true, cascaded: true });
-    expect(view.modules[0]).toMatchObject({ staged: null, archived: true, cascaded: true });
-  });
-
-  it('does not bring back what a restored category once held', () => {
-    const archived: TrainingCategoryRow[] = [{
-      ...TREE[0],
-      status: 'archived',
-      skills: [{ ...TREE[0].skills[0], status: 'archived' }],
-    }];
-    const view = projectTraining(archived, [{ op: 'trainingCategory.restore', id: 'c-sales', expectedVersion: 1 }]);
-
-    expect(view.categories[0]).toMatchObject({ archived: false, staged: 'restored' });
-    expect(view.skills[0]).toMatchObject({ archived: true, cascaded: false });
-  });
-
-  it('moves a skill with its modules when its category changes', () => {
-    const view = projectTraining(TREE, [
-      { op: 'trainingSkill.update', id: 's-prospecting', expectedVersion: 2, body: { categoryCode: 'PRODUCT' } },
-    ]);
-
-    expect(view.skills[0].row.categoryCode).toBe('PRODUCT');
-    // The module holds its skill, not a category, so it goes wherever the skill goes.
-    expect(view.modules[0].row.skillCode).toBe('PROSPECTING');
-  });
-
-  it('draws a staged module as a draft, under the skill it names', () => {
-    const view = projectTraining(TREE, [
-      { op: 'trainingModule.create', body: { code: 'cold_calls', skillCode: 'PROSPECTING', title: 'Cold calls' } },
-    ]);
-
-    const added = view.modules[1];
-    expect(added).toMatchObject({ staged: 'added', archived: false });
-    expect(added.row).toMatchObject({ code: 'COLD_CALLS', publishState: 'draft', skillCode: 'PROSPECTING' });
-    expect(isUnsaved(added.row)).toBe(true);
-    expect(isUnsaved(view.modules[0].row)).toBe(false);
-  });
-
-  it('draws staged categories and skills with the fields they were given', () => {
-    const view = projectTraining(TREE, [
-      { op: 'trainingCategory.create', body: { code: 'LEGAL', label: 'Legal', description: 'Rules.' } },
-      { op: 'trainingSkill.create', body: { code: 'CONTRACTS', categoryCode: 'LEGAL', label: 'Contracts' } },
-      { op: 'trainingModule.create', body: { code: 'READING', skillCode: 'CONTRACTS', title: 'Reading', publishState: 'published' } },
-    ]);
-
-    expect(view.categories[2].row).toMatchObject({ code: 'LEGAL', description: 'Rules.', status: 'active' });
-    expect(view.skills[1]).toMatchObject({ archived: false, row: { categoryCode: 'LEGAL' } });
-    expect(view.modules[1].row.publishState).toBe('published');
-  });
-
-  it('treats a row whose parent is nowhere as archived, since no screen can show it', () => {
-    const view = projectTraining(TREE, [
-      { op: 'trainingSkill.create', body: { code: 'ORPHAN', categoryCode: 'NOWHERE', label: 'Orphan' } },
-    ]);
-
-    expect(view.skills[1]).toMatchObject({ archived: true, cascaded: true });
+  it('a code is taken at its level whatever its case, archived rows included', () => {
+    expect(codeTaken(flattenTraining(tree).modules, 'e')).toBe(true);
+    expect(codeTaken(flattenTraining(tree).modules, 'NEW')).toBe(false);
+    expect(codeTaken([], '  ')).toBe(false);
   });
 });
 
-describe('staging an edit sends only what differs', () => {
-  const saved = { ...TREE[0].skills[0].modules[0] } as unknown as { id: string; version: number } & Record<string, unknown>;
+describe('P19.25-T4 AC-2 Unggah materi takes any format (ADR-0282 §3)', () => {
+  afterEach(() => vi.unstubAllGlobals());
 
-  it('stages the fields that changed, at the version read', () => {
-    const ops = stageEdit([], 'trainingModule', saved, { publishState: 'draft' });
+  it('P19.25-T4 AC-2 offers exactly the types the API signs for a module (backend TRAINING_FILE_MIME_TYPES)', () => {
+    // Two repositories: read from the backend's source, so the two cannot drift.
+    const source = readFileSync(join(__dirname, '../../../backend/src/domain/constants/assets.ts'), 'utf8');
+    const block = /export const TRAINING_FILE_MIME_TYPES = \[([\s\S]*?)\] as const;/.exec(source)?.[1] ?? '';
+    const backend = [...block.matchAll(/'([^']+)'/g)].map((m) => m[1]).concat(block.includes('HTML_MIME_TYPE') ? ['text/html'] : []);
+    expect([...TRAINING_FILE_TYPES.map((t) => t.mimeType)].sort()).toEqual(backend.sort());
+  });
 
-    expect(ops).toEqual([
-      { op: 'trainingModule.update', id: 'm-list', expectedVersion: 3, body: { publishState: 'draft' } },
+  it.each([
+    [{ type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation', name: 'deck.pptx' }, 'application/vnd.openxmlformats-officedocument.presentationml.presentation'],
+    [{ type: '', name: 'Prospek.DOCX' }, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
+    [{ type: '', name: 'old.ppt' }, 'application/vnd.ms-powerpoint'],
+    [{ type: '', name: 'lesson.html' }, 'text/html'],
+    [{ type: 'video/quicktime', name: 'clip.mov' }, 'video/quicktime'],
+    [{ type: 'application/pdf', name: 'a.pdf' }, 'application/pdf'],
+    [{ type: 'application/x-msdownload', name: 'setup.exe' }, null],
+    [{ type: '', name: 'notes.txt' }, null],
+    // A type reported and foreign is refused, whatever the name claims.
+    [{ type: 'application/x-msdownload', name: 'macro.pdf' }, null],
+  ])('P19.25-T4 AC-2 sends %j as %s', (picked, type) => {
+    expect(trainingFileType(picked)).toBe(type);
+  });
+
+  it('P19.25-T4 AC-2 the row’s picker offers every type; a module page’s File picker no video, its Video picker only video', () => {
+    for (const ext of ['.pdf', '.pptx', '.ppt', '.docx', '.doc', '.xlsx', '.csv', '.html', '.jpg', '.mp4', '.webm', '.mov']) {
+      expect(TRAINING_ACCEPT.split(',')).toContain(ext);
+    }
+    expect(TRAINING_FILE_ACCEPT.split(',')).not.toContain('.mp4');
+    expect(TRAINING_FILE_ACCEPT.split(',')).toContain('.pptx');
+    expect(TRAINING_VIDEO_ACCEPT.split(',').filter((e) => e.startsWith('.'))).toEqual(['.mp4', '.webm', '.mov']);
+  });
+
+  it('P19.25-T4 AC-2 Unggah materi on a module with nothing: the file is its material, a video under Video', () => {
+    const none = { content: { files: [], videos: [], links: [] }, overridden: false };
+    expect(withUploaded(none, file('deck.pptx', 'application/vnd.ms-powerpoint'))).toEqual({ files: [file('deck.pptx', 'application/vnd.ms-powerpoint')], videos: [], links: [] });
+    expect(withUploaded(none, file('clip.mp4', 'video/mp4'))).toEqual({ files: [], videos: [file('clip.mp4', 'video/mp4')], links: [] });
+  });
+
+  it('P19.25-T4 AC-2 Ganti on the office’s own material replaces the item the row names and keeps the rest', () => {
+    const link = { id: 'l', label: 'Panduan', url: 'https://example.com/' };
+    const own = { content: { files: [file('old.pdf'), file('extra.pdf')], videos: [], links: [link] }, overridden: true };
+    expect(withUploaded(own, file('new.pdf'))).toEqual({ files: [file('new.pdf'), file('extra.pdf')], videos: [], links: [link] });
+    const linkOnly = { content: { files: [], videos: [], links: [link] }, overridden: true };
+    expect(withUploaded(linkOnly, file('new.pdf'))).toEqual({ files: [file('new.pdf')], videos: [], links: [] });
+  });
+
+  it('P19.25-T4 AC-2 Ganti on the template’s material: the office’s becomes the file alone, the template’s untouched', () => {
+    const company = { content: { files: [file('company.pdf')], videos: [], links: [] }, overridden: false };
+    expect(withUploaded(company, file('mine.pdf'))).toEqual({ files: [file('mine.pdf')], videos: [], links: [] });
+  });
+
+  it('P19.25-T4 AC-2 an upload signs, sends the bytes to storage, and confirms what landed', async () => {
+    const calls: string[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      calls.push(`${init?.method ?? 'GET'} ${url}`);
+      if (url.endsWith('/kpm/settings/training/uploads')) {
+        return new Response(JSON.stringify({ uploadUrl: 'https://storage.test/up', storageKey: 'k1', fields: {} }), { status: 201 });
+      }
+      if (url === 'https://storage.test/up') return new Response(null, { status: 204 });
+      return new Response(JSON.stringify({ storageKey: 'k1', mimeType: 'application/pdf', bytes: 3 }), { status: 201 });
+    }));
+    const item = await uploadTrainingFile(new File(['abc'], 'deck.pdf', { type: 'application/pdf' }), 'application/pdf');
+    expect(item).toEqual({ id: '', label: 'deck.pdf', storageKey: 'k1', mimeType: 'application/pdf', bytes: 3 });
+    expect(calls.map((c) => c.replace(/^(\w+) .*(\/kpm\/settings\/training\/uploads.*)$/, '$1 $2'))).toEqual([
+      'POST /kpm/settings/training/uploads', 'POST https://storage.test/up', 'POST /kpm/settings/training/uploads/confirm',
     ]);
-  });
-
-  it('merges a second edit to the same row into the first', () => {
-    const once = stageEdit([], 'trainingModule', saved, { publishState: 'draft' });
-    const twice = stageEdit(once, 'trainingModule', saved, { title: 'Prospect lists' });
-
-    expect(twice).toHaveLength(1);
-    expect(twice[0].body).toEqual({ publishState: 'draft', title: 'Prospect lists' });
-  });
-
-  it('takes a field back out when it is put back, and drops an edit left empty', () => {
-    const unpublished = stageEdit([], 'trainingModule', saved, { publishState: 'draft' });
-
-    expect(stageEdit(unpublished, 'trainingModule', saved, { publishState: 'published' })).toEqual([]);
-  });
-
-  it('reads a cleared description as the null the office already has', () => {
-    const category = { ...TREE[0] } as unknown as { id: string; version: number } & Record<string, unknown>;
-
-    expect(stageEdit([], 'trainingCategory', category, { label: 'Sales', description: '' })).toEqual([]);
-  });
-
-  it('leaves other rows and other ops alone', () => {
-    const others: ConfigChange[] = [{ op: 'trainingModule.archive', id: 'm-list', expectedVersion: 3 }];
-
-    expect(stageEdit(others, 'trainingModule', saved, { title: 'X' })).toEqual([
-      others[0],
-      { op: 'trainingModule.update', id: 'm-list', expectedVersion: 3, body: { title: 'X' } },
-    ]);
-  });
-});
-
-describe('archive and restore', () => {
-  const row = { id: 'c-sales', version: 1 };
-
-  it('stages the one asked for', () => {
-    expect(stageStatus([], 'trainingCategory', row, 'archive')).toEqual([
-      { op: 'trainingCategory.archive', id: 'c-sales', expectedVersion: 1 },
-    ]);
-  });
-
-  /*
-   * Staged together, archive then restore would archive every skill and module in the category
-   * and bring back only the category. Pressing Restore on a staged archive means Undo.
-   */
-  it('takes back a staged archive rather than staging a restore beside it', () => {
-    const archived = stageStatus([], 'trainingCategory', row, 'archive');
-
-    expect(stageStatus(archived, 'trainingCategory', row, 'restore')).toEqual([]);
-  });
-
-  it('takes back a staged restore the same way', () => {
-    const restored = stageStatus([], 'trainingSkill', row, 'restore');
-
-    expect(stageStatus(restored, 'trainingSkill', row, 'archive')).toEqual([]);
-  });
-});
-
-describe('a code already taken', () => {
-  const view = projectTraining(TREE, [
-    { op: 'trainingModule.create', body: { code: 'COLD_CALLS', skillCode: 'PROSPECTING', title: 'Cold calls' } },
-  ]);
-
-  it('is found whatever its case, counting rows staged but not saved', () => {
-    expect(codeTaken(view.modules, 'prospect_list')).toBe(true);
-    expect(codeTaken(view.modules, 'COLD_CALLS')).toBe(true);
-  });
-
-  it('is only ever taken within its own level, and never when blank', () => {
-    expect(codeTaken(view.modules, 'PROSPECTING')).toBe(false);
-    expect(codeTaken(view.modules, '  ')).toBe(false);
-  });
-});
-
-describe('taking a row back', () => {
-  const ops: ConfigChange[] = [
-    { op: 'trainingCategory.create', body: { code: 'LEGAL', label: 'Legal' } },
-    { op: 'trainingSkill.create', body: { code: 'contracts', categoryCode: 'legal', label: 'Contracts' } },
-    { op: 'trainingModule.create', body: { code: 'READING', skillCode: 'CONTRACTS', title: 'Reading' } },
-    { op: 'trainingModule.create', body: { code: 'COLD', skillCode: 'PROSPECTING', title: 'Cold calls' } },
-    { op: 'trainingModule.update', id: 'm-list', expectedVersion: 3, body: { title: 'Lists' } },
-  ];
-  const view = projectTraining(TREE, ops);
-
-  it('takes an unsaved category back with the skills and modules staged inside it', () => {
-    const legal = view.categories.find((c) => c.row.code === 'LEGAL')!.row;
-
-    expect(unstageTraining(ops, 'trainingCategory', legal)).toEqual([ops[3], ops[4]]);
-  });
-
-  it('takes an unsaved skill back with its modules, and nothing else', () => {
-    const contracts = view.skills.find((s) => s.row.code === 'CONTRACTS')!.row;
-
-    expect(unstageTraining(ops, 'trainingSkill', contracts)).toEqual([ops[0], ops[3], ops[4]]);
-  });
-
-  it('takes an unsaved module back alone', () => {
-    const cold = view.modules.find((m) => m.row.code === 'COLD')!.row;
-
-    expect(unstageTraining(ops, 'trainingModule', cold)).toEqual([ops[0], ops[1], ops[2], ops[4]]);
-  });
-
-  it('takes every op on a saved row back, and no other row', () => {
-    const list = view.modules.find((m) => m.row.code === 'PROSPECT_LIST')!.row;
-
-    expect(unstageTraining(ops, 'trainingModule', list)).toEqual(ops.slice(0, 4));
   });
 });

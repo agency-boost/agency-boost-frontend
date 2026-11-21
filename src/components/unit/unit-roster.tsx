@@ -3,67 +3,45 @@
 import Link from 'next/link';
 import { useId, useState, type MouseEvent, type ReactNode } from 'react';
 import { MemberContactButtons } from '@/components/contact-buttons';
-import { HEADER_CONTROL } from '@/components/ui/header-control';
+import { Avatar } from '@/components/ui/avatar';
 import { LineIcon } from '@/components/ui/line-icon';
-import { PersonRow } from '@/components/ui/person-row';
 import { RungTag, useIsLeaderRung } from '@/components/ui/rung-tag';
 import { SectionTitle } from '@/components/ui/section-title';
 import { TippedGlyph } from '@/components/ui/tipped-glyph';
-import { TonePill, type PillTone } from '@/components/ui/tone-pill';
 import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
 import { unitDashboardMessages } from '@/i18n/messages/unit-dashboard';
 import { cn } from '@/lib/cn';
-import { lastOneOnOneLine, rosterStatusLabel, type RosterStatus } from '@/lib/coaching';
 import { formatNumber, formatPercent, formatRupiahCompactPair, formatShortDay } from '@/lib/format';
 import { useCan } from '@/lib/session';
 import {
-  everyRow, goalMet, goalShare, matchesFilter, rowHref, rowName, rowsOf, statusShown, statusTally,
-  type RosterFilter, type UnitDashboardView, type UnitGroup, type UnitPeriod, type UnitRow, type UnitTotal,
+  goalShare, progressTone, rowHref, rowName, rowsOf,
+  type UnitDashboardView, type UnitGroup, type UnitPeriod, type UnitRow, type UnitTotal,
 } from '@/lib/unit-dashboard';
+import { CoachingStatusTile } from './coaching-status-tile';
 
 /**
- * ***Roster tim Anda*** (UI V1, Phase 18.11 T4; UI-002, UI-005, UI-007, UI-009, UI-011, UI-028;
- * `unit-dashboard-mobile` screens 1–2, `unit-dashboard-desktop` *Overview*). **Three drawings of one roster**, each for
- * its range, never one restyled (the report's *Rules*):
+ * ***Roster tim Anda*** (P19.18-T1 AC-5 to AC-9; ADR-0271 §4–§6; the brief of 19 November 2026, part A;
+ * `unit-overview-{mobile,tablet,laptop}`) — **one drawing of unit cards at every size; no wide table any more**.
  *
- * - **Below 768px, an accordion by leader** (UI-002): *Unit Anda · 4* first and open, each AAB unit closed, a unit nested
- *   in one inside it; each header 48px with the unit's goal bar and percentage, in place of the old *— Total* card; each
- *   person a 60px row — avatar, NAME, the goal's mini bar, percentage and *Rp 29 Jt / 94,7 Jt* — with the status pill on
- *   the right. No ⓘ per row, no ⌄, no *Perbarui produksi*, no *+ Tambah agent* (the owner, 30 Oct). **Since the owner's
- *   mobile review of 7 November** (P19.8-T4 AC-3, MOB UI-178; ADR-0229 §3): the NAME on up to two lines, never cut; under
- *   it the percentage in colour and *Rp 68 / 94,7 Jt*, and under that **a 5px bar across the name column, for every
- *   person**; the whole row a target with ›; and the chips **equal count tiles**, the count over its words.
- * - **768–1023px, a table of four** (UI-009): *Nama · Progres goal · Aktivitas · Status*.
- * - **From 1024px, a table of nine and a ›** (UI-009): *Nama · Progres goal · Leads penjualan · Closing · Leads rekrut ·
- *   Potensi rekrut · Aktivitas · 1:1 terakhir · Status*; each unit's header row with its totals and *Active n/m*;
- *   every unit open, its header able to close it; the header sticky; nothing scrolls sideways.
+ * - **The title row**: *Roster tim Anda · 30*, an ⓘ, *⟳ 27 Okt 26* (the office's latest production import, UI-028), and
+ *   on a tablet and a laptop ***+ Tambah agent*** and ***Perbarui produksi*** on the right (the screen's `actions`).
+ * - **One header per unit** — the reader's own (*Unit Anda*), then each unit below them, then *Belum punya leader* — with
+ *   the leader's photo, *n orang* and the unit's progress (*12% · Rp 605,5 Jt / 5 M* and its bar) **even when closed**.
+ *   **Every team inside it**, at any depth, is a **team line** built like the header — the same orange tint, the team
+ *   leader's photo, *n orang*, its own progress — never a folder to open (*"one header level only"*).
+ * - **The rows in the server's order**: inside every unit and team the AB, then the AAB(s), then the agents (AC-6).
+ * - **A person**: photo (initials without one), the orange *AB* / *AAB* label before the NAME in capitals (agents none),
+ *   then **% + *Rp x / y* + a thin bar on that line**, or *Belum diunggah* / *Goal belum diatur* there — never a floating
+ *   pill — then WhatsApp and ›. **Progress is navy below 100%, green from 100%; never red** (AC-5). **No status pill and
+ *   no status chips** (OD-391: *"the % colour carries it"*).
+ * - **Phone**: the units an accordion, *Unit Anda* open; **from 768px** every unit open (a tap on its header closes it),
+ *   the people two a row on a tablet held upright and **three a row from 1024px**, each with **the coaching status tile
+ *   under the bar, exactly as wide** (`COACHING_STATUS`), and *Leads sales n · Leads rekrut n* for the period (AC-8).
+ * - **A tap on a person** (AC-9): with `view.personCard` — the KPM Owner, an Admin — the person's card first
+ *   (`onPerson`); anybody else straight to the person's Personal Summary (`rowHref`, UI-011), the reader's own row to
+ *   their own. A row the reader may not open goes nowhere.
  *
- * ***Proposal*** (P19.7-T2 AC-13; ADR-0221 §7): how many proposals each person first saved as a PDF in the period
- * (`PROPOSALS_MADE`), and nothing about the clients — a column after *Potensi rekrut* on a laptop and a tablet (before
- * *Aktivitas* on a tablet, which draws no lead columns), its unit's sum on the header row; on a phone the document icon
- * and the count beside the person's name, only above zero, heard as *"{n} proposal"*. The coaching roster carries none.
- *
- * **Every row is a link, whole** (UI-011): the reader's own to `/summary`, anybody else's to their agent page on the
- * *Personal Summary* tab, `?from=` this page so its ‹ comes back; somebody whose pages the reader may not open is a
- * row that goes nowhere. **The status pill shows on *Bulan ini* alone** (UI-005), and so do the chips that filter by it
- * (*Semua 12 · Perlu perhatian 5 · Perlu dipantau 3*, UI-002); **one ⓘ** says how a status is decided (UI-007) — beside
- * the title on a phone, on the *Status* heading in a table. *⟳ Last updated 28 Okt 26* is the office's latest production
- * import (UI-028) — on a phone *⟳ 28 Okt 26*, its words for a screen reader.
- *
- * **No status without production** (P19.8-T4 AC-2, MOB UI-177; ADR-0229 §2, at every size): a row whose figure is not
- * uploaded shows the dashed bar and *Belum diunggah* and **no pill**, and counts in no status chip; a chip at 0 is not
- * drawn, and **when only *Semua* would remain the chip row is not drawn at all — the title reads *Roster tim Anda · 12***.
- * The title is the section titles' one size, 14px / 700 (MOB UI-185); the chips are header controls (MOB UI-171).
- *
- * **Since the owner's requests of 6 November** (P19.9-T4; R6, R7; ADR-0235, OD-291): **a leader's row, at every period
- * and size, carries the person's level** — the navy tag *Potensi* draws (`RungTag`), before the name — **and every row a
- * WhatsApp button** (`RowWhatsApp`), Home's rule: with a number on file, or for a reader who may save one; never on the
- * reader's own row, never in the office's read-only view. **Each unit's header carries its amount**, *Rp x / y*, under
- * its label on a phone and on its own line on a laptop below 1280px, where it was read only by a screen reader.
- *
- * *Changed 2026-11-10 (P19.11-T6 AC-4; UX-16, UXQ10):* **the tag is a leader's alone** — AB and AAB, as the company's
- * ladder places them (`useIsLeaderRung`); an Agent's row has none, and nothing in its place: on a phone the name follows
- * the avatar directly, on a tablet and a laptop no empty line stands under the name. It was on every row (P19.9-T4 AC-1).
+ * Every figure is the server's; this sums nothing.
  */
 export interface RosterProps {
   view: UnitDashboardView;
@@ -76,312 +54,296 @@ export interface RosterProps {
   actions?: ReactNode;
   /** A row was followed: the screen keeps the scroll, so ‹ comes back to it (UI-011). */
   onLeave?: () => void;
+  /** The person card (AC-9): drawn by the screen when the server says the reader opens one. */
+  onPerson?: (row: UnitRow, unit: string) => void;
 }
 
-export function UnitRoster({ view, period, from, size, actions, onLeave }: RosterProps) {
+export function UnitRoster({ view, period, from, size, actions, onLeave, onPerson }: RosterProps) {
   const headingId = useId();
-  const language = useLanguage();
   const figures = useFigureLanguage();
   const t = useMessages(unitDashboardMessages);
-  const [filter, setFilter] = useState<RosterFilter>('all');
-  const month = period === 'month';
-  const tally = statusTally(everyRow(view));
-  // Only *Semua* would remain (MOB UI-177): no chip row, and the count joins the title.
-  const onlyAll = tally.needs_attention === 0 && tally.watch_closely === 0;
-  const shownFilter: RosterFilter = month && !onlyAll ? filter : 'all';
-
-  const statusInfo = month ? (
-    <TippedGlyph glyph="ⓘ" name={t.prototype.statusInfo} tip={t.prototype.statusRules} align="fit" className={STATUS_TIP} />
-  ) : null;
-  const chips = month && !onlyAll
-    ? size === 'phone'
-      ? <CountTiles tally={tally} filter={shownFilter} onFilter={setFilter} language={language} />
-      : <StatusChips tally={tally} filter={shownFilter} onFilter={setFilter} language={language} />
-    : null;
-  const title = month && onlyAll ? t.v1.rosterCount({ title: t.prototype.roster, n: tally.all }) : t.prototype.roster;
+  const sections = useSections(view);
+  // *Roster tim Anda · 30*: the server's count, the same number as *Tim Anda* (`tiles.team.total`, every row).
+  const total = view.tiles.team.total;
 
   /** A row's link followed (a click on an `<a>` inside the roster): tell the screen, which keeps the scroll. */
   const leaving = (e: MouseEvent<HTMLElement>) => {
     if ((e.target as HTMLElement).closest('a[href]')) onLeave?.();
   };
+  const wide = size !== 'phone';
+  const card = view.personCard && onPerson ? onPerson : undefined;
 
   return (
     <section aria-labelledby={headingId} data-roster={size} onClickCapture={leaving} className="mt-3 overflow-clip rounded-lg bg-card lg:mt-4">
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-2 px-3 pb-2 pt-3 md:px-4">
-        <SectionTitle id={headingId}>{title}</SectionTitle>
-        {size === 'phone' && statusInfo}
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-2 px-3 pb-2.5 pt-3 md:px-4">
+        <SectionTitle id={headingId}>{t.v1.rosterCount({ title: t.prototype.roster, n: total })}</SectionTitle>
+        <TippedGlyph glyph="ⓘ" name={t.overview.rosterInfo} tip={t.overview.rosterRules} align="fit" className={TIP} />
         {view.lastUpload && (
-          <span data-last-updated="" className="inline-flex items-center gap-1 text-sm text-signal-grey max-md:ml-auto">
+          <span data-last-updated="" className="inline-flex items-center gap-1 text-sm text-signal-grey max-md:ml-auto md:ml-auto">
             <LineIcon name="refresh" className="h-3.5 w-3.5" />
-            {size === 'phone' ? (
-              // The phone's *⟳ 27 Okt 26* (the Unit mockup); its words for a screen reader.
-              <>
-                <span className="sr-only">{t.v1.lastUpdatedLabel}</span>
-                {shortDayWithYear(view.lastUpload, figures)}
-              </>
-            ) : t.v1.lastUpdated({ day: shortDayWithYear(view.lastUpload, figures) })}
+            <span className="sr-only">{t.v1.lastUpdatedLabel}</span>
+            {shortDayWithYear(view.lastUpload, figures)}
           </span>
         )}
-        {size !== 'phone' && (
-          <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
-            {chips}
-            {actions}
-          </div>
-        )}
+        {wide && actions && <div className="flex flex-wrap items-center justify-end gap-2">{actions}</div>}
       </div>
-      {size === 'phone' && chips && <div className="px-2.5 pb-3 pt-1">{chips}</div>}
-
-      {size === 'phone'
-        ? <RosterAccordion view={view} period={period} filter={shownFilter} from={from} />
-        : <RosterTable view={view} period={period} filter={shownFilter} from={from} wide={size === 'desktop'} headingId={headingId} statusInfo={statusInfo} />}
+      <Sections sections={sections} view={view} period={period} from={from} wide={wide} card={card} />
     </section>
   );
 }
 
-/** *Last updated 28 Okt 26* (UI-028): the day and month as the product writes them, and the year's two digits. */
+/** *⟳ 28 Okt 26* (UI-028): the day and month as the product writes them, and the year's two digits. */
 export const shortDayWithYear = (day: string, figures: Parameters<typeof formatShortDay>[2]) =>
   `${formatShortDay(day, {}, figures)} ${day.slice(2, 4)}`;
 
-/** The status rules' bubble, its lines kept, below its glyph. */
-const STATUS_TIP = cn(
+/** The ⓘ's bubble, below its glyph, its lines kept. */
+const TIP = cn(
   'normal-case tracking-normal',
   '[&>[role=tooltip]]:bottom-auto [&>[role=tooltip]]:top-full [&>[role=tooltip]]:mb-0 [&>[role=tooltip]]:mt-1',
   '[&>[role=tooltip]]:w-[250px] [&>[role=tooltip]]:whitespace-pre-line [&>[role=tooltip]]:font-normal',
-  '[&>[role=tooltip]]:leading-relaxed',
 );
 
-/** `GOAL_PACE_STATUS` as the shared pill's tone (UI-005): red, amber, green, grey — never a dot. */
-export const STATUS_TONE: Record<RosterStatus, PillTone> = {
-  needs_attention: 'red',
-  watch_closely: 'amber',
-  on_track: 'green',
-  no_goal_set: 'grey',
-};
-
-/** The pill a row carries on *Bulan ini*. */
-function StatusPill({ status }: { status: RosterStatus }) {
-  const language = useLanguage();
-  return <TonePill tone={STATUS_TONE[status]}>{rosterStatusLabel(status, language)}</TonePill>;
+/** A unit line's or a team line's leader: whose photo it carries. */
+interface LineLeader {
+  membershipId: string;
+  name: string;
+  photoUrl: string | null;
 }
 
-/** A row's pill: on *Bulan ini*, and only when its figure is uploaded (MOB UI-177) — `null` otherwise. */
-const pillOf = (row: UnitRow, period: UnitPeriod) =>
-  (period === 'month' && statusShown(row) ? <StatusPill status={row.status} /> : null);
-
-/**
- * *Semua 12 · Perlu perhatian 5 · Perlu dipantau 3* (UI-002): toggle buttons, one pressed; *Semua* navy, each status on
- * its own tint, its count beside its words. A status nobody holds has no chip.
- */
-function StatusChips({
-  tally, filter, onFilter, language,
-}: { tally: Record<RosterFilter, number>; filter: RosterFilter; onFilter: (f: RosterFilter) => void; language: Parameters<typeof rosterStatusLabel>[1] }) {
-  const t = useMessages(unitDashboardMessages).v1;
-  const chip = (id: RosterFilter, label: string, tint: string) => (
-    <button
-      key={id}
-      type="button"
-      aria-pressed={filter === id}
-      onClick={() => onFilter(id)}
-      className={cn(
-        'inline-flex items-center whitespace-nowrap rounded-pill px-3',
-        HEADER_CONTROL,
-        tint,
-        filter === id && 'outline outline-2 outline-offset-1 outline-secondary',
-      )}
-    >
-      {label}
-    </button>
-  );
-  return (
-    <div role="group" aria-label={t.filterLabel} className="flex flex-wrap gap-1.5">
-      {chip('all', t.all({ n: tally.all }), filter === 'all' ? 'bg-secondary text-secondary-contrast' : 'border border-line bg-card text-ink')}
-      {tally.needs_attention > 0 && chip(
-        'needs_attention', t.withCount({ status: rosterStatusLabel('needs_attention', language), n: tally.needs_attention }),
-        'bg-pill-red text-pill-red-ink',
-      )}
-      {tally.watch_closely > 0 && chip(
-        'watch_closely', t.withCount({ status: rosterStatusLabel('watch_closely', language), n: tally.watch_closely }),
-        'bg-pill-amber text-pill-amber-ink',
-      )}
-    </div>
-  );
+/** A team inside a unit (an AAB with people, at any depth): its line, then its own rows. */
+export interface RosterBlock {
+  team: { key: string; label: string; leader: LineLeader; count: number; goal: UnitTotal['goal'] } | null;
+  rows: UnitRow[];
 }
 
+/** One unit of the roster: its header, then its own rows and each team inside it. */
+export interface RosterSection {
+  key: string;
+  label: string;
+  leader: LineLeader | null;
+  count: number;
+  goal: UnitTotal['goal'];
+  blocks: RosterBlock[];
+}
+
+const leaderOf = (row: UnitRow): LineLeader => ({ membershipId: row.membershipId, name: row.name, photoUrl: row.photoUrl ?? null });
+
 /**
- * **The phone's count tiles** (P19.8-T4 AC-3, MOB UI-178; ADR-0229 §3; OD-281's default, as drawn): the chips as equal
- * tiles on one row — the count on top, 16px / 800, its words under it, 12px — *12 Semua · 3 Perlu perhatian · 5 Perlu
- * dipantau*; *Semua* navy when chosen, each status on its own tint. A status nobody holds has no tile. Toggle buttons,
- * one pressed, as the chips are.
+ * **The roster's units** (AC-6): *Unit Anda* — or *Unit {head}* in a view of a unit below the reader — then each unit below
+ * the head with every team nested in it flattened into team lines, in the server's order, then *Belum punya leader*.
  */
-function CountTiles({
-  tally, filter, onFilter, language,
-}: { tally: Record<RosterFilter, number>; filter: RosterFilter; onFilter: (f: RosterFilter) => void; language: Parameters<typeof rosterStatusLabel>[1] }) {
-  const t = useMessages(unitDashboardMessages).v1;
-  const figures = useFigureLanguage();
-  const tiles: { id: RosterFilter; label: string; tint: string }[] = [
-    { id: 'all', label: t.allTile, tint: filter === 'all' ? 'bg-secondary text-secondary-contrast' : 'bg-hover-row text-ink' },
-    ...(tally.needs_attention > 0
-      ? [{ id: 'needs_attention' as const, label: rosterStatusLabel('needs_attention', language), tint: 'bg-pill-red text-pill-red-ink' }]
-      : []),
-    ...(tally.watch_closely > 0
-      ? [{ id: 'watch_closely' as const, label: rosterStatusLabel('watch_closely', language), tint: 'bg-pill-amber text-pill-amber-ink' }]
-      : []),
-  ];
+export function rosterSections(
+  view: Pick<UnitDashboardView, 'head' | 'yourUnit' | 'units'> & { unled?: UnitDashboardView['unled'] },
+  words: { own: string; unitOf: (name: string) => string; unled: string },
+): RosterSection[] {
+  const teams = (groups: readonly UnitGroup[]): RosterBlock[] => groups.flatMap((g) => [
+    {
+      team: { key: g.head.membershipId, label: words.unitOf(g.head.name), leader: leaderOf(g.head), count: rowsOf(g).length, goal: g.total.goal },
+      rows: [g.head, ...g.members],
+    },
+    ...teams(g.units),
+  ]);
+  const own: RosterSection[] = view.yourUnit.rows.length > 0 ? [{
+    key: 'own',
+    label: view.head.isReader ? words.own : words.unitOf(view.head.name),
+    leader: leaderOf(view.yourUnit.rows[0]),
+    count: view.yourUnit.rows.length,
+    goal: view.yourUnit.total.goal,
+    blocks: [{ team: null, rows: view.yourUnit.rows }],
+  }] : [];
+  const units: RosterSection[] = view.units.map((g) => ({
+    key: g.head.membershipId,
+    label: words.unitOf(g.head.name),
+    leader: leaderOf(g.head),
+    count: rowsOf(g).length,
+    goal: g.total.goal,
+    blocks: [{ team: null, rows: [g.head, ...g.members] }, ...teams(g.units)],
+  }));
+  const unled: RosterSection[] = view.unled && view.unled.rows.length > 0 ? [{
+    key: 'unled', label: words.unled, leader: null, count: view.unled.rows.length, goal: view.unled.total.goal,
+    blocks: [{ team: null, rows: view.unled.rows }],
+  }] : [];
+  return [...own, ...units, ...unled];
+}
+
+/** The sections in the reader's words: unit names in capitals (the naming rule), *Unit Anda* the reader's own. */
+function useSections(view: UnitDashboardView): RosterSection[] {
+  const t = useMessages(unitDashboardMessages);
+  return rosterSections(view, {
+    own: t.prototype.yourUnitGroup,
+    unitOf: (name) => t.unitOf({ name: name.toLocaleUpperCase('id-ID') }),
+    unled: t.views.unled,
+  });
+}
+
+function Sections({
+  sections, view, period, from, wide, card,
+}: {
+  sections: RosterSection[]; view: UnitDashboardView; period: UnitPeriod; from: string; wide: boolean;
+  card?: (row: UnitRow, unit: string) => void;
+}) {
+  // A phone opens *Unit Anda* alone; from 768px every unit is open, and a tap on its header closes it (AC-8).
+  const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set(wide ? sections.map((s) => s.key) : sections.slice(0, 1).map((s) => s.key)));
+  const toggle = (key: string) => setOpen((now) => {
+    const next = new Set(now);
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
+    return next;
+  });
   return (
-    <div role="group" aria-label={t.filterLabel} data-count-tiles="" className={cn('grid gap-1.5', tiles.length === 3 ? 'grid-cols-3' : 'grid-cols-2')}>
-      {tiles.map(({ id, label, tint }) => (
-        <button
-          key={id}
-          type="button"
-          aria-pressed={filter === id}
-          aria-label={`${formatNumber(tally[id], {}, figures)} ${label}`}
-          onClick={() => onFilter(id)}
-          className={cn(
-            'flex min-h-[3.25rem] min-w-0 flex-col items-center justify-center rounded-[14px] px-1.5 text-sm font-semibold leading-tight',
-            tint,
-            filter === id && id !== 'all' && 'outline outline-2 outline-offset-1 outline-secondary',
-          )}
-        >
-          <span data-count="" className="text-lg font-extrabold tabular-nums">{formatNumber(tally[id], {}, figures)}</span>
-          <span className="max-w-full truncate">{label}</span>
-        </button>
+    <div data-roster-units="">
+      {sections.map((section) => (
+        <UnitSection
+          key={section.key}
+          section={section}
+          open={open.has(section.key)}
+          onToggle={() => toggle(section.key)}
+          view={view}
+          period={period}
+          from={from}
+          wide={wide}
+          card={card}
+        />
       ))}
     </div>
   );
 }
 
+function UnitSection({
+  section, open, onToggle, view, period, from, wide, card,
+}: {
+  section: RosterSection; open: boolean; onToggle: () => void; view: UnitDashboardView; period: UnitPeriod; from: string;
+  wide: boolean; card?: (row: UnitRow, unit: string) => void;
+}) {
+  const bodyId = useId();
+  return (
+    <div data-unit-section={section.key}>
+      <h3>
+        <button
+          type="button"
+          aria-expanded={open}
+          aria-controls={bodyId}
+          onClick={onToggle}
+          data-unit-line=""
+          className="flex min-h-14 w-full items-center gap-2.5 border-t border-divider bg-primary/[0.12] px-3.5 py-2 text-left text-md font-bold text-ink md:px-4"
+        >
+          <LineIcon name={open ? 'chevronDown' : 'chevronRight'} className="h-4 w-4 shrink-0 text-signal-grey" />
+          <LineContent label={section.label} leader={section.leader} count={section.count} goal={section.goal} wide={wide} />
+        </button>
+      </h3>
+      {open && (
+        <div id={bodyId}>
+          {section.blocks.map((block, i) => (
+            <div key={block.team?.key ?? `own-${i}`} data-roster-block={block.team?.key ?? 'own'}>
+              {block.team && (
+                <div data-team-line={block.team.key} className="flex min-h-12 items-center gap-2.5 border-t border-divider bg-primary/[0.12] py-2 pl-9 pr-3.5 text-md font-bold text-ink md:pl-10 md:pr-4">
+                  <LineContent label={block.team.label} leader={block.team.leader} count={block.team.count} goal={block.team.goal} wide={wide} />
+                </div>
+              )}
+              <ul role="list" className={cn('border-t border-divider', wide && 'grid md:grid-cols-2 lg:grid-cols-3')}>
+                {block.rows.map((row) => (
+                  <PersonCell
+                    key={row.membershipId}
+                    row={row}
+                    unit={section.label}
+                    period={period}
+                    from={from}
+                    wide={wide}
+                    readOnly={view.readOnly}
+                    card={card}
+                  />
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /**
- * **A goal's line** (UI-002, UI-005): the 44px mini bar, the percentage — red under 100%, green from it, judged on the
- * server's unrounded figure — and *Rp 29 Jt / 94,7 Jt* in grey. No goal: *Goal belum diatur*; no upload: a dashed empty
- * bar and *Belum diunggah*; a year made before the month: *Target tahun ini tercapai*. **No figure is shown as 0.**
+ * **A unit's or a team's line** (UI-206): the leader's photo, the label, *n orang*, and the progress — under the label on
+ * a phone, on the right from 768px — the same pieces a person's row draws.
  */
-function GoalLine({ goal, pair = true }: {
+function LineContent({
+  label, leader, count, goal, wide,
+}: { label: string; leader: LineLeader | null; count: number; goal: UnitTotal['goal']; wide: boolean }) {
+  const words = useMessages(unitDashboardMessages);
+  const people = <span data-line-count="" className="shrink-0 text-sm font-semibold text-signal-grey">{words.overview.people({ n: count })}</span>;
+  return (
+    <>
+      {leader && <Avatar name={leader.name} photoUrl={leader.photoUrl} seed={leader.membershipId} size={28} />}
+      {wide ? (
+        <>
+          <span className="min-w-0 truncate">{label}</span>
+          <span aria-hidden="true" className="text-signal-grey">·</span>
+          {people}
+          <span className="ml-auto w-60 shrink-0"><Progress goal={goal} align="end" /></span>
+        </>
+      ) : (
+        <span className="min-w-0 flex-1">
+          <span className="flex items-baseline gap-2">
+            <span className="min-w-0 flex-1 truncate">{label}</span>
+            {people}
+          </span>
+          <span className="mt-0.5 block max-w-[12rem] font-medium"><Progress goal={goal} /></span>
+        </span>
+      )}
+    </>
+  );
+}
+
+/**
+ * **A goal's progress, on its line** (AC-5, AC-7): the % — navy below 100%, green from 100%, never red, judged on the
+ * server's unrounded figure — and *Rp x / y* in grey, a thin bar under them in the same colour. No goal: a dashed bar and
+ * *Goal belum diatur*; nothing uploaded: the dashed bar and *Belum diunggah*; a year made before the month: *Target tahun
+ * ini tercapai*. **No figure is shown as 0.**
+ */
+function Progress({
+  goal, align = 'start',
+}: {
   goal: { set?: boolean; targetMinor: number | null; actualMinor: number | null; attainmentPct: number | null };
-  /** The *Rp x / y* beside it. */
-  pair?: boolean;
+  align?: 'start' | 'end';
 }) {
   const figures = useFigureLanguage();
   const t = useMessages(unitDashboardMessages);
   const { targetMinor: target, actualMinor: actual } = goal;
-  if (goal.set === false || target === null) return <span className="text-signal-grey">{t.own.noGoal}</span>;
-  if (target === 0) return <span className="font-semibold text-signal-green">{t.own.targetMade}</span>;
-  if (actual === null) {
-    return (
-      <span className="inline-flex min-w-0 items-center gap-1.5">
-        <span aria-hidden="true" data-goal-bar="none" className="h-[5px] w-11 shrink-0 rounded-sm border border-dashed border-line" />
-        <span className="text-signal-grey">{t.own.notUploaded}</span>
-      </span>
-    );
-  }
-  const pct = goal.attainmentPct ?? 0;
-  const met = goalMet(pct);
-  const bar = goalShare({ ...goal, set: true }) ?? 0;
-  return (
-    <span className="inline-flex min-w-0 items-center gap-1.5">
-      <span aria-hidden="true" data-goal-bar={bar} className="h-[5px] w-11 shrink-0 overflow-hidden rounded-sm bg-base">
-        <span className={cn('block h-full', met ? 'bg-signal-green' : 'bg-signal-red')} style={{ width: `${bar}%` }} />
-      </span>
-      <span className={cn('font-semibold', met ? 'text-signal-green' : 'text-signal-red')}>{formatPercent(pct, {}, figures)}</span>
-      {pair && (
-        <span className="min-w-0 truncate text-signal-grey">{formatRupiahCompactPair(actual, target, '/', figures)}</span>
-      )}
+  const dashed = (words: string) => (
+    <span className={cn('flex min-w-0 items-center gap-1.5 text-sm font-medium text-signal-grey', align === 'end' && 'justify-end')}>
+      <span aria-hidden="true" data-goal-bar="none" className="h-1.5 w-9 shrink-0 rounded-sm border border-dashed border-line" />
+      {words}
     </span>
   );
-}
-
-/**
- * **A phone row's goal** (P19.8-T4 AC-3, MOB UI-178; ADR-0229 §3): the percentage in colour — green from 100%, red under
- * it — and *Rp 68 Jt / 94,7 Jt* in grey, and under them **a 5px bar across the name column**, for every person with a
- * figure, in the same colour. No goal: *Goal belum diatur*; no upload: the dashed bar and *Belum diunggah*; a year made
- * before the month: *Target tahun ini tercapai*. **No figure is shown as 0.**
- */
-function PhoneGoalLine({ goal }: { goal: UnitRow['goal'] }) {
-  const figures = useFigureLanguage();
-  const { targetMinor: target, actualMinor: actual } = goal;
-  if (goal.set === false || target === null || target === 0 || actual === null) return <GoalLine goal={goal} />;
+  if (goal.set === false || target === null) return dashed(t.own.noGoal);
+  if (target === 0) return <span className="text-sm font-semibold text-signal-green">{t.own.targetMade}</span>;
+  if (actual === null) return dashed(t.own.notUploaded);
   const pct = goal.attainmentPct ?? 0;
-  const met = goalMet(pct);
-  const bar = goalShare({ ...goal, set: true }) ?? 0;
+  const tone = progressTone(pct);
+  const share = goalShare({ ...goal, set: true }) ?? 0;
+  const width = pct > 0 ? Math.max(share, 2) : 0;
   return (
     <span className="flex w-full min-w-0 flex-col">
-      <span className="flex min-w-0 items-center gap-1.5 whitespace-nowrap">
-        <span className={cn('font-bold', met ? 'text-signal-green' : 'text-signal-red')}>{formatPercent(pct, {}, figures)}</span>
+      <span className={cn('flex min-w-0 items-center gap-1.5 whitespace-nowrap text-sm font-medium', align === 'end' && 'justify-end')}>
+        <b data-progress-tone={tone} className={cn('font-bold', tone === 'green' ? 'text-signal-green' : 'text-navy')}>
+          {formatPercent(pct, {}, figures)}
+        </b>
         <span className="min-w-0 truncate text-signal-grey">{formatRupiahCompactPair(actual, target, '/', figures)}</span>
       </span>
-      <span aria-hidden="true" data-goal-bar={bar} className="mt-[5px] block h-[5px] w-full overflow-hidden rounded-sm bg-base">
-        <span className={cn('block h-full rounded-sm', met ? 'bg-signal-green' : 'bg-signal-red')} style={{ width: `${bar}%` }} />
+      <span aria-hidden="true" data-goal-bar={share} className="mt-[5px] block h-[5px] w-full overflow-hidden rounded-sm bg-base">
+        <span className={cn('block h-full rounded-sm', tone === 'green' ? 'bg-signal-green' : 'bg-secondary')} style={{ width: `${width}%` }} />
       </span>
     </span>
   );
 }
 
-/** A row's ✓ (`PACING_TO_MAA`), named for a screen reader. */
-function MaaMark() {
-  const t = useMessages(unitDashboardMessages).own;
-  return (
-    <span className="shrink-0 font-bold text-signal-green">
-      <span aria-hidden="true">✓</span>
-      <span className="sr-only">{t.maaMark}</span>
-    </span>
-  );
-}
-
-/** *New hire* before a first sale (ADR-0172 §3): a grey pill, and for a screen reader why the totals leave them out. */
-function NewHireTag() {
-  const t = useMessages(unitDashboardMessages);
-  return (
-    <TonePill tone="grey">
-      {t.prototype.newHire}
-      <span className="sr-only">{t.own.newHireMark}</span>
-    </TonePill>
-  );
-}
-
-/** The marks beside a name: the ✓ and *New hire*. `null` with neither. */
-function marksOf(row: UnitRow): ReactNode {
-  if (!row.pacingToMaa && !row.newHireBeforeFirstSale) return null;
-  return (
-    <span className="inline-flex items-center gap-1.5">
-      {row.pacingToMaa && <MaaMark />}
-      {row.newHireBeforeFirstSale && <NewHireTag />}
-    </span>
-  );
-}
+/** The person card's progress figure and line: the same rule as a row's, for `unit-person-card.tsx`. */
+export { Progress as GoalProgress };
 
 /**
- * **A phone row's proposal count** (P19.7-T2 AC-13): the document icon and the number, only above zero — one image to a
- * screen reader, *"3 proposal"*.
- */
-function ProposalsMark({ n }: { n: number }) {
-  const figures = useFigureLanguage();
-  const t = useMessages(unitDashboardMessages).own;
-  return (
-    <span role="img" aria-label={t.proposalsMade({ n })} data-proposals-made={n} className="inline-flex shrink-0 items-center gap-0.5 text-xs font-semibold text-navy">
-      <LineIcon name="document" className="h-3.5 w-3.5" />
-      <span aria-hidden="true">{formatNumber(n, {}, figures)}</span>
-    </span>
-  );
-}
-
-/** A phone row's marks: the ✓, *New hire*, and its proposals above zero (P19.7-T2 AC-13). `null` with none. */
-function phoneMarksOf(row: UnitRow): ReactNode {
-  const marks = marksOf(row);
-  if (!(row.proposalsMade > 0)) return marks;
-  return (
-    <span className="inline-flex items-center gap-1.5">
-      {marks}
-      <ProposalsMark n={row.proposalsMade} />
-    </span>
-  );
-}
-
-/**
- * **A row's WhatsApp** (P19.9-T4 AC-1; R6, ADR-0235, OD-291) — Home's *Laporan aktivitas tim* rule (`home-team.tsx`):
- * the 36px green circle straight to WhatsApp with a number on file; without one, *Isi nomor WhatsApp* for a reader who
- * may save it on the person's account (`member:update_phone`: every leader, the Owner and the Admins since ADR-0263) —
- * and nothing for one who may not.
- * **Never on the reader's own row, and never in the office's read-only view** (P19.3-T3 AC-3), whose rows carry no
- * number. Where a row has none, an equal blank keeps the column straight — none at all in the read-only view.
+ * **A row's WhatsApp** (P19.9-T4 AC-1; R6, ADR-0235, OD-291) — Home's rule: the 36px green circle straight to WhatsApp with
+ * a number on file; without one, *Isi nomor WhatsApp* for a reader who may save it (`member:update_phone`) — and nothing
+ * for one who may not. **Never on the reader's own row, and never in the office's read-only view** (P19.3-T3 AC-3).
  */
 function RowWhatsApp({ row, readOnly }: { row: UnitRow; readOnly: boolean }) {
   const canSavePhone = useCan('member:update_phone');
@@ -390,8 +352,7 @@ function RowWhatsApp({ row, readOnly }: { row: UnitRow; readOnly: boolean }) {
   const phone = saved ?? row.phone;
   if (row.isReader || !(canSavePhone || phone)) return <span aria-hidden="true" className="w-9 shrink-0" />;
   return (
-    // A 36px circle in a 36px column; its 44px target reaches 4px into the gap either side (as Home's).
-    <span data-row-whatsapp="" className="-mx-1 flex lg:mx-0">
+    <span data-row-whatsapp="" className="-mx-1 flex">
       <MemberContactButtons
         membershipId={row.membershipId}
         name={row.name}
@@ -405,482 +366,66 @@ function RowWhatsApp({ row, readOnly }: { row: UnitRow; readOnly: boolean }) {
 }
 
 /**
- * **A unit's amount** (P19.9-T4 AC-2; R7, ADR-0235): *Rp 262,4 Jt / 320 Jt* — the shared pair, beside its percentage —
- * or *Belum diunggah* while none of its production is uploaded; nothing without a target. Each figure kept whole, so a
- * narrow column wraps after the slash and never cuts a sum.
+ * **One person** (AC-7, AC-8): photo, the orange label and the NAME, the progress on its line — and from 768px the
+ * coaching status tile as wide as the bar and *Leads sales n · Leads rekrut n* — then WhatsApp and ›. **The name is the
+ * row's target, stretched over it**, so WhatsApp stays its own control above it.
  */
-function UnitAmount({ goal, className }: { goal: UnitTotal['goal']; className?: string }) {
-  const t = useMessages(unitDashboardMessages);
-  const figures = useFigureLanguage();
-  if (!goal.targetMinor) return null;
-  if (goal.actualMinor === null) return <span data-unit-amount="" className={className}>{t.own.notUploaded}</span>;
-  const [first, second] = formatRupiahCompactPair(goal.actualMinor, goal.targetMinor, '/', figures).split(' / ');
-  return (
-    <span data-unit-amount="" className={className}>
-      <span className="whitespace-nowrap">{first} /</span> <span className="whitespace-nowrap">{second}</span>
-    </span>
-  );
-}
-
-/**
- * **A phone row's right side** (P19.9-T4 AC-1): the status pill on *Bulan ini* and **WhatsApp under it**, the two right-
- * aligned in one column — side by side they left the name ~40px at 375px — and WhatsApp alone on the other periods. The
- * row's › stays beside them.
- */
-function PhoneTrailing({ row, period, readOnly }: { row: UnitRow; period: UnitPeriod; readOnly: boolean }) {
-  const pill = pillOf(row, period);
-  // The office's read-only view: the row's right side as it was, the pill alone.
-  if (readOnly) return pill;
-  const whatsApp = <RowWhatsApp row={row} readOnly={readOnly} />;
-  if (!pill) return whatsApp;
-  return (
-    <span className="flex flex-col items-end gap-1">
-      {pill}
-      <span className="-my-1 flex">{whatsApp}</span>
-    </span>
-  );
-}
-
-/** One unit of the roster, as both drawings walk it: its name, its people, its total, the units inside it. */
-interface Section {
-  key: string;
-  label: string;
-  /** Everybody its total covers: its own rows and every unit inside it. */
-  count: number;
-  rows: UnitRow[];
-  total: UnitTotal;
-  inner: Section[];
-}
-
-function sectionsOf(view: UnitDashboardView, own: string, unitOf: (name: string) => string, unledLabel: string): Section[] {
-  const unit = (group: UnitGroup): Section => ({
-    key: group.head.membershipId,
-    label: unitOf(group.head.name),
-    count: rowsOf(group).length,
-    rows: [group.head, ...group.members],
-    total: group.total,
-    inner: group.units.map(unit),
-  });
-  const first: Section[] = view.yourUnit.rows.length > 0
-    ? [{ key: 'own', label: own, count: view.yourUnit.rows.length, rows: view.yourUnit.rows, total: view.yourUnit.total, inner: [] }]
-    : [];
-  // ADR-0249 §2: the office-wide *Semua downline*'s people with no leader, their own section, last.
-  const unled: Section[] = view.unled && view.unled.rows.length > 0
-    ? [{ key: 'unled', label: unledLabel, count: view.unled.rows.length, rows: view.unled.rows, total: view.unled.total, inner: [] }]
-    : [];
-  return [...first, ...view.units.map(unit), ...unled];
-}
-
-/** A section with somebody the filter keeps, in it or in a unit inside it. */
-const holds = (section: Section, filter: RosterFilter): boolean =>
-  section.rows.some((r) => matchesFilter(r, filter)) || section.inner.some((s) => holds(s, filter));
-
-/*
- * ── Below 768px: the accordion (UI-002) ─────────────────────────────────────────────────────────
- */
-
-function RosterAccordion({ view, period, filter, from }: { view: UnitDashboardView; period: UnitPeriod; filter: RosterFilter; from: string }) {
-  const t = useMessages(unitDashboardMessages);
-  const own = view.head.isReader ? t.prototype.yourUnitGroup : t.unitOf({ name: view.head.name });
-  const sections = sectionsOf(view, own, (name) => t.unitOf({ name }), t.views.unled);
-  // Your own unit open, every AAB unit closed (UI-002); a filter opens every unit that holds a match.
-  const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set(sections[0] ? [sections[0].key] : []));
-  const toggle = (key: string) => setOpen((now) => {
-    const next = new Set(now);
-    if (next.has(key)) next.delete(key);
-    else next.add(key);
-    return next;
-  });
-  return (
-    <div data-roster-accordion="">
-      {sections.filter((s) => holds(s, filter)).map((s) => (
-        <AccordionSection key={s.key} section={s} depth={0} open={open} onToggle={toggle} period={period} filter={filter} from={from} readOnly={view.readOnly} />
-      ))}
-    </div>
-  );
-}
-
-function AccordionSection({
-  section, depth, open, onToggle, period, filter, from, readOnly,
+function PersonCell({
+  row, unit, period, from, wide, readOnly, card,
 }: {
-  section: Section; depth: number; open: ReadonlySet<string>; onToggle: (key: string) => void;
-  period: UnitPeriod; filter: RosterFilter; from: string; readOnly: boolean;
+  row: UnitRow; unit: string; period: UnitPeriod; from: string; wide: boolean; readOnly: boolean;
+  card?: (row: UnitRow, unit: string) => void;
 }) {
-  const t = useMessages(unitDashboardMessages);
   const language = useLanguage();
   const figures = useFigureLanguage();
-  const isLeader = useIsLeaderRung();
-  const bodyId = useId();
-  const expanded = filter !== 'all' || open.has(section.key);
-  const goal = section.total.goal;
-  const bar = goalShare(goal);
-  return (
-    <div data-unit-section={section.key} style={depth ? { paddingLeft: depth * 12 } : undefined}>
-      <h3>
-        <button
-          type="button"
-          aria-expanded={expanded}
-          aria-controls={bodyId}
-          onClick={() => onToggle(section.key)}
-          className={cn(
-            'flex min-h-12 w-full items-center gap-2 border-t border-divider px-3 text-left text-md font-semibold text-ink',
-            expanded && 'bg-primary/[0.06]',
-          )}
-        >
-          <LineIcon name={expanded ? 'chevronDown' : 'chevronRight'} className="h-4 w-4 shrink-0 text-signal-grey" />
-          <span className="min-w-0 flex-1 py-1">
-            <span className="block truncate">{t.v1.unitCount({ label: section.label, n: section.count })}</span>
-            {/* P19.9-T4 AC-2 (R7): the unit's amount under its label, the bar and the % kept. */}
-            <UnitAmount goal={goal} className="block text-sm font-normal text-signal-grey" />
-          </span>
-          {bar !== null && (
-            <span aria-hidden="true" className="h-1.5 w-[60px] shrink-0 overflow-hidden rounded-sm bg-base">
-              <span className="block h-full bg-secondary" style={{ width: `${bar}%` }} />
-            </span>
-          )}
-          <span className="shrink-0 tabular-nums">
-            {goal.attainmentPct !== null && goal.actualMinor !== null && goal.targetMinor
-              ? formatPercent(goal.attainmentPct, {}, figures)
-              : '–'}
-          </span>
-        </button>
-      </h3>
-      {expanded && (
-        <div id={bodyId}>
-          <ul role="list">
-            {section.rows.filter((r) => matchesFilter(r, filter)).map((row) => (
-              <li key={row.membershipId} className="border-t border-divider">
-                <PersonRow
-                  name={rowName(row, language)}
-                  photoUrl={row.photoUrl ?? null}
-                  seed={row.membershipId}
-                  href={rowHref(row, from) ?? undefined}
-                  height={60}
-                  // 13px / 700, on up to two lines and never cut (MOB UI-178; PersonRow wraps it below 768px).
-                  nameClassName="text-base"
-                  // A leader's level before the name; an Agent's row none, the name straight after the avatar (P19.11-T6 AC-4).
-                  tag={isLeader(row.rung) ? <RungTag rung={row.rung} className="mr-1.5" /> : undefined}
-                  badge={phoneMarksOf(row)}
-                  meta={<PhoneGoalLine goal={row.goal} />}
-                  trailing={<PhoneTrailing row={row} period={period} readOnly={readOnly} />}
-                  chevron
-                  className="rounded-none"
-                />
-              </li>
-            ))}
-          </ul>
-          {section.inner.filter((s) => holds(s, filter)).map((inner) => (
-            <AccordionSection key={inner.key} section={inner} depth={depth + 1} open={open} onToggle={onToggle} period={period} filter={filter} from={from} readOnly={readOnly} />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-/*
- * ── From 768px: the table (UI-009) ──────────────────────────────────────────────────────────────
- */
-
-/** A count: right-aligned, a light *·* for zero (a screen reader hears 0), a tone when it is above zero. */
-function Count({ n, tone }: { n: number; tone?: string }) {
-  const figures = useFigureLanguage();
-  if (n === 0) {
-    return (
-      <>
-        <span aria-hidden="true" className="text-line">·</span>
-        <span className="sr-only">{formatNumber(0, {}, figures)}</span>
-      </>
-    );
-  }
-  return <span className={tone}>{formatNumber(n, {}, figures)}</span>;
-}
-
-/** *162 / 51* — the goal activities against their target, or the count alone without one. */
-function Touches({ touches }: { touches: { logged: number; target: number | null } }) {
-  const figures = useFigureLanguage();
-  const n = (v: number) => formatNumber(v, {}, figures);
-  return (
-    <span className="whitespace-nowrap tabular-nums">
-      {touches.target === null ? n(touches.logged) : `${n(touches.logged)} / ${n(touches.target)}`}
-    </span>
-  );
-}
-
-const HEAD = 'bg-hover-row px-2 py-2 text-xs font-semibold leading-tight text-muted [overflow-wrap:anywhere] lg:px-1.5 xl:px-2.5';
-const CELL = 'px-2 lg:px-1.5 xl:px-2.5';
-/** The laptop's second header row (UI-114): stuck under the groups' 2rem row, its names right-aligned over the figures. */
-const SUB_HEAD = 'text-right !top-[calc(env(safe-area-inset-top)+2rem)]';
-
-function RosterTable({
-  view, period, filter, from, wide, headingId, statusInfo,
-}: {
-  view: UnitDashboardView; period: UnitPeriod; filter: RosterFilter; from: string; wide: boolean; headingId: string;
-  statusInfo: ReactNode;
-}) {
-  const t = useMessages(unitDashboardMessages);
-  const own = view.head.isReader ? t.prototype.yourUnitGroup : t.unitOf({ name: view.head.name });
-  const flat: { section: Section; depth: number }[] = [];
-  const walk = (s: Section, depth: number) => { flat.push({ section: s, depth }); s.inner.forEach((i) => walk(i, depth + 1)); };
-  sectionsOf(view, own, (name) => t.unitOf({ name }), t.views.unled).forEach((s) => walk(s, 0));
-  const [closed, setClosed] = useState<ReadonlySet<string>>(() => new Set());
-  const toggle = (key: string) => setClosed((now) => {
-    const next = new Set(now);
-    if (next.has(key)) next.delete(key);
-    else next.add(key);
-    return next;
-  });
-
-  return (
-    <table aria-labelledby={headingId} data-roster-table={wide ? 'desktop' : 'tablet'} className="relative w-full table-fixed border-collapse text-left text-base">
-      {/*
-       * P19.9-T4 AC-1 (R6): the last column holds WhatsApp and the row's ›, ~64px. Its width comes from the count columns,
-       * which gave one to three digits up to 70px, measured against their headings in Inter (2026-11-08): at 1024px beside
-       * the rail every heading still fits whole, and *Status* holds its longest pill.
-       */}
-      {wide ? (
-        <colgroup>
-          <col className="w-[16%] xl:w-[16%]" />
-          <col className="w-[11%] xl:w-[15%]" />
-          <col className="w-[5.5%] xl:w-[6%]" />
-          <col className="w-[6.5%] xl:w-[6%]" />
-          <col className="w-[5.5%] xl:w-[6%]" />
-          <col className="w-[8%] xl:w-[6.5%]" />
-          {/* P19.7-T2 AC-13: *Proposal*, after *Potensi rekrut*. */}
-          <col className="w-[7.5%] xl:w-[6.5%]" />
-          <col className="w-[9%] xl:w-[7.5%]" />
-          <col className="w-[8%] xl:w-[9%]" />
-          <col className="w-[15.5%] xl:w-[14.5%]" />
-          <col className="w-[7.5%] xl:w-[7%]" />
-        </colgroup>
-      ) : (
-        <colgroup>
-          <col className="w-[28%]" />
-          <col className="w-[24%]" />
-          {/* P19.7-T2 AC-13: *Proposal*, before *Aktivitas*. */}
-          <col className="w-[10%]" />
-          <col className="w-[14%]" />
-          <col className="w-[15%]" />
-          <col className="w-[9%]" />
-        </colgroup>
-      )}
-      {/* The head sticks below the top inset, never under a Home Screen app's clock (staging review, 2026-10-31). */}
-      <thead className="[&_th]:sticky [&_th]:top-[env(safe-area-inset-top)] [&_th]:z-[1]">
-        <tr>
-          <th scope="col" rowSpan={wide ? 2 : undefined} className={HEAD}>{t.columns.name}</th>
-          <th scope="col" rowSpan={wide ? 2 : undefined} className={HEAD}>{t.columns.goal}</th>
-          {/*
-           * **Grouped headers on a laptop** (P19.1-T1 AC-3, UI-114: *Leads penjualan → Leads | Closing, Leads rekrut →
-           * Leads | Potensi*): two groups over four short columns, so no header breaks inside a word at 1024; the one long
-           * name left, *Potensi rekrut*, is the short column's ⓘ.
-           */}
-          {wide && (
-            <>
-              <th scope="colgroup" colSpan={2} className={cn(HEAD, 'h-8 whitespace-nowrap text-center')}>{t.v1.columns.salesLeads}</th>
-              <th scope="colgroup" colSpan={2} className={cn(HEAD, 'h-8 whitespace-nowrap text-center')}>{t.v1.columns.recruitLeads}</th>
-            </>
-          )}
-          <th scope="col" rowSpan={wide ? 2 : undefined} className={cn(HEAD, 'text-right')}>{t.v1.columns.proposal}</th>
-          <th scope="col" rowSpan={wide ? 2 : undefined} className={cn(HEAD, 'text-right')}>
-            <span className="inline-flex items-center gap-1">
-              {t.columns.activity}
-              {/* ADR-0165 §2: the figure is *goal activities*; the heading's ⓘ names the three types it counts. */}
-              <TippedGlyph glyph="ⓘ" name={t.own.activityInfo} tip={t.own.activityRule} align="fit" className={STATUS_TIP} />
-            </span>
-          </th>
-          {wide && <th scope="col" rowSpan={2} className={HEAD}>{t.columns.last}</th>}
-          <th scope="col" rowSpan={wide ? 2 : undefined} className={HEAD}>
-            <span className="inline-flex items-center gap-1">
-              {t.columns.status}
-              {statusInfo}
-            </span>
-          </th>
-          <th scope="col" rowSpan={wide ? 2 : undefined} className={HEAD}><span className="sr-only">{t.own.details}</span></th>
-        </tr>
-        {wide && (
-          // Under the groups, stuck below their row (2rem): the four short names.
-          <tr>
-            <th scope="col" className={cn(HEAD, SUB_HEAD)}>{t.v1.columns.leads}</th>
-            <th scope="col" className={cn(HEAD, SUB_HEAD)}>{t.v1.columns.closing}</th>
-            <th scope="col" className={cn(HEAD, SUB_HEAD)}>{t.v1.columns.leads}</th>
-            <th scope="col" className={cn(HEAD, SUB_HEAD)}>
-              <span className="inline-flex items-center gap-1">
-                {t.v1.columns.potensi}
-                <TippedGlyph glyph="ⓘ" name={t.v1.columns.potentialRecruits} tip={t.v1.columns.potentialRecruits} align="fit" className={STATUS_TIP} />
-              </span>
-            </th>
-          </tr>
-        )}
-      </thead>
-      {flat.filter(({ section }) => section.rows.some((r) => matchesFilter(r, filter)) || filter === 'all').map(({ section, depth }) => (
-        <UnitRows
-          key={section.key}
-          section={section}
-          depth={depth}
-          open={!closed.has(section.key)}
-          onToggle={() => toggle(section.key)}
-          period={period}
-          filter={filter}
-          from={from}
-          wide={wide}
-          readOnly={view.readOnly}
-        />
-      ))}
-    </table>
-  );
-}
-
-function UnitRows({
-  section, depth, open, onToggle, period, filter, from, wide, readOnly,
-}: {
-  section: Section; depth: number; open: boolean; onToggle: () => void; period: UnitPeriod; filter: RosterFilter;
-  from: string; wide: boolean; readOnly: boolean;
-}) {
-  const t = useMessages(unitDashboardMessages);
-  const figures = useFigureLanguage();
-  const bodyId = useId();
-  const { total } = section;
-  const goal = total.goal;
-  const pct = goal.attainmentPct !== null && goal.actualMinor !== null && goal.targetMinor
-    ? formatPercent(goal.attainmentPct, {}, figures)
-    : null;
-  return (
-    <tbody id={bodyId} data-unit-rows={section.key}>
-      <tr className="border-t border-divider bg-primary/[0.06] font-semibold text-ink">
-        <th scope="rowgroup" className={cn(CELL, 'h-11 text-left font-semibold')} colSpan={1}>
-          <button
-            type="button"
-            aria-expanded={open}
-            aria-controls={bodyId}
-            onClick={onToggle}
-            className="flex min-h-8 w-full min-w-0 items-center gap-1.5 text-left md:max-lg:min-h-11"
-            style={depth ? { paddingLeft: depth * 14 } : undefined}
-          >
-            <LineIcon name={open ? 'chevronDown' : 'chevronRight'} className="h-4 w-4 shrink-0 text-signal-grey" />
-            <span className="min-w-0 truncate">{t.v1.unitCount({ label: section.label, n: section.count })}</span>
-          </button>
-        </th>
-        <td className={cn(CELL, wide ? 'xl:truncate' : 'truncate')}>
-          {pct ?? '–'}
-          {goal.actualMinor !== null && goal.targetMinor ? (
-            /*
-             * P19.9-T4 AC-2 (R7): the amount beside the % — on a laptop below 1280px on its own line under it, where it was
-             * read only by a screen reader, each figure whole.
-             */
-            <span className={cn('font-normal text-signal-grey', wide && 'max-xl:block max-xl:text-sm max-xl:leading-tight')}>
-              <span className={cn(wide && 'max-xl:hidden')}>{' · '}</span>
-              <UnitAmount goal={goal} />
-            </span>
-          ) : null}
-        </td>
-        {wide && (
-          <>
-            <td className={cn(CELL, 'text-right')}><Count n={total.leadsCounts.salesOpen} /></td>
-            <td className={cn(CELL, 'text-right')}><Count n={total.closings} /></td>
-            <td className={cn(CELL, 'text-right')}><Count n={total.leadsCounts.recruitOpen} /></td>
-            <td className={cn(CELL, 'text-right')}><Count n={total.leadsCounts.recruitNominated} /></td>
-          </>
-        )}
-        <td className={cn(CELL, 'text-right')} data-proposals-made={total.proposalsMade}><Count n={total.proposalsMade} /></td>
-        <td className={cn(CELL, 'text-right')}><Touches touches={total.touches} /></td>
-        {wide && <td className={CELL} />}
-        <td className={cn(CELL, 'whitespace-nowrap')}>{t.v1.active({ count: total.potentialActive.count, of: total.potentialActive.of })}</td>
-        <td className={CELL} />
-      </tr>
-      {open && section.rows.filter((r) => matchesFilter(r, filter)).map((row) => (
-        <PersonTableRow key={row.membershipId} row={row} period={period} from={from} wide={wide} depth={depth} readOnly={readOnly} />
-      ))}
-    </tbody>
-  );
-}
-
-function PersonTableRow({
-  row, period, from, wide, depth, readOnly,
-}: { row: UnitRow; period: UnitPeriod; from: string; wide: boolean; depth: number; readOnly: boolean }) {
-  const language = useLanguage();
   const t = useMessages(unitDashboardMessages);
   const isLeader = useIsLeaderRung();
   const href = rowHref(row, from);
   const name = rowName(row, language);
-  const last = row.lastOneOnOne;
-  const marks = marksOf(row);
-  return (
-    <tr
-      data-membership={row.membershipId}
-      className={cn('relative h-11 border-t border-divider', href && 'cursor-pointer lg:hover:bg-hover-row', 'md:max-lg:h-12')}
-    >
-      <th scope="row" className={cn(CELL, 'text-left font-normal')}>
-        <span className="flex min-w-0 items-center gap-1.5" style={depth ? { paddingLeft: depth * 14 } : undefined}>
-          {href ? (
-            <Link
-              href={href}
-              className="min-w-0 truncate font-semibold uppercase text-ink after:absolute after:inset-0 after:content-[''] focus-visible:outline-none focus-visible:after:outline focus-visible:after:outline-2 focus-visible:after:outline-focus-ring"
-            >
-              {name}
-            </Link>
-          ) : (
-            <span className="min-w-0 truncate font-semibold uppercase text-ink">{name}</span>
-          )}
-          {marks}
-        </span>
-        {/*
-         * P19.9-T4 AC-1 (R6): a leader's level on a line of its own under the name — the row keeps its height, and the
-         * name the width it had, where nine columns share the laptop's line. An Agent's row draws no line at all
-         * (P19.11-T6 AC-4).
-         */}
-        {isLeader(row.rung) && (
-          <span className="mt-px flex" style={depth ? { paddingLeft: depth * 14 } : undefined}>
-            <RungTag rung={row.rung} className="text-2xs leading-tight" />
-          </span>
-        )}
-      </th>
-      <td className={CELL}>
-        <span className="flex min-w-0">
-          <GoalLine goal={row.goal} pair={!wide} />
-          {wide && <GoalPairWide goal={row.goal} />}
-        </span>
-      </td>
-      {wide && (
-        <>
-          <td className={cn(CELL, 'text-right tabular-nums')}><Count n={row.leadsCounts.salesOpen} /></td>
-          <td className={cn(CELL, 'text-right tabular-nums')}><Count n={row.closings} tone="font-semibold text-pill-amber-ink" /></td>
-          <td className={cn(CELL, 'text-right tabular-nums')}><Count n={row.leadsCounts.recruitOpen} /></td>
-          <td className={cn(CELL, 'text-right tabular-nums')}><Count n={row.leadsCounts.recruitNominated} tone="font-semibold text-lavender" /></td>
-        </>
-      )}
-      <td className={cn(CELL, 'text-right tabular-nums')} data-proposals-made={row.proposalsMade}><Count n={row.proposalsMade} /></td>
-      <td className={cn(CELL, 'text-right')}><Touches touches={row.activity.touches} /></td>
-      {wide && (
-        <td className={cn(CELL, 'truncate')}>
-          {row.isReader
-            ? <span className="text-signal-grey">—</span>
-            : last === null
-              ? <span className="text-signal-grey">{t.prototype.noOneOnOne}</span>
-              : <span className={last.overdue ? 'font-semibold text-signal-red' : 'text-ink'}>{lastOneOnOneLine(last, language)}</span>}
-        </td>
-      )}
-      <td className={CELL}>{pillOf(row, period)}</td>
-      <td className="px-1 text-right">
-        {/* P19.9-T4 AC-1 (R6): WhatsApp, then the row's ›. */}
-        <span className="flex items-center justify-end gap-1">
-          <RowWhatsApp row={row} readOnly={readOnly} />
-          {href ? <LineIcon name="chevronRight" className="h-4 w-4 shrink-0 text-signal-grey" /> : <span aria-hidden="true" className="w-4 shrink-0" />}
-        </span>
-      </td>
-    </tr>
+  // The reader's own row goes to their own Summary; anybody else's card first where the server says so (AC-9).
+  const opensCard = card !== undefined && !row.isReader;
+  const target = 'text-left uppercase after:absolute after:inset-0 after:content-[\'\'] focus-visible:outline-none focus-visible:after:outline focus-visible:after:outline-2 focus-visible:after:outline-focus-ring';
+  const nameEl = opensCard ? (
+    <button type="button" aria-haspopup="dialog" onClick={() => card(row, unit)} className={target}>{name}</button>
+  ) : href ? (
+    <Link href={href} className={target}>{name}</Link>
+  ) : (
+    <span className="uppercase">{name}</span>
   );
-}
-
-/**
- * On a desktop the *Rp x / y* beside the bar from 1280px; between 1024 and 1279px, where nine columns share ~690px, it
- * is read by a screen reader and left off the line, so nothing scrolls sideways (UI-009).
- */
-function GoalPairWide({ goal }: { goal: UnitRow['goal'] }) {
-  const figures = useFigureLanguage();
-  if (!goal.set || goal.targetMinor === null || goal.targetMinor === 0 || goal.actualMinor === null) return null;
+  const number = (n: number) => formatNumber(n, {}, figures);
   return (
-    <span className="ml-1.5 min-w-0 truncate text-signal-grey max-xl:sr-only">
-      {formatRupiahCompactPair(goal.actualMinor, goal.targetMinor, '/', figures)}
-    </span>
+    <li
+      data-person={row.membershipId}
+      data-period={period}
+      className={cn(
+        'relative flex min-h-16 items-center gap-2.5 border-b border-divider px-3 py-2 md:px-3.5',
+        wide && 'md:border-r md:[&:nth-child(2n)]:border-r-0 lg:[&:nth-child(2n)]:border-r lg:[&:nth-child(3n)]:border-r-0',
+        (opensCard || href) && 'lg:hover:bg-hover-row',
+      )}
+    >
+      <Avatar name={row.name} photoUrl={row.photoUrl ?? null} seed={row.membershipId} size={40} />
+      <div className="min-w-0 flex-1">
+        <p className="text-base font-bold leading-tight text-ink [overflow-wrap:anywhere]">
+          {isLeader(row.rung) && <RungTag rung={row.rung} className="mr-1.5" />}
+          {nameEl}
+        </p>
+        <div className="mt-0.5 max-w-[11.5rem]">
+          <Progress goal={row.goal} />
+          {wide && (
+            <>
+              <CoachingStatusTile status={row.coaching.status} days={row.coaching.days} fill className="mt-1.5" />
+              <p data-period-leads="" className="mt-1 flex flex-wrap gap-x-3 whitespace-nowrap text-sm text-muted">
+                <span>{t.overview.salesLeads} <b className="text-ink">{number(row.periodLeads.sales)}</b></span>
+                <span>{t.overview.recruitLeads} <b className="text-ink">{number(row.periodLeads.recruitment)}</b></span>
+              </p>
+            </>
+          )}
+        </div>
+      </div>
+      <RowWhatsApp row={row} readOnly={readOnly} />
+      {opensCard || href
+        ? <LineIcon name="chevronRight" className="h-4 w-4 shrink-0 text-signal-grey" />
+        : <span aria-hidden="true" className="w-4 shrink-0" />}
+    </li>
   );
 }

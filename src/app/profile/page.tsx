@@ -3,7 +3,6 @@
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useEffect, useId, useState, type ReactNode } from 'react';
-import { useDestructiveAction } from '@/components/ui/destructive-action';
 import { RoleShell } from '@/components/role-shell';
 import { Avatar } from '@/components/ui/avatar';
 import { DateField } from '@/components/ui/date-field';
@@ -22,8 +21,6 @@ import { messagesIn } from '@/i18n/catalogue';
 import { LANGUAGE_NAMES, LANGUAGES, type Language } from '@/i18n/language';
 import { useLanguage, useLanguageChoice, useMessages } from '@/i18n/language-provider';
 import { accountMessages } from '@/i18n/messages/account';
-import { accountLinkMessages } from '@/i18n/messages/account-links';
-import { removeLink } from '@/lib/account-links';
 import { api, toDisplayError, type ApiError } from '@/lib/api-client';
 import { readCalendarSettings, saveCalendarSettings } from '@/lib/calendar-settings';
 import { cn } from '@/lib/cn';
@@ -39,7 +36,7 @@ import { CORE_LEADER_LABEL } from '@/lib/profile-line';
 import { readProfileFacts, type ProfileFacts } from '@/lib/profile';
 import { PASSWORD_MIN_LENGTH } from '@/lib/password';
 import { listSessions } from '@/lib/sessions';
-import { useCan, useSession, type LinkedLogin, type Me } from '@/lib/session';
+import { useCan, useSession, type Me } from '@/lib/session';
 import { ChoiceSegments, dayShape, MonthShapeField } from '@/components/personal-fields';
 import { useSignOut } from '@/lib/use-sign-out';
 
@@ -159,7 +156,7 @@ function ProfileBody({ say }: { say: Say }) {
       )}
       <Settings me={me} say={say} />
       <SectionHead>{t.security}</SectionHead>
-      <Security me={me} say={say} />
+      <Security />
     </>
   );
 }
@@ -697,7 +694,7 @@ function KpmAndRole({ me, facts, code, say }: { me: Me; facts: ProfileFacts | nu
 }
 
 type FactIconName =
-  | 'building' | 'badge' | 'up' | 'group' | 'tree' | 'key' | 'language' | 'eye' | 'lock' | 'devices' | 'link';
+  | 'building' | 'badge' | 'up' | 'group' | 'tree' | 'key' | 'language' | 'eye' | 'lock' | 'devices';
 
 /** The row's line icon (`profile-mobile`'s Tabler glyphs, drawn in the line icons' stroke). */
 function FactIcon({ icon }: { icon: FactIconName }) {
@@ -712,8 +709,6 @@ function FactIcon({ icon }: { icon: FactIconName }) {
     eye: <><path d="M3 12s3.5-6 9-6c1.6 0 3 .5 4.2 1.2M21 12s-3.5 6-9 6c-1.6 0-3-.5-4.2-1.2M4 4l16 16" /><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2" /></>,
     lock: <><rect x="5" y="11" width="14" height="9" rx="2" /><path d="M8 11V8a4 4 0 0 1 8 0v3" /></>,
     devices: <><rect x="3" y="5" width="13" height="10" rx="1.5" /><rect x="16" y="9" width="5" height="10" rx="1" /><path d="M7 19h6" /></>,
-    // Tabler's *link*, for *Akun tertaut* (P19.2-T1 AC-8).
-    link: <><path d="M9 15l6-6M11 6l.5-.5a4.5 4.5 0 0 1 6.4 6.4l-.5.5M13 18l-.5.5a4.5 4.5 0 0 1-6.4-6.4l.5-.5" /></>,
   };
   return (
     <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 shrink-0 text-pill-grey-ink">
@@ -858,10 +853,8 @@ function messagesSaved(language: Language): string {
 
 /* ── Keamanan ────────────────────────────────────────────────────────────────────────────── */
 
-function Security({ me, say }: { me: Me; say: Say }) {
+function Security() {
   const t = useMessages(accountMessages);
-  // Never in a support session: its `me` carries no link (ADR-0199 §7), and the API refuses the removal there besides.
-  const linked = me.isImpersonating ? null : (me.linkedLogin ?? null);
   const language = useLanguage();
   const [open, setOpen] = useState<'password' | 'devices' | null>(null);
   const [devices, setDevices] = useState<{ n: number; current: string | null } | null>(null);
@@ -889,7 +882,6 @@ function Security({ me, say }: { me: Me; say: Say }) {
           onOpen={() => setOpen('devices')}
           divided
         />
-        {linked && <LinkedLoginRow linked={linked} say={say} />}
       </CardBox>
       <LazyResponsiveSheet open={open === 'password'} title={t.v1.changePassword} onClose={() => setOpen(null)}>
         <PasswordForm />
@@ -898,61 +890,6 @@ function Security({ me, say }: { me: Me; say: Say }) {
         {open === 'devices' && <SessionList bare />}
       </LazyResponsiveSheet>
     </>
-  );
-}
-
-/**
- * ***Akun tertaut*** (P19.2-T1 AC-8; UI-169 item 5; ADR-0199 §5): the linked login's address, and ***Hapus tautan***,
- * which asks first — undoing it takes both logins' passwords again — then removes the link and reads the session again,
- * so the linked login leaves the avatar menu at once. One line, where the section already lists the sessions.
- */
-function LinkedLoginRow({ linked, say }: { linked: LinkedLogin; say: Say }) {
-  const t = useMessages(accountLinkMessages).profile;
-  const { reload } = useSession();
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<ApiError | null>(null);
-  const remove = useDestructiveAction({
-    label: t.remove,
-    message: t.removeAsk({ email: linked.email }),
-    confirmLabel: t.remove,
-    cancelLabel: t.keep,
-    disabled: busy,
-    onConfirm: () => {
-      void (async () => {
-        setBusy(true);
-        setError(null);
-        try {
-          await removeLink(linked.linkId);
-          say(t.removed);
-          await reload();
-        } catch (err) {
-          setError(toDisplayError(err));
-        } finally {
-          setBusy(false);
-        }
-      })();
-    },
-  });
-  return (
-    <div className="border-t border-divider" data-linked-login="">
-      <div className="flex min-h-[52px] items-center gap-2.5 px-3.5 py-1.5">
-        <FactIcon icon="link" />
-        <span className="min-w-0 flex-1">
-          <span className="block text-md text-ink">{t.linked}</span>
-          <span className="mt-0.5 block truncate text-sm leading-snug text-muted">{linked.email}</span>
-        </span>
-        <button
-          type="button"
-          onClick={remove.ask}
-          disabled={busy}
-          className="flex min-h-11 shrink-0 items-center rounded-row px-2 text-md font-semibold text-signal-red hover:bg-pill-red disabled:opacity-40"
-        >
-          {t.remove}
-        </button>
-      </div>
-      {error && <div className="px-3.5 pb-2"><ErrorBanner {...error} /></div>}
-      {remove.dialog}
-    </div>
   );
 }
 

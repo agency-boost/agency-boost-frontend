@@ -1,83 +1,64 @@
 'use client';
 
-import { pillClass, TD as TRACKER_TD, TrackerHeaders } from '@/components/leader-forum/action-items';
-import { Chips, ScorecardNotes, ScorecardTable, StatsTitle } from '@/components/leader-forum/scorecard';
-import { useMessages } from '@/i18n/language-provider';
+import { useFigureLanguage, useMessages } from '@/i18n/language-provider';
 import { forumMessages } from '@/i18n/messages/forum';
-import { forumMinutesMessages } from '@/i18n/messages/forum-minutes';
-import { NONE } from '@/lib/leader-meeting-tabs';
-import { AGENDA_SECTIONS, type MeetingView } from '@/lib/leader-meetings';
+import { cn } from '@/lib/cn';
+import { formatShortDay } from '@/lib/format';
+import { forumWhen, personOf, type MeetingView } from '@/lib/leader-meetings';
+import { STATUS_PILL } from './action-items';
 
 /**
- * **A4, landscape** (P18.9-T1 AC-18, I-494): the slide's seven columns fit across without clipping. While a meeting's
- * page is open, its print is this layout alone, so the page size is the meeting's.
- */
-const LANDSCAPE = '@media print { @page { size: A4 landscape; margin: 10mm; } }';
-
-/**
- * **The print layout** (`KPM_Owner.html:2662-2695`, `renderPrintMom`; `functional/leader-forum.md`, *Printing*):
- * what *Save as PDF* prints in place of the tab — *Overview & Stats*, *Agenda* (the three columns side by side, each
- * item's text and *"PIC: {name}"*, no boxes) and *Action Items* (the six named columns, the status as its pill).
- *
- * ***Overview & Stats* prints the screen's own table** since P18.9-T1 (AC-18; the client's *Save as PDF* against the
- * reference slide): the title and *AS OF*, the strip, the seven columns with their two-line headers and the two groups,
- * the hatch, the outline, every target as its text, and the numbered footnotes and *(\*)* notes — which take the place
- * of the print's *†* and its line (P18.1-T3). A past meeting prints its frozen figures.
- *
- * Off the screen and on the paper (`hidden print:block`, `:744`, `:762-764`); the page around it hides its own
- * chrome. **It draws what the page holds**, so it is never stale (the prototype's can be, flow doc §2.9). It writes
- * nothing. **In the screen's language** (P18.10-T4): the words the reader reads, the figures the reader's.
+ * ***PDF*** (P19.22-T8 AC-2): what the browser prints for a forum — its name and when, the agenda's lines with their box
+ * and PIC, and the action items with PIC, *tenggat* and state, *dari forum #n* where carried. Hidden on the screen,
+ * shown in print; the page around it hides itself in print. *MAPA driver* and *Informal group* are Advanced analytics'
+ * own and print from there.
  */
 export function PrintLayout({ meeting }: { meeting: MeetingView }) {
-  const tabs = useMessages(forumMessages).tabs;
-  const t = useMessages(forumMinutesMessages);
-  const { scorecard } = meeting;
-  const h3 = 'mb-3 mt-6 text-lg font-extrabold text-navy first:mt-0';
+  const t = useMessages(forumMessages);
+  const language = useFigureLanguage();
+  const who = (id: string | null, all = false) => (all ? t.agenda.everyone : personOf(meeting, id)?.firstName ?? '—');
+  const th = 'border-b border-card-edge px-3 py-2 text-left text-sm font-semibold text-muted';
+  const td = 'border-b border-divider px-3 py-2 align-top text-base text-ink';
   return (
-    <section className="hidden font-body text-navy print:block">
-      <style>{LANDSCAPE}</style>
-      <h3 className={h3}>{tabs.overview}</h3>
-      <StatsTitle meeting={meeting} print />
-      <Chips chips={scorecard.chips} />
-      <ScorecardTable meeting={meeting} print />
-      <ScorecardNotes scorecard={scorecard} />
+    <section className="hidden font-body text-navy print:block" data-forum-print="">
+      <h2 className="text-xl font-extrabold">{t.forumN({ n: meeting.number })}</h2>
+      <p className="mb-5 text-md text-muted">{forumWhen(meeting, language)} · {t.state[meeting.state]}</p>
 
-      <h3 className={h3}>{tabs.agenda}</h3>
-      {/* `.agenda-cols` in print (`:765`): the three side by side. */}
-      <div className="grid grid-cols-3 items-start gap-4">
-        {AGENDA_SECTIONS.map((section) => (
-          <div key={section} className="break-inside-avoid rounded-lg border border-card-edge bg-card px-4 pb-3 pt-4">
-            <h4 className="mb-3 text-md font-extrabold text-navy">{t.sections[section]}</h4>
-            {meeting.agenda[section].map((item) => (
-              <div key={item.id} className="mb-3">
-                <div className="text-base leading-[1.4] text-navy">{item.text}</div>
-                <div className="mt-0.5 text-xs text-muted">{`${t.pic}: ${item.pic || NONE}`}</div>
-              </div>
-            ))}
-          </div>
+      <h3 className="mb-2 text-lg font-extrabold">{t.tabs.agenda}</h3>
+      <ul className="mb-6 rounded-lg border border-card-edge">
+        {meeting.agenda.map((line) => (
+          <li key={line.id} className="flex break-inside-avoid gap-3 border-b border-divider px-3 py-2 last:border-0">
+            <span aria-hidden="true">{line.done ? '☑' : '☐'}</span>
+            <span className={cn('flex-1', line.done && 'line-through')}>{line.text}</span>
+            <span className="text-muted">{who(line.picMembershipId, line.picAll)}</span>
+          </li>
         ))}
-      </div>
+      </ul>
 
-      <h3 className={h3}>{tabs.actions}</h3>
-      <div className="overflow-hidden rounded-lg border border-card-edge bg-card">
-        <table className="relative w-full border-collapse text-left text-base">
-          <thead>
-            <tr><TrackerHeaders /></tr>
-          </thead>
-          <tbody>
-            {meeting.actionItems.map((a) => (
-              <tr key={a.id} className="break-inside-avoid [&:last-child>td]:border-b-0">
-                <td className={TRACKER_TD}>{a.initiative}</td>
-                <td className={TRACKER_TD}>{a.metric}</td>
-                <td className={TRACKER_TD}>{a.action}</td>
-                <td className={TRACKER_TD}>{a.pic}</td>
-                <td className={TRACKER_TD}><span className={pillClass(a.status)}>{t.statuses[a.status]}</span></td>
-                <td className={TRACKER_TD}>{a.remarks}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <h3 className="mb-2 text-lg font-extrabold">{t.tabs.actions}</h3>
+      <table className="relative w-full border-collapse rounded-lg border border-card-edge">
+        <thead>
+          <tr>
+            <th className={th}>{t.actions.headers.item}</th>
+            <th className={th}>{t.actions.headers.pic}</th>
+            <th className={th}>{t.actions.headers.due}</th>
+            <th className={th}>{t.actions.headers.status}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {meeting.actionItems.map((item) => (
+            <tr key={item.id} className="break-inside-avoid">
+              <td className={td}>
+                {item.text}
+                {item.fromNumber !== null && <span className="block text-sm text-primary-ink">{t.actions.from({ n: item.fromNumber })}</span>}
+              </td>
+              <td className={td}>{who(item.picMembershipId)}</td>
+              <td className={td}>{item.dueOn ? formatShortDay(item.dueOn, {}, language) : '—'}</td>
+              <td className={td}><span className={cn('rounded-pill px-2.5 py-0.5 text-sm font-semibold', STATUS_PILL[item.status])}>{t.actions.status[item.status]}</span></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </section>
   );
 }

@@ -9,8 +9,9 @@ import {
 } from '@/lib/api-client';
 import { Me, SessionContext } from '@/lib/session';
 import { OfficeUnavailable } from './office-unavailable';
-import { clearCachedReads, forgetView } from '@/lib/views';
+import { forgetInFlight } from '@/lib/in-flight';
 import { applySessionBranding, clearBranding } from '@/lib/branding';
+import { leaveKpm, onKpmChange } from '@/lib/super-admin-kpm';
 
 export function SessionProvider({ children }: { children: React.ReactNode }) {
   const [me, setMe] = useState<Me | null>(null);
@@ -112,6 +113,16 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     await load();
   }, [load]);
 
+  /*
+   * **A Super Admin entering or leaving a KPM reads the session again** (P19.23-T2 AC-4, AC-5; ADR-0268 §3, ADR-0277 §3):
+   * `GET /auth/me` answers them as that KPM's Owner while one is entered (its permissions, its branding) and as the
+   * platform outside, so the menu, the gates and the pages follow the KPM the tab is in. Only a Super Admin signed in as
+   * themselves enters one (`enterKpm`); for anybody else the header is ignored and nothing is read again.
+   */
+  useEffect(() => onKpmChange(() => {
+    if (signedIn.current?.user.platformRole === 'super_admin' && !signedIn.current.isImpersonating) void reload();
+  }), [reload]);
+
   // On mount the access token is gone (it lives in memory only), but the httpOnly
   // refresh cookie survives a reload — so a signed-in user comes back signed in
   // without the token ever being reachable from script.
@@ -136,8 +147,6 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   const adopt = useCallback(
     async (accessToken: string) => {
       setAccessToken(accessToken);
-      // Signing in starts on *Akun saya* (P19.2-T1 AC-4; ADR-0198 §5), whatever view this tab was last in.
-      forgetView();
       return load();
     },
     [load],
@@ -167,13 +176,15 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     await api<void>('/auth/logout', { method: 'POST' }).catch(() => undefined);
     setAccessToken(null);
     remember(null);
-    // The tab's view goes with the session (ADR-0198 §5): the next person to sign in here starts on *Akun saya*.
-    forgetView();
-    // So do the cached reads (P19.11-T6 AC-1; UX-8): a read still out for this session is let go, so whoever signs in
-    // next in this tab is never handed its answer (`clearCachedReads`, ADR-0198 §6).
-    clearCachedReads();
+    // The cached reads go with the session (P19.11-T6 AC-1; UX-8): a read still out for it is let go, so whoever signs in
+    // next in this tab is never handed its answer.
+    forgetInFlight();
     // The KPM's colours and its boot cache go too (P19.6-T1; ADR-0218 §8): the sign-in page is AgencyBoost's again.
     clearBranding();
+    // And the KPM a Super Admin had entered in this tab (2026-11-20): their landing inside one is that KPM's page
+    // (`landingFor`), so whoever signs in next here starts on the platform, never inside it. After `remember(null)`, so
+    // nobody's session is read again for it.
+    leaveKpm();
     setSignedOut(true);
     setExpired(false);
     setUnavailable(null);

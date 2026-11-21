@@ -62,32 +62,35 @@ function render(types: unknown[] = [type()], events: unknown[] = [event()]) {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('P18.10-T4 Settings › Events in Indonesian', () => {
-  it('P18.10-T4 AC-1 to AC-4 the list: title and tabs kept, phases, the line and the row’s actions in Indonesian', async () => {
+  it('P18.10-T4 AC-1 to AC-4, P19.25-T3 AC-1 the list: Events | Jenis event, Akan datang / Sudah lewat, the line and ⋯ in Indonesian', async () => {
     render([type()], [
       event({ audience: { issuer: 'kpm', scope: 'select_agents', inviteeMembershipIds: ['mem-budi', 'mem-rina'] } }),
       event({ id: 'e2', code: 'NOW', title: 'Happening', phase: 'running' }),
       event({ id: 'e3', code: 'LAST', title: 'Last month', phase: 'past' }),
     ]);
-    expect(await screen.findByText('Akan datang')).toBeInTheDocument();
+    await screen.findByText('Last month');
     expect(screen.getByRole('heading', { level: 1, name: 'Events' })).toBeInTheDocument();
     expect(screen.getByText('Apa yang diadakan KPM Anda, dan siapa yang diundang.')).toBeInTheDocument();
-    for (const name of ['Events', 'Event types']) expect(screen.getByRole('link', { name })).toBeInTheDocument();
-    expect(screen.getByText('Sedang berlangsung')).toBeInTheDocument();
+    for (const name of ['Events', 'Jenis event']) expect(screen.getByRole('link', { name })).toBeInTheDocument();
+    // A running event is Akan datang until it ends (ADR-0281 §6).
+    expect(screen.getAllByText('Akan datang')).toHaveLength(2);
     expect(screen.getByText('Sudah lewat')).toBeInTheDocument();
-    // The day in the reader's figures, the issuer and the scope in words, the count invited; the place as typed.
-    expect(screen.getByText(/^1 Okt 2026 · KPM ini · Orang terpilih · 2 diundang · Jakarta$/)).toBeInTheDocument();
-    expect(screen.getAllByRole('button', { name: 'Ubah' }).length).toBeGreaterThan(0);
-    expect(screen.getByRole('button', { name: 'Lihat masukan' })).toBeInTheDocument();
+    expect(screen.queryByText('Sedang berlangsung')).not.toBeInTheDocument();
+    // The day in the reader's figures, the place as typed, who it is for.
+    expect(screen.getByText('1 Okt 2026 · Jakarta · 2 orang terpilih')).toBeInTheDocument();
+    expect(screen.getAllByText('1 Okt 2026 · Jakarta · semua anggota')).toHaveLength(2);
+    await userEvent.click(screen.getByRole('button', { name: 'Tindakan untuk Last month' }));
+    for (const item of ['Ubah', 'Catat kehadiran', 'Arsipkan']) expect(screen.getByRole('menuitem', { name: item })).toBeInTheDocument();
+    await userEvent.keyboard('{Escape}');
     expect(screen.getByLabelText('Tampilkan yang diarsipkan')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Tambah event' })).toBeInTheDocument();
-    // Typed content as typed.
-    expect(screen.getAllByText('The year ahead').length).toBeGreaterThan(0);
+    expect(screen.getByRole('button', { name: '+ Tambah event' })).toBeInTheDocument();
+    expect(screen.getByText('Masukan dan kehadiran: Advanced analytics › Event')).toBeInTheDocument();
     noEnglishLeft();
   });
 
   it('P18.10-T4 AC-1 the panel: its fields, the audience choices and the picker, in Indonesian', async () => {
     render();
-    await userEvent.click(await screen.findByRole('button', { name: 'Tambah event' }));
+    await userEvent.click(await screen.findByRole('button', { name: '+ Tambah event' }));
     for (const label of ['Judul', 'Kode', 'Jenis', 'Satu kalimat tentang event ini', 'Mulai', 'Selesai', 'Tempat', 'Diadakan oleh', 'Siapa yang diundang']) {
       expect(screen.getByLabelText(label)).toBeInTheDocument();
     }
@@ -105,7 +108,7 @@ describe('P18.10-T4 Settings › Events in Indonesian', () => {
 
   it('P18.10-T4 AC-1 the event types: a type’s count, its form, and an empty list', async () => {
     render([type(), type({ id: 't2', code: 'NIGHT', label: 'Recognition night', events: 1 })]);
-    await userEvent.click(await screen.findByRole('link', { name: 'Event types' }));
+    await userEvent.click(await screen.findByRole('link', { name: 'Jenis event' }));
     expect(await screen.findByText('3 events')).toBeInTheDocument();
     expect(screen.getByText('1 event')).toBeInTheDocument();
     expect(screen.getAllByRole('button', { name: 'Arsipkan' })[0])
@@ -119,14 +122,15 @@ describe('P18.10-T4 Settings › Events in Indonesian', () => {
   it('P18.10-T4 AC-1 no active type: the sentence with its kept tab name bold, and the empty list', async () => {
     render([type({ status: 'archived' })], []);
     const line = await screen.findByText(/Anda belum punya jenis event yang aktif/);
-    expect(within(line).getByText('Event types', { selector: 'strong' })).toBeInTheDocument();
+    expect(within(line).getByText('Jenis event', { selector: 'strong' })).toBeInTheDocument();
     expect(screen.getByText(/^Belum ada event\. Semua yang diadakan KPM Anda ada di sini/)).toBeInTheDocument();
     noEnglishLeft();
   });
 
-  it('P18.10-T4 AC-1 to AC-4 View feedback: the roll call and the Feedback Summary in Indonesian, answers as typed', async () => {
+  it('P18.10-T4 AC-1 to AC-4 Catat kehadiran: the roll call and the Feedback Summary in Indonesian, answers as typed', async () => {
     render([type()], [event({ id: 'e3', code: 'LAST', title: 'Last month', phase: 'past' })]);
-    await userEvent.click(await screen.findByRole('button', { name: 'Lihat masukan' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Tindakan untuk Last month' }));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Catat kehadiran' }));
     const box = await screen.findByRole('dialog', { name: 'Last month' });
     expect(within(box).getByRole('tab', { name: 'Daftar hadir' })).toBeInTheDocument();
     const table = await within(box).findByRole('table');

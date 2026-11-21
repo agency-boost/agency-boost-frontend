@@ -13,7 +13,7 @@ import { useQuery } from '@/lib/use-query';
  *
  * Gated by `unit_dashboard:read`, which every field rung holds for their own unit: somebody who leads
  * nobody is answered an empty unit and meets the empty state, not a refusal (D-reach). The period is the
- * address's, `?period=7d|month|year`, *This month* when it names none; the tab too, `?tab=activities` (UI V1, UI-001).
+ * address's, `?period=7d|month|year`, *Tahun ini* when it names none (P19.18-T1 AC-1); the tab too, `?tab=activities` (UI-001).
  */
 export default function UnitDashboardPage() {
   return (

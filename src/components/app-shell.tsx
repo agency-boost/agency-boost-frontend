@@ -1,6 +1,7 @@
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { FieldChromeContext, type FieldChrome, type ViewSwitcher } from '@/components/field-chrome';
+import { FieldChromeContext, type FieldChrome } from '@/components/field-chrome';
 import { TabBar } from '@/components/field-nav';
 import { NotificationBell } from '@/components/notification-bell';
 import { PageHeader } from '@/components/page-header';
@@ -10,9 +11,9 @@ import { KpmLogo, PoweredBy, useBranding, useOfficeName } from '@/components/kpm
 import { NavIcon, type NavIconName } from '@/components/ui/nav-icon';
 import { kept } from '@/i18n/kept';
 import { useMessages } from '@/i18n/language-provider';
+import { useSystemName } from '@/i18n/system-name';
 import { shellMessages } from '@/i18n/messages/shell';
 import { cn } from '@/lib/cn';
-import { PANDUAN_GLYPH } from '@/lib/panduan';
 import { useMediaQuery } from '@/lib/use-media-query';
 
 /**
@@ -26,9 +27,15 @@ import { useMediaQuery } from '@/lib/use-media-query';
  * (ADR-0167 §3), their tablet rail (ADR-0178 §1) and *ID | EN* on a page (ADR-0197 §5) are gone with them.
  *
  * **From 1024px, since P19.13** (UI-192 to UI-196; ADR-0252): the sidebar is **a floating navy panel** 12px off the
- * window's edges — the app icon, *Search agent*, the top section, the groups closed but the current page's, *Panduan*
- * and the account card — or the 64px rail in the same style; and `main` is **the page frame**, at most 1320px, centred
- * beside it, 32px each side, so every page stands on the same two edges.
+ * window's edges, or the 64px rail in the same style; and `main` is **the page frame**, at most 1320px, centred beside
+ * it, 32px each side, so every page stands on the same two edges.
+ *
+ * **Since P19.17-T3** (AC-5, AC-6; [ADR-0269](../../../docs/04-adr/0269-one-login-one-menu-one-title-row.md) §5; the
+ * brief's part E, `sidebar-icons-laptop`): the app icon, *Search agent*, the top section, then the groups — **every item
+ * with its own Tabler outline icon, in one column**; the groups' names grey capitals with a chevron and, for the extras,
+ * the orange *Owner* tag — in a part that scrolls with no scrollbar drawn; **Pengaturan pinned** under a thin line; the
+ * account card. *📘 Panduan* is gone (ADR-0219 §5 superseded). The rail: the top four, **one icon per group, opening a
+ * flyout**, Pengaturan at its foot.
  *
  * Nav items are grouped by section label, and a disabled item keeps an "Upcoming" pill
  * rather than disappearing — the prototype does this deliberately, so the roadmap stays
@@ -59,6 +66,8 @@ export interface NavItem {
    * agent search picker (UI-004, UI-012; D-14). Drawn as a button that opens a dialog; `href` is not followed.
    */
   readonly onSelect?: () => void;
+  /** **The extras' tag after the words** (P19.17-T3 AC-5; part E): the pinned *Pengaturan*'s orange *Owner*. */
+  readonly tag?: string;
 }
 
 export interface NavSection {
@@ -67,6 +76,13 @@ export interface NavSection {
   readonly items: readonly NavItem[];
   /** Draw a rule after this section. The prototype uses two to band the agent nav. */
   readonly divider?: boolean;
+  /** **The extras' tag beside the group's name** (P19.17-T3 AC-5; part E): the orange *Owner* on *KPM* and *PEOPLE*. */
+  readonly tag?: string;
+  /**
+   * **The group's one icon on the rail** (P19.17-T3 AC-6; part E), which opens a flyout of its items. Absent, the rail
+   * lists the group's items one by one (the Super Admin's, until Phase 19.23).
+   */
+  readonly railIcon?: NavIconName;
 }
 
 /**
@@ -91,12 +107,20 @@ const APP_ICON = '/icons/icon-192.png';
  */
 function Wordmark({ brandTag, branch }: { brandTag?: string; branch?: string | null }) {
   const name = kept('AgencyBoost');
+  // P19.21-T4 (ADR-0274): the KPM's *Nama sistem*, written whole; never on the Super Admin's console (`brandTag`).
+  const own = useSystemName();
   return (
     <span className="flex min-w-0 flex-col leading-tight">
-      <span className="font-display text-lg font-extrabold tracking-tight text-secondary-contrast">
-        {name.slice(0, 6)}
-        <span className="text-primary-on-secondary">{name.slice(6)}</span>
-      </span>
+      {own && !brandTag ? (
+        <span className="truncate font-display text-lg font-extrabold tracking-tight text-secondary-contrast" title={own} data-system-name="">
+          {own}
+        </span>
+      ) : (
+        <span className="font-display text-lg font-extrabold tracking-tight text-secondary-contrast">
+          {name.slice(0, 6)}
+          <span className="text-primary-on-secondary">{name.slice(6)}</span>
+        </span>
+      )}
       {brandTag ? (
         <span className="block text-2xs font-semibold uppercase tracking-wide text-primary-on-secondary">{brandTag}</span>
       ) : branch ? (
@@ -194,8 +218,8 @@ function useRailTip(on: boolean, name: string) {
 }
 
 function NavLink({
-  item, pill, rail, tip = false, sub = false,
-}: { item: NavItem; pill: string; rail: boolean; tip?: boolean; sub?: boolean }) {
+  item, pill, rail, tip = false,
+}: { item: NavItem; pill: string; rail: boolean; tip?: boolean }) {
   /** What the amber check says to a screen reader, after the item's own name (WCAG 2.5.3: the words on screen first). */
   const { doneSuffix } = useMessages(shellMessages);
   // No hover state. There is no `.nav a:hover` rule in any of the fifteen prototype
@@ -203,15 +227,16 @@ function NavLink({
   // inactive item makes it read as nearly-active, which is exactly the confusion the
   // current page's mark exists to avoid.
   /*
-   * *Changed 2026-11-12 (P19.13-T2 AC-4; UI-196, ADR-0252):* **the current page is a white pill with navy bold words and
-   * an orange glyph** (it was the amber tint): 40px rows rounded 12px in the top section, **36px rows indented under
-   * their group's heading, words alone** (`sub`, the approved mockup's `.side a.sub`); 44px squares on the rail. The pill's
-   * words are the secondary's ink and its glyph the primary, so a KPM's colours carry it (ADR-0218 §6).
+   * *Changed 2026-11-20 (P19.17-T3 AC-5; ADR-0269 §5; part E, `sidebar-icons-laptop`):* **every row has its own icon,
+   * in one column** — a group's rows were indented words alone (UI-196) — **36px rows rounded 12px**, the words 14px
+   * semibold, the icon 20px in the panel's light grey; **the current page a white pill with navy words and a navy
+   * icon** (it was an orange glyph). 44px squares on the rail. The pill's words and icon are the secondary's ink, so a
+   * KPM's colours carry it (ADR-0218 §6).
    */
   const className = cn(
-    'flex items-center rounded-xl font-medium',
-    rail ? 'h-11 w-11 justify-center px-0' : sub ? 'h-9 gap-3 pl-[2.6875rem] pr-3 text-base' : 'h-10 gap-3 px-3 text-md',
-    item.active ? 'bg-card font-bold text-secondary-ink' : 'text-secondary-contrast/[0.86]',
+    'flex items-center rounded-xl font-semibold',
+    rail ? 'h-11 w-11 justify-center px-0' : 'h-9 gap-2.5 px-3 text-md',
+    item.active ? 'bg-card font-bold text-secondary-ink' : 'text-secondary-contrast/[0.9]',
     item.upcoming && 'cursor-default text-secondary-contrast/30',
   );
   const body = (
@@ -219,22 +244,20 @@ function NavLink({
       {/*
         * The glyph replaces the prototype's dot rather than joining it. Two marks in front of
         * one label is one too many, and the dot said only *active or not* — which the pill
-        * behind the row already says, and which an icon can say by colour as well. A group's
-        * rows carry no glyph beside their words (UI-196); on the rail every row is its glyph.
+        * behind the row already says, and which an icon can say by colour as well.
         */}
-      {(rail || !sub) && (
-        <span className={cn('relative shrink-0', item.active ? 'text-primary' : undefined)}>
-          <NavIcon name={item.icon} />
-          {/*
-            * Collapsed, a count has nowhere to sit at the end of a row — so it rides the glyph,
-            * as a dot rather than a number. The number is still in the accessible name.
-            */}
-          {rail && item.badge !== undefined && item.badge > 0 && (
-            <span aria-hidden className="absolute -right-1 -top-0.5 h-2 w-2 rounded-pill bg-alert" />
-          )}
-        </span>
-      )}
+      <span className={cn('relative shrink-0', item.active ? 'text-secondary-ink' : 'text-secondary-muted')}>
+        <NavIcon name={item.icon} className="h-5 w-5 shrink-0" />
+        {/*
+          * Collapsed, a count has nowhere to sit at the end of a row — so it rides the glyph,
+          * as a dot rather than a number. The number is still in the accessible name.
+          */}
+        {rail && item.badge !== undefined && item.badge > 0 && (
+          <span aria-hidden className="absolute -right-1 -top-0.5 h-2 w-2 rounded-pill bg-alert" />
+        )}
+      </span>
       {!rail && <span className="min-w-0 truncate">{item.label}</span>}
+      {!rail && item.tag && <OwnerTag tag={item.tag} />}
       {!rail && item.badge !== undefined && item.badge > 0 && (
         <span className="ml-auto inline-flex h-[17px] min-w-[17px] items-center justify-center rounded-pill bg-alert px-1.5 text-2xs font-bold text-white">
           {item.badge}
@@ -327,34 +350,15 @@ function NavLink({
 }
 
 /**
- * ***📘 Panduan*, the sidebar's last item** (P19.6-T5 AC-1; ADR-0219 §5; the guide spec's *Where the menu goes* 1 and 3):
- * below the last group and above the account block, for every role and view, opening the reader's own guide **in a new
- * tab** (`target="_blank" rel="noopener"`), so they keep their place. A nav item's look — no hover, as `NavLink` — with
- * the spec's 📘 for its glyph; on the 64px rail the glyph alone, its name drawn as every rail item's is (`useRailTip`).
- * A plain `<a>`, not `next/link`: it leaves the app for a static file, or opens `/admin/panduan` in a tab of its own.
+ * **The extras' tag** (P19.17-T3 AC-5; part E: *a small orange "Owner" tag*): after a group's name or the pinned item's,
+ * the primary as a word on the panel, 12px bold — the mockup's 10px meets UI-008's *nothing below 12px*. Its words are
+ * part of the control's name (*KPM Owner*), as they are on screen.
  */
-function GuideItem({ href, rail }: { href: string; rail: boolean }) {
-  const t = useMessages(shellMessages);
-  const railTip = useRailTip(rail, t.guide);
+function OwnerTag({ tag }: { tag: string }) {
   return (
-    <a
-      href={href}
-      target="_blank"
-      rel="noopener"
-      data-panduan=""
-      // The new tab is in the name, never in the text: a sentence in the text is read as words on the page (P19.6-T5).
-      aria-label={`${t.guide}${t.opensInNewTab}`}
-      // *Changed 2026-11-12 (P19.13-T2 AC-6; UI-196):* a 40px row as the top section's, above the account card.
-      className={cn(
-        'mt-1 flex h-10 shrink-0 items-center rounded-xl text-md font-medium text-secondary-contrast/[0.86]',
-        rail ? 'w-11 select-none justify-center px-0 [-webkit-touch-callout:none]' : 'gap-3 px-3',
-      )}
-      {...railTip.handlers}
-    >
-      <span aria-hidden="true" className="w-[18px] shrink-0 text-center text-base leading-none">{PANDUAN_GLYPH}</span>
-      {!rail && t.guide}
-      {railTip.tip}
-    </a>
+    <span data-owner-tag="" className="shrink-0 text-2xs font-bold normal-case tracking-normal text-primary-on-secondary">
+      {tag}
+    </span>
   );
 }
 
@@ -385,16 +389,11 @@ function SearchField({ label, onSelect, rail }: { label: string; onSelect: () =>
   );
 }
 
-/** What the identity chip opens: the account, signing out, and for a person with more than one view the switcher. */
+/** What the identity chip opens: the account and signing out — *Akun Anda · Keluar*, for everybody (P19.17-T3 AC-1). */
 export interface AppShellAccount {
   href: string;
   onSignOut: () => void;
   signingOut?: boolean;
-  /**
-   * **The view switcher** (P19.2-T1 AC-5; ADR-0198 §3), above *Your account*; absent for one view. It replaced ADR-0114's
-   * link to the other view.
-   */
-  views?: ViewSwitcher;
 }
 
 export interface ShellUser {
@@ -436,14 +435,11 @@ function SidebarFoot({
   user,
   account,
   notifications,
-  guideHref,
 }: {
   rail: boolean;
   user: ShellUser;
   account?: AppShellAccount;
   notifications?: { href: string; unread: number };
-  /** *📘 Panduan* in the account menu, between *Your account* and *Sign out* (P19.6-T5 AC-1). */
-  guideHref?: string;
 }) {
   /*
    * **The chip takes the space; the bell is pinned.** The chip sized itself to its contents,
@@ -461,11 +457,9 @@ function SidebarFoot({
       accountHref={account.href}
       onSignOut={account.onSignOut}
       signingOut={account.signingOut}
-      views={account.views}
       className={rail ? undefined : 'min-w-0 flex-1'}
       compact={rail}
       languageSwitch
-      guideHref={guideHref}
     />
   ) : (
     <div
@@ -527,30 +521,43 @@ const LAPTOP_RAIL_KEY = 'ab.sidebar.rail.laptop';
 /** Before the browser paints, with the width (`useMediaQuery`'s `beforePaint`), so a tablet's first frame is the rail. */
 const useBeforePaint = typeof window === 'undefined' ? useEffect : useLayoutEffect;
 
-/** The groups the reader opened by hand, remembered for the tab's session (P19.13-T2 AC-5): a JSON list of headings. */
-const OPEN_GROUPS_KEY = 'ab.sidebar.open';
+/**
+ * The groups the reader folded by hand, remembered for the tab's session (P19.17-T3 AC-5): a JSON list of names. Every
+ * group starts open (`sidebar-icons-laptop`); P19.13-T2's `ab.sidebar.open`, the groups opened by hand, is not read.
+ */
+const CLOSED_GROUPS_KEY = 'ab.sidebar.closed';
+
+/** The chevron a group's name carries (part E): Tabler's, turned to point right while the group is folded. */
+function Chevron({ open }: { open: boolean }) {
+  return (
+    <NavIcon
+      name="ti-chevron-down"
+      className={cn('h-3.5 w-3.5 shrink-0 transition-transform motion-reduce:transition-none', open ? 'rotate-0' : '-rotate-90')}
+    />
+  );
+}
 
 /**
- * The nav's groups, each a heading that opens and closes it and the items beneath — rendered by the
- * sidebar, and on a phone by the drawer the bar's ☰ opens (P18.7-T2), so the two cannot differ in order,
- * names or state.
+ * The nav's groups, each a name that folds and unfolds it and the items beneath — rendered by the sidebar at full width;
+ * on the rail (`RailGroups`) each group is one icon and a flyout.
+ *
+ * *Changed 2026-11-20 (P19.17-T3 AC-5; ADR-0269 §5; part E, `sidebar-icons-laptop`):* **a group's name is a small grey
+ * capital label with a chevron, no icon** — 12px bold, spaced, in the panel's muted grey — with the extras' orange
+ * *Owner* tag after it; the rows under it carry their own icons, in the top section's column. **Every group starts
+ * open**, as the approved sidebar draws them — the part above *Pengaturan* scrolls instead (ADR-0252 §4's *only the
+ * current page's group is open* superseded) — and the chevron folds one.
  */
 function NavGroups({
   sections,
-  rail,
   isOpen,
   onToggle,
   pill,
-  railTips = false,
 }: {
   sections: readonly NavSection[];
-  rail: boolean;
-  /** Whether a headed group is open (P19.13-T2 AC-5): the current page's, and any the reader opened this session. */
+  /** Whether a headed group is open: every group, but one the reader folded this session (P19.17-T3 AC-5). */
   isOpen: (label: string) => boolean;
   onToggle: (label: string) => void;
   pill: string;
-  /** **The field rail's drawn names** (P19.1-T1 AC-4, `useRailTip`): on hover, focus and a long press. */
-  railTips?: boolean;
 }) {
   return (
     <>
@@ -561,11 +568,10 @@ function NavGroups({
          * — one or two destinations with nothing to call them — so there is no header to
          * collapse and nothing gained by hiding them.
          */
-        const collapsible = Boolean(section.label) && !rail;
-        const open = !collapsible || isOpen(section.label ?? '');
+        const open = !section.label || isOpen(section.label);
 
         return (
-          <div key={id}>
+          <div key={id} data-sidebar-group={section.label ?? ''}>
             {/*
               * **A button, not a heading.** It was an `h2` for one run of the tests, which
               * put five sidebar entries into the document's heading outline and ahead of
@@ -573,74 +579,189 @@ function NavGroups({
               * first `h2` on the console is *Needs your attention*. The `nav` landmark is
               * the structure here; `aria-expanded` and `aria-controls` are the semantics.
               */}
-            {section.label && !rail && (
-              <div className="mt-0.5">
-                <button
-                  type="button"
-                  aria-expanded={open}
-                  aria-controls={`nav-group-${sectionIndex}`}
-                  onClick={() => onToggle(section.label ?? '')}
-                  /*
-                   * **Readable, not decorative.** It was `text-2xs` at 40% white — 10px of
-                   * uppercase at that contrast is a smudge, and this is the control that
-                   * decides what the whole menu shows. Sentence case (UI V1, UI-004; D-20).
-                   *
-                   * *Changed 2026-11-12 (P19.13-T2 AC-5; UI-196):* **a 36px heading row, 13px**, at 65% white while
-                   * closed and white while open, its ▸ turning to ▾ — the approved mockup's `.side .gh`.
-                   */
-                  className={cn(
-                    'flex h-9 w-full items-center gap-2 rounded-xl px-3 text-base font-semibold hover:bg-secondary-contrast/[0.06] hover:text-secondary-contrast',
-                    open ? 'text-secondary-contrast' : 'text-secondary-contrast/65',
-                  )}
-                >
-                  {section.label}
-                  {/*
-                    * A drawn chevron, not the `▸` character. At 10px that glyph rendered as
-                    * a dot in most stacks — the one mark that says whether a group is open,
-                    * and it said nothing.
-                    */}
-                  <svg
-                    aria-hidden
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.4"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    className={cn(
-                      'ml-auto h-3.5 w-3.5 shrink-0 transition-transform',
-                      open ? 'rotate-90' : 'rotate-0',
-                    )}
-                  >
-                    <path d="m9 6 6 6-6 6" />
-                  </svg>
-                </button>
-              </div>
-            )}
-            {/*
-              * Collapsed to the rail, the groups flatten. There are no headings to click,
-              * so hiding items behind one would make them unreachable.
-              */}
-            {open && (
-              <ul
-                id={`nav-group-${sectionIndex}`}
-                className={cn('flex flex-col', rail ? 'mb-1.5 items-center gap-px' : 'gap-0')}
+            {section.label && (
+              <button
+                type="button"
+                aria-expanded={open}
+                aria-controls={`nav-group-${sectionIndex}`}
+                onClick={() => onToggle(section.label ?? '')}
+                data-group-label=""
+                className="mt-2 flex h-8 w-full items-center gap-1.5 rounded-xl px-3 text-xs font-bold uppercase tracking-[0.05em] text-secondary-muted hover:bg-secondary-contrast/[0.06]"
               >
+                <span className="min-w-0 truncate">{section.label}</span>
+                {section.tag && <OwnerTag tag={section.tag} />}
+                <span className="ml-auto flex">
+                  <Chevron open={open} />
+                </span>
+              </button>
+            )}
+            {open && (
+              <ul id={`nav-group-${sectionIndex}`} className="flex flex-col gap-px">
                 {section.items.map((item) => (
                   <li key={item.href}>
-                    <NavLink item={item} pill={pill} rail={rail} tip={railTips} sub={Boolean(section.label) && !rail} />
+                    <NavLink item={item} pill={pill} rail={false} />
                   </li>
                 ))}
               </ul>
             )}
-            {/* A `separator`, so the rule between groups is a thing a test and a screen reader can
-                both find, rather than a styled `div` only the eye can (parity I-144). Since P19.13-T2
-                (UI-196) one, under the top section: the closed headings are the groups' edges. */}
+            {/* A `separator`, so the rule under the top section is a thing a test and a screen reader can both find,
+                rather than a styled `div` only the eye can (parity I-144). */}
             {section.divider && <div role="separator" className="mx-1.5 my-2 h-px bg-secondary-contrast/[0.08]" />}
           </div>
         );
       })}
     </>
+  );
+}
+
+/**
+ * **The rail's groups** (P19.17-T3 AC-6; ADR-0269 §5; part E: *the 4 top items, then one icon per group (user-circle,
+ * activity, users-group, trophy, building-skyscraper, address-book; tap = flyout)*): the unheaded section's items one by
+ * one, a line, then **one icon per group**, white while the current page is in it, which opens the group's flyout. A
+ * group with no rail icon — the Super Admin's — lists its items one by one, as every rail did until now (ADR-0196 §4).
+ */
+function RailGroups({ sections, pill }: { sections: readonly NavSection[]; pill: string }) {
+  const [openGroup, setOpenGroup] = useState<string | null>(null);
+  const pathname = usePathname();
+  useEffect(() => setOpenGroup(null), [pathname]);
+  return (
+    <>
+      {sections.map((section) => {
+        const id = section.label ?? section.items[0]?.href ?? 'root';
+        if (section.label && section.railIcon) {
+          return (
+            <RailGroup
+              key={id}
+              section={section}
+              icon={section.railIcon}
+              pill={pill}
+              open={openGroup === section.label}
+              onOpen={(open) => setOpenGroup(open ? section.label : null)}
+            />
+          );
+        }
+        return (
+          <div key={id} data-sidebar-group={section.label ?? ''}>
+            <ul className="mb-1.5 flex flex-col items-center gap-px">
+              {section.items.map((item) => (
+                <li key={item.href}>
+                  <NavLink item={item} pill={pill} rail tip />
+                </li>
+              ))}
+            </ul>
+            {section.divider && <div role="separator" className="mx-1.5 my-2 h-px bg-secondary-contrast/[0.08]" />}
+          </div>
+        );
+      })}
+    </>
+  );
+}
+
+/** What Tab can land on inside a flyout. */
+const FLYOUT_FOCUSABLE = 'a[href], button:not([disabled])';
+
+/**
+ * **One group on the rail: its icon, and its flyout** (P19.17-T3 AC-6). A disclosure — a button with `aria-expanded`
+ * over the group's own links, reached with Tab — as the account menu is, so it promises no arrow keys it does not have.
+ *
+ * - **The button**: the group's icon in a 44px square, named by the group (*Saya*, *KPM Owner*); white with a navy icon
+ *   while the current page is one of its items (`sidebar-icons-laptop`'s `.rail .on`).
+ * - **The flyout**: fixed beside the rail, at the button's height and moved up to stay inside the window (`DESIGN-RULES`:
+ *   *menus always open fully inside the screen*); the group's name as the sidebar writes it, its tag, and its items as
+ *   the sidebar's rows. Escape closes it and gives the focus back; so does a click outside it, choosing an item, and the
+ *   route moving.
+ */
+function RailGroup({
+  section, icon, pill, open, onOpen,
+}: {
+  section: NavSection;
+  icon: NavIconName;
+  pill: string;
+  open: boolean;
+  onOpen: (open: boolean) => void;
+}) {
+  const button = useRef<HTMLButtonElement>(null);
+  const panel = useRef<HTMLDivElement>(null);
+  const [at, setAt] = useState<{ top: number; left: number } | null>(null);
+  const current = section.items.some((item) => item.active);
+  const panelId = `rail-flyout-${(section.label ?? '').replace(/\W+/g, '-').toLowerCase()}`;
+
+  useBeforePaint(() => {
+    if (!open || !button.current) {
+      setAt(null);
+      return;
+    }
+    const box = button.current.getBoundingClientRect();
+    const height = panel.current?.offsetHeight ?? 0;
+    const room = window.innerHeight - 12;
+    setAt({ top: Math.max(12, Math.min(box.top, room - height)), left: box.right + 12 });
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key !== 'Escape') return;
+      onOpen(false);
+      button.current?.focus();
+    }
+    function onPointerDown(event: MouseEvent) {
+      const target = event.target as Node;
+      if (!panel.current?.contains(target) && !button.current?.contains(target)) onOpen(false);
+    }
+    document.addEventListener('keydown', onKeyDown);
+    document.addEventListener('mousedown', onPointerDown, true);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      document.removeEventListener('mousedown', onPointerDown, true);
+    };
+  }, [open, onOpen]);
+
+  useEffect(() => {
+    if (open && at) panel.current?.querySelector<HTMLElement>(FLYOUT_FOCUSABLE)?.focus();
+  }, [open, at]);
+
+  const name = section.tag ? `${section.label} ${section.tag}` : (section.label ?? '');
+  return (
+    <div data-sidebar-group={section.label ?? ''} data-rail-group="" className="flex justify-center">
+      <button
+        ref={button}
+        type="button"
+        aria-expanded={open}
+        aria-controls={panelId}
+        aria-label={name}
+        onClick={() => onOpen(!open)}
+        className={cn(
+          'flex h-11 w-11 items-center justify-center rounded-xl',
+          current || open ? 'bg-card text-secondary-ink' : 'text-secondary-muted hover:bg-secondary-contrast/[0.06]',
+        )}
+      >
+        <NavIcon name={icon} className="h-[21px] w-[21px] shrink-0" />
+      </button>
+      {open && (
+        <div
+          ref={panel}
+          id={panelId}
+          data-rail-flyout=""
+          onClick={(event) => {
+            if ((event.target as Element).closest('a[href]')) onOpen(false);
+          }}
+          className="fixed z-50 max-h-[calc(100vh-1.5rem)] w-60 overflow-y-auto rounded-xl bg-secondary p-2 text-sidebar-text shadow-modal"
+          style={at ? { top: at.top, left: at.left } : { top: 0, left: 0, visibility: 'hidden' }}
+        >
+          <p className="flex h-8 items-center gap-1.5 px-3 text-xs font-bold uppercase tracking-[0.05em] text-secondary-muted">
+            <span className="min-w-0 truncate">{section.label}</span>
+            {section.tag && <OwnerTag tag={section.tag} />}
+          </p>
+          <ul className="flex flex-col gap-px">
+            {section.items.map((item) => (
+              <li key={item.href}>
+                <NavLink item={item} pill={pill} rail={false} />
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -657,11 +778,17 @@ export function AppShell({
   field,
   officeTitle = false,
   labelledFrom1024 = false,
-  guideHref,
   search,
+  pinned,
   children,
 }: {
   sections: readonly NavSection[];
+  /**
+   * ***Pengaturan*, pinned** (P19.17-T3 AC-5, AC-6; part E: *always visible at the bottom of the sidebar above the account
+   * row, with a thin divider; only the menu above it scrolls*): the item and its *Owner* tag, for the Owner, the Admins
+   * and the core leaders; omitted for everybody else.
+   */
+  pinned?: { item: NavItem; tag?: string };
   user: ShellUser;
   /**
    * The amber line under the wordmark naming which app this is: `SUPERADMIN`, which `admin-desktop` still draws in every
@@ -708,11 +835,6 @@ export function AppShell({
    */
   labelledFrom1024?: boolean;
   /**
-   * ***📘 Panduan*** (P19.6-T5 AC-1, AC-2; ADR-0219 §5): the reader's own guide, by view and role (`panduanHref`) — the
-   * sidebar's last item and the account menu's, each opening it in a new tab. Omitted outside a session: nothing drawn.
-   */
-  guideHref?: string;
-  /**
    * ***Search agent*, the 40px field under the logo** (P19.13-T2 AC-3; UI-196, D-14): its words and what opens the
    * agent picker. Omitted for a reader without the picker, who has no field.
    */
@@ -735,47 +857,56 @@ export function AppShell({
   const branding = useBranding();
   const officeName = useOfficeName();
   /**
-   * **Only the group holding the current page is open; a heading opens its own, and a group the reader opened stays
-   * open for the session** (P19.13-T2 AC-5; UI-196, ADR-0252 §4).
+   * **Every group open, but one the reader folded** (P19.17-T3 AC-5; part E, `sidebar-icons-laptop`; ADR-0269 §5 — it
+   * supersedes ADR-0252 §4's *only the group holding the current page is open*). The part above *Pengaturan* scrolls, so
+   * nothing is out of reach with every group open.
    *
-   * *Changed 2026-11-12 — it reversed P10.1-T3's* every group open by default (the client's request of 2026-09-29, ADR-0062's
-   * own example): the owner's later request of 9 November wins (ADR-0062 §1). All open, the Owner's office menu was
-   * 1,634px in a 797px column.
-   *
-   * - **The current page's group** (`activeGroup`) is open, and closes when the reader closes it, until the route moves
-   *   to another group — `activeGroup` in the effect's list is what clears that.
-   * - **A group the reader opened** is remembered for the tab's session (`sessionStorage`, `OPEN_GROUPS_KEY`), across
-   *   pages and a reload; closing it forgets it. The server and the first client render both draw the current page's
-   *   group alone, so they agree. **Read after the paint, and only when something is kept**, as `compact` is: a state
-   *   change in a layout effect re-renders the page under the shell inside the commit, and a page reading its route's
-   *   params through `use()` suspends there and never comes back (the unit below the reader's did).
+   * - **A group the reader folded** stays folded for the tab's session (`sessionStorage`, `CLOSED_GROUPS_KEY`), across
+   *   pages and a reload; unfolding it forgets it. The server and the first client render both draw every group open,
+   *   so they agree. **Read after the paint, and only when something is kept**: a state change in a layout effect
+   *   re-renders the page under the shell inside the commit, and a page reading its route's params through `use()`
+   *   suspends there and never comes back.
+   * - **The route moving into a folded group unfolds it**, so the current page is never hidden under its group's name.
    */
   const activeGroup = sections.find((s) => s.items.some((i) => i.active))?.label ?? null;
-  const [opened, setOpened] = useState<ReadonlySet<string>>(() => new Set());
-  const [activeShut, setActiveShut] = useState(false);
+  const [closed, setClosed] = useState<ReadonlySet<string>>(() => new Set());
   useEffect(() => {
     try {
-      const stored = JSON.parse(window.sessionStorage.getItem(OPEN_GROUPS_KEY) ?? '[]') as unknown;
+      const stored = JSON.parse(window.sessionStorage.getItem(CLOSED_GROUPS_KEY) ?? '[]') as unknown;
       const names = Array.isArray(stored) ? stored.filter((x): x is string => typeof x === 'string') : [];
-      if (names.length > 0) setOpened(new Set(names));
+      if (names.length > 0) setClosed(new Set(names));
     } catch {
-      // Storage refused or unreadable: the current page's group alone, as on a first visit.
+      // Storage refused or unreadable: every group open, as on a first visit.
     }
   }, []);
-  useEffect(() => setActiveShut(false), [activeGroup]);
-  const isOpen = (label: string) => (label === activeGroup && !activeShut) || opened.has(label);
-  const toggleGroup = (label: string) => {
-    const wasOpen = isOpen(label);
-    if (label === activeGroup) setActiveShut(wasOpen);
-    const next = new Set(opened);
-    if (wasOpen) next.delete(label);
-    else next.add(label);
-    setOpened(next);
+  const keepClosed = (next: ReadonlySet<string>) => {
+    setClosed(next);
     try {
-      window.sessionStorage.setItem(OPEN_GROUPS_KEY, JSON.stringify([...next]));
+      window.sessionStorage.setItem(CLOSED_GROUPS_KEY, JSON.stringify([...next]));
     } catch {
-      // Not remembered past this page; the heading still opens.
+      // Not remembered past this page; the name still folds the group.
     }
+  };
+  useEffect(() => {
+    if (activeGroup === null) return;
+    setClosed((was) => {
+      if (!was.has(activeGroup)) return was;
+      const next = new Set(was);
+      next.delete(activeGroup);
+      try {
+        window.sessionStorage.setItem(CLOSED_GROUPS_KEY, JSON.stringify([...next]));
+      } catch {
+        // As above.
+      }
+      return next;
+    });
+  }, [activeGroup]);
+  const isOpen = (label: string) => !closed.has(label);
+  const toggleGroup = (label: string) => {
+    const next = new Set(closed);
+    if (next.has(label)) next.delete(label);
+    else next.add(label);
+    keepClosed(next);
   };
 
   /**
@@ -820,16 +951,9 @@ export function AppShell({
     }
   };
 
-  const groups = (
-    <NavGroups
-      sections={sections}
-      rail={rail}
-      isOpen={isOpen}
-      onToggle={toggleGroup}
-      pill={pill}
-      railTips
-    />
-  );
+  const groups = rail
+    ? <RailGroups sections={sections} pill={pill} />
+    : <NavGroups sections={sections} isOpen={isOpen} onToggle={toggleGroup} pill={pill} />;
 
   return (
     <div
@@ -929,27 +1053,43 @@ export function AppShell({
           {search && <SearchField label={search.label} onSelect={search.onSelect} rail={rail} />}
 
           {/*
-            * **The nav never scrolls on its own** (P19.13-T2 AC-7; UI-196): with one group open it fits the panel at 1280 ×
-            * 800 and 1440 × 900. Where a long group is open on a short window it scrolls inside the panel, rather than
-            * leaving an item out of reach, while *Panduan* and the account card stay in sight below it.
+            * **Only the menu above *Pengaturan* scrolls** (P19.17-T3 AC-5; part E: *Pengaturan is pinned (freeze pane) …
+            * only the menu above it scrolls*; `DESIGN-RULES.md`: *no visible inner scrollbar*). One `nav` landmark: the
+            * part that scrolls — every group open, no scrollbar drawn, still a scroll container a wheel, a finger and Tab
+            * move — then *Pengaturan* under a thin line, then the account card, both always in sight.
             */}
           <nav
             id="sidebar-nav"
-            className={cn('min-h-0 flex-1 overflow-y-auto', search ? undefined : 'mt-4', rail && 'w-full')}
+            className={cn('flex min-h-0 flex-1 flex-col', search ? undefined : 'mt-4', rail && 'w-full')}
             aria-label={t.mainNav}
           >
-            {groups}
+            <div
+              data-sidebar-scroll=""
+              className={cn(
+                'min-h-0 flex-1 overflow-y-auto overscroll-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden',
+                rail && 'flex flex-col items-center',
+              )}
+            >
+              {groups}
+            </div>
+            {pinned && (
+              <div
+                data-sidebar-pinned=""
+                className={cn(
+                  'shrink-0 border-t-[1.5px] border-secondary-contrast/30 pt-3',
+                  rail ? 'mt-2 flex w-full justify-center' : '-mx-3 mt-2 px-3',
+                )}
+              >
+                <NavLink item={{ ...pinned.item, tag: pinned.tag }} pill={pill} rail={rail} tip={rail} />
+              </div>
+            )}
           </nav>
-
-          {/* P19.6-T5 AC-1: *📘 Panduan*, below the last group and above the account block, for every role. */}
-          {guideHref && <GuideItem href={guideHref} rail={rail} />}
 
           <SidebarFoot
             rail={rail}
             user={user}
             account={account}
             notifications={notifications}
-            guideHref={guideHref}
           />
           {/* P19.6-T1 AC-14 (ADR-0218 §11): only under a KPM's own logo; the rail has no room for the line. */}
           {!rail && <PoweredBy branding={branding} className="mt-2 px-1 text-secondary-contrast/55" />}

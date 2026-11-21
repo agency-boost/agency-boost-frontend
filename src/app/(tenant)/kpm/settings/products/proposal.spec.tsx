@@ -59,6 +59,8 @@ const sent = (stub: ReturnType<typeof stubFetch>) =>
     body: c.init.body ? JSON.parse(String(c.init.body)) : null,
   }));
 const customize = async () => {
+  // The product's sheet first, from its ⋯ (P19.21-T3 AC-5), then *Customize* in it.
+  await userEvent.click((await screen.findAllByRole('button', { name: /^More for / }))[0]);
   await userEvent.click(await screen.findByRole('button', { name: 'Customize' }));
   return within(document.querySelector('[data-office-proposal]') as HTMLElement);
 };
@@ -132,7 +134,7 @@ describe('P19.7-T1 AC-3 the office’s FAQ and plan highlights', () => {
     });
     render([pending]);
     await screen.findByText('PRUWell Medical');
-    await userEvent.click(screen.getByRole('link', { name: 'Script approvals' }));
+    await userEvent.click(screen.getByRole('link', { name: 'Scripts to approve' }));
     await screen.findByText('Waiting for your approval');
     const card = screen.getByRole('heading', { name: 'PRUWell Medical', level: 2 }).closest('li')!;
     expect(within(card).getByText(/Bisa dicicil\? — Bisa\./)).toBeInTheDocument();
@@ -150,6 +152,7 @@ describe('P19.7-T1 AC-3 the office’s FAQ and plan highlights', () => {
 
   it('P19.7-T1 AC-3 speaks Indonesian: Tanya-jawab, Angka utama plan, Paling banyak dipilih', async () => {
     render([row()], {}, OWNER, true);
+    await userEvent.click((await screen.findAllByRole('button', { name: /^Lainnya untuk / }))[0]);
     await userEvent.click(await screen.findByRole('button', { name: 'Sesuaikan' }));
     const block = within(document.querySelector('[data-office-proposal]') as HTMLElement);
     expect(block.getByRole('heading', { name: 'Tanya-jawab' })).toBeInTheDocument();

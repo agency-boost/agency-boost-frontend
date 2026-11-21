@@ -19,8 +19,12 @@ export type Provenance = 'imported' | 'corrected' | 'self_reported';
  */
 export const PROVENANCE_LABEL: Record<Provenance, string> = messagesIn(dataUploadMessages, SOURCE_LANGUAGE).provenance;
 
-/** A correction by hand — who, when, why. A figure emptied by hand is `corrected` with no value. */
-export interface CellCorrection { by: string | null; at: string | null; reason: string | null }
+/**
+ * A correction by hand — who, when, why. A figure emptied by hand is `corrected` with no value. `fileValue` is the file's
+ * number behind it (P19.21-T1 AC-4): *"dari file: Rp 1.412.000"*, and what *Kembalikan ke angka dari file* restores —
+ * `null` when no standing upload wrote the cell.
+ */
+export interface CellCorrection { by: string | null; at: string | null; reason: string | null; fileValue?: number | null }
 
 /**
  * One figure and where it came from. **`null` is not zero**: a cell nothing has written is *no data*,
@@ -86,6 +90,11 @@ export interface MonthRow {
   ytd: Record<string, YtdCell>;
   /** A member of a leader class, `ab` or `aab`: the rows a leaders' column is filled on. */
   leader: boolean;
+  /** Their class — `ab`, `aab`, `agent` — and rung: the orange *AB* / *AAB* before the name (P19.21-T1 AC-3). */
+  role?: string | null;
+  orgLevelCode?: string | null;
+  /** Their photo, a signed link; `null` draws initials. */
+  photoUrl?: string | null;
   /**
    * `MONTHLY_ACTIVE_AGENT` for the month (ADR-0054): `APE` or `POLICY_COUNT` above zero. **The server's answer, never
    * recomputed here** — one definition per metric (invariant §8). `null` is *not reported*, which is not `false`.
@@ -93,7 +102,7 @@ export interface MonthRow {
   monthlyActiveAgent: boolean | null;
 }
 
-/** **A *Belum terdaftar* row** (ADR-0214 §8): a code no member holds yet — read-only, counted in nothing. */
+/** **A *Belum jadi anggota* row** (ADR-0214 §8; ADR-0274 §2): a code no member holds yet — read-only, counted in nothing. */
 export interface UnregisteredRow {
   agentCode: string;
   /** The name the file gave. */
@@ -137,7 +146,7 @@ export interface MonthConfig {
   templateName: string | null;
   version: number;
   columns: MonthColumn[];
-  /** The required history's first month (R5): twelve before the KPM's first. The month grid starts there. */
+  /** The required history's first month: January 2024 for every KPM (P19.21-T1 AC-1; ADR-0274 §3). The grid starts there. */
   historyFrom: string;
   firstMonth: string;
   completePct: number;
@@ -187,7 +196,7 @@ export const isMoney = (unit: UploadUnit) => unit === 'rp_million';
 /** The columns with a year to date, in the template's order: the table's YTD side. */
 export const ytdColumns = (columns: readonly MonthColumn[]) => columns.filter((c) => c.ytd !== 'none');
 
-/** A cell's key in a commit's `replace`: the kode, `<KODE>_YTD` for an uploaded year to date (`cellKey`, ADR-0214 §9). */
+/** A cell's key: the kode, `<KODE>_YTD` for an uploaded year to date (`cellKey`, ADR-0214 §9). */
 export const cellKey = (kode: string, ytd: boolean) => (ytd ? `${kode}_YTD` : kode);
 
 /**
@@ -250,10 +259,7 @@ export interface PreviewCell {
   after: number | null;
   /** As the file has it — money in *Rp juta*. */
   raw: string | null;
-  /**
-   * Set when the stored figure was corrected by hand and the file would change it — replaced only if
-   * whoever imports ticks it (ADR-0053).
-   */
+  /** Set when the stored figure was corrected by hand and the file would change it — the file replaces it (ADR-0274 §1). */
   correction: {
     by: string | null;
     at: string | null;
@@ -263,7 +269,7 @@ export interface PreviewCell {
   } | null;
 }
 
-/** `held`: a code no member holds, kept apart as *Belum terdaftar* (ADR-0214 §8). */
+/** `held`: a code no member holds, kept as *Belum jadi anggota* (ADR-0214 §8; ADR-0274 §2). `refused`: a problem to fix. */
 export type PreviewRowStatus = 'ready' | 'refused' | 'held';
 
 export interface PreviewRow {
@@ -336,13 +342,6 @@ export interface UploadPreview {
 }
 
 /**
- * How a ticked correction is named in the commit's `replace` (ADR-0053): the member — or, for a held row, `held:<CODE>`
- * — and the cell's key.
- */
-export const correctionKey = (row: Pick<PreviewRow, 'status' | 'membershipId' | 'agentCode'>, cell: Pick<PreviewCell, 'kode' | 'ytd'>) =>
-  `${row.status === 'held' ? `held:${row.agentCode.trim().toUpperCase()}` : row.membershipId}:${cellKey(cell.kode, cell.ytd)}`;
-
-/**
  * The file as **bytes**, in a form — a CSV or an Excel workbook (ADR-0184). `FileReader.readAsText` would decode it in
  * the browser first, and a byte the encoding cannot explain would already be U+FFFD when it reached the server that
  * knows how to read it (ADR-0052); a workbook is opened on the server only.
@@ -364,8 +363,10 @@ export interface BatchView {
   templateVersion: number;
   /** D8: the office day a running month's upload stood at; `null` for a final one. */
   asOf?: string | null;
-  /** *Belum terdaftar* rows it held apart. */
+  /** *Belum jadi anggota* rows it kept — the history's *n belum jadi anggota*. */
   heldRowCount?: number;
+  /** The file's rows that went to members — *n ke anggota* (P19.21-T1 AC-7). */
+  memberRowCount?: number;
   rowCount: number;
   writtenRowCount: number;
   cellCount: number;
@@ -388,18 +389,15 @@ export interface ImportResult {
 }
 
 /**
- * **Confirm import.** The same file again, with the revision its preview was taken against — the
- * server reads it afresh and refuses it if the month has moved since (P9-T4). An upload into the current month carries
- * its *as of* day (D8; P19.5-T2 AC-9), today when none is chosen.
+ * **Simpan semua** (P19.21-T1 AC-5). The same file again, with the revision its preview was taken against — the
+ * server reads it afresh and refuses it if the month has moved since (P9-T4), and refuses it whole, naming each problem,
+ * when any row or cell cannot be saved (ADR-0274 §2). The file replaces earlier corrections by hand (§1): there is no
+ * choice to send. An upload into the current month carries its *as of* day (D8; P19.5-T2 AC-9), today when none is chosen.
  */
-export const commitUpload = (
-  month: string, revision: number, file: File, replace: readonly string[] = [], asOf?: string | null,
-) => {
+export const commitUpload = (month: string, revision: number, file: File, asOf?: string | null) => {
   const form = new FormData();
   form.append('month', month);
   form.append('revision', String(revision));
-  // The corrections by hand to replace, `membershipId:KODE`; none named, every one stays (ADR-0053).
-  if (replace.length) form.append('replace', replace.join(','));
   if (asOf) form.append('asOf', asOf);
   form.append('file', file);
   return api<ImportResult>('/kpm/data-upload/commit', { method: 'POST', body: form });
@@ -445,6 +443,20 @@ export interface CorrectionResult {
 
 export const correctCell = (input: CorrectionInput) =>
   api<CorrectionResult>('/kpm/data-upload/cell', { method: 'PATCH', body: input });
+
+/** **Kembalikan ke angka dari file** (P19.21-T1 AC-4): a corrected figure back to what the month's standing uploads gave. */
+export const restoreCell = (input: Omit<CorrectionInput, 'value' | 'reason'>) =>
+  api<CorrectionResult>('/kpm/data-upload/cell/restore', { method: 'POST', body: input });
+
+/** A problem a refused *Simpan semua* names (`details.problems`): the file's line, its code, and what is wrong. */
+export interface UploadProblem {
+  line: number;
+  agentCode: string;
+  code: string;
+  message: string;
+  kode: string | null;
+  ytd: boolean | null;
+}
 
 /** The UTF-8 byte-order mark, percent-encoded: `EF BB BF`. */
 const UTF8_BOM = '%EF%BB%BF';

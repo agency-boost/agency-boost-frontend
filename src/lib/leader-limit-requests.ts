@@ -16,6 +16,8 @@ export interface LeaderLimitRequestRow {
   kpmId: string;
   kpmCode: string;
   kpmBranchName: string;
+  /** The office's company (P19.23-T3): *Persetujuan* names a KPM by name and company. `''` when unreadable. */
+  companyName: string;
   subjectMembershipId: string;
   subjectName: string;
   subjectAgentCode: string;
@@ -31,6 +33,8 @@ export interface LeaderLimitRequestRow {
   status: LeaderLimitRequestStatus;
   requestedAt: string;
   decidedAt: string | null;
+  /** Who decided it (P19.23-T3): the Super Admin, or the asker who withdrew it; `null` while it waits. */
+  decidedByName: string | null;
   /** AgencyBoost's reason, or that it no longer applied. */
   declineReason: string | null;
   /** The office's limit and *Leaders used* now. */

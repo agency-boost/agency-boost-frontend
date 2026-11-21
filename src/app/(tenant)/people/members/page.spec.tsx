@@ -1,11 +1,9 @@
-import { fireEvent, screen, within } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { createHash } from 'node:crypto';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import TenantLayout from '@/app/(tenant)/layout';
-import { atWidth, digestAt, makeMe, renderInLayout, stubFetch, wears } from '@test/harness';
-import { asBeforeBranding } from '@test/brand-aliases';
-import { dayInZone, OFFICE_TIME_ZONE } from '@/lib/format';
+import { atWidth, makeMe, renderInLayout, stubFetch } from '@test/harness';
+import { row } from '@test/people-fixtures';
 import MembersPage from './page';
 
 vi.mock('next/navigation', () => ({
@@ -13,1322 +11,324 @@ vi.mock('next/navigation', () => ({
   usePathname: () => '/people/members',
 }));
 
-const OWNER = makeMe({
+const STEWARD = ['member:read_profile', 'member:tag_group', 'member:read_tags', 'member:read_role_change_log', 'member:transfer_approve', 'member:tag_core_leader', 'member:complete_personal'];
+
+/** The KPM's Owner, with the grants a steward holds. */
+export const OWNER = makeMe({
   membership: {
-    membershipId: 'mem-owner', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab',
-    isKpmOwner: true, isKpmAdmin: false, status: 'active', directCount: 0,
+    membershipId: 'mem-wilson', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab',
+    isKpmOwner: true, isKpmAdmin: false, status: 'active', directCount: 4,
   },
-  permissions: ['member:read_profile'],
+  permissions: STEWARD,
 });
 
-const member = (over: Record<string, unknown> = {}) => ({
-  membershipId: 'mem-1', agentCode: 'KPM0417-001', role: 'agent', status: 'active',
-  fullName: 'Rina Wijaya', preferredName: 'Rina', email: 'rina@kpm0417.test', initials: 'RW',
-  leaderId: null, leaderName: null, depth: 0, directCount: 0, subtreeCount: 0,
-  isLeader: false, isKpmOwner: false, isKpmAdmin: false, joinedAt: '2026-03-01T00:00:00.000Z',
-  ...over,
+const dewi = row({
+  membershipId: 'mem-dewi', agentCode: '80007', role: 'aab', orgLevelCode: 'AAB', fullName: 'Dewi Lestari',
+  leaderId: 'mem-agus', leaderName: 'Agus Prasetyo', directCount: 0, subtreeCount: 0, isLeader: false, isCoreLeader: false,
+  lastActivityDays: 23, lastActivityStatus: 'lapsed', canTagCoreLeader: true,
+  groupPlace: { group: { groupId: 'g-top', name: 'Top Producers 2026' }, ab: { membershipId: 'mem-agus', name: 'Agus Prasetyo' }, isGroupLeader: false },
+});
+const wilson = row({
+  membershipId: 'mem-wilson', agentCode: '80003', fullName: 'Wilson Tanoto', leaderId: null, leaderName: null,
+  isKpmOwner: true, directCount: 4, subtreeCount: 29,
+  groupPlace: { group: { groupId: 'g-top', name: 'Top Producers 2026' }, ab: { membershipId: 'mem-wilson', name: 'Wilson Tanoto' }, isGroupLeader: true },
+});
+const maya = row({
+  membershipId: 'mem-maya', agentCode: '80004', fullName: 'Maya Halim', isKpmAdmin: true, isCoreLeader: true,
+  groupPlace: { group: null, ab: { membershipId: 'mem-maya', name: 'Maya Halim' }, isGroupLeader: false },
 });
 
-describe('members directory (P3-T1 AC-3)', () => {
-  afterEach(() => vi.unstubAllGlobals());
+/** One row of the table, by whom it is about: a name also appears in other rows' *Melapor ke*. */
+const rowOf = (table: HTMLElement, membershipId: string) => table.querySelector(`[data-row="${membershipId}"]`) as HTMLElement;
 
-  it('lists the roster with the agent code as issued', async () => {
-    stubFetch({ '/members': { body: { members: [member()], nextCursor: null, counts: { directory: 187, pending: 14, removed: 3 } } } });
-    renderInLayout(TenantLayout, <MembersPage />, { me: OWNER });
+const page = (members: unknown[], over: Record<string, unknown> = {}) => ({
+  body: { members, nextCursor: null, counts: { directory: members.length, pending: 1, removed: 0 }, ...over },
+});
 
-    const row = within(await screen.findByRole('table')).getByRole('row', { name: /Rina/ });
-    expect(within(row).getByText('KPM0417-001')).toBeInTheDocument();
-    expect(within(row).getByText('rina@kpm0417.test')).toBeInTheDocument();
-    expect(within(row).getByTitle('Agent')).toBeInTheDocument();
+describe('P19.20-T1 All members', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    window.history.replaceState(null, '', '/');
   });
 
-  it('says who leads nobody, because leadership is the graph and not the role (OD-23)', async () => {
-    stubFetch({
-      '/members': {
-        body: {
-          members: [
-            member({ membershipId: 'a', role: 'aab', fullName: 'Childless AAB', preferredName: null }),
-            member({
-              membershipId: 'b', agentCode: 'KPM0417-002', role: 'agent',
-              fullName: 'Leads Someone', preferredName: null,
-              isLeader: true, directCount: 2, subtreeCount: 5,
-            }),
-          ],
-          nextCursor: null,
-        },
-      },
-    });
+  it('P19.20-T1 AC-1 three tabs — Anggota (n), Menunggu with a red count, Riwayat — and Invite a member', async () => {
+    stubFetch({ '/members': page([wilson, row(), dewi]) });
+    renderInLayout(TenantLayout, <MembersPage />, { me: OWNER });
+
+    expect(await screen.findByRole('tab', { name: 'Members 3' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tab', { name: 'Waiting 1' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'History' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Invite a member' })).toHaveAttribute('href', '/user-management/add');
+  });
+
+  it('P19.20-T1 AC-2 a row: the label before the NAME, ★, the Owner / Admin chip by the code, no email', async () => {
+    atWidth(1024);
+    stubFetch({ '/members': page([wilson, maya, row(), dewi]) });
     renderInLayout(TenantLayout, <MembersPage />, { me: OWNER });
 
     const table = await screen.findByRole('table');
-    // *Leads nobody* until P18.9-T4 AC-3 (UI-024): the glossary's *No team*, as the Overview's AB list reads it.
-    expect(within(table).getByRole('row', { name: /Childless AAB/ })).toHaveTextContent('No team');
-    expect(within(table).getByRole('row', { name: /Leads Someone/ })).toHaveTextContent(
-      '2 direct · 5 in unit',
-    );
+    const wilsonRow = rowOf(table, 'mem-wilson');
+    expect(wilsonRow).toHaveTextContent('ABWilson Tanoto★Core leader80003Owner');
+    expect(rowOf(table, 'mem-maya')).toHaveTextContent('80004Admin');
+    expect(table).not.toHaveTextContent('agus@kpm0417.test');
   });
 
-  it('sends the search and role filters to the server, not just to the table', async () => {
-    // A filter applied only in the browser would still have fetched every row, which is
-    // the thing pagination exists to avoid.
-    const { calls } = stubFetch({ '/members': { body: { members: [], nextCursor: null, counts: { directory: 0, pending: 0, removed: 0 } } } });
+  it('P19.20-T1 AC-2 Group: an AB’s chip opens the Group dialog, Group Leader under it; a follower’s is locked, ikut AB …; Tanpa group dashed', async () => {
+    atWidth(1024);
+    stubFetch({ '/members/groups': { body: { groups: [], ungrouped: { abs: [], counts: { leaders: 0, people: 0, abGroups: 0 } }, unplaced: 0, canWrite: true } }, '/members': page([wilson, maya, dewi]) });
     renderInLayout(TenantLayout, <MembersPage />, { me: OWNER });
-
-    await userEvent.type(screen.getByLabelText('Search'), 'budi');
-    await userEvent.selectOptions(screen.getByLabelText('Role'), 'aab');
-
-    await vi.waitFor(() => {
-      const last = calls[calls.length - 1].url;
-      expect(last).toContain('q=budi');
-      expect(last).toContain('role=aab');
-    });
-  });
-
-  it('pages forward with the cursor the server returned', async () => {
-    const { calls } = stubFetch({
-      '/members': [
-        { body: { members: [member()], nextCursor: '25', counts: { directory: 187, pending: 14, removed: 3 } } },
-        { body: { members: [member({ membershipId: 'mem-2', agentCode: 'KPM0417-026' })], nextCursor: null } },
-      ],
-    });
-    renderInLayout(TenantLayout, <MembersPage />, { me: OWNER });
-
-    await userEvent.click(await screen.findByRole('button', { name: 'Next' }));
-    await vi.waitFor(() => expect(calls[calls.length - 1].url).toContain('cursor=25'));
-    expect(await screen.findByText('KPM0417-026')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled();
-  });
-
-  it('offers Previous only once there is a page to go back to', async () => {
-    stubFetch({ '/members': { body: { members: [member()], nextCursor: '25', counts: { directory: 187, pending: 14, removed: 3 } } } });
-    renderInLayout(TenantLayout, <MembersPage />, { me: OWNER });
-    expect(await screen.findByRole('button', { name: 'Previous' })).toBeDisabled();
-  });
-
-  it('tells an empty office apart from an empty filter', async () => {
-    stubFetch({ '/members': { body: { members: [], nextCursor: null, counts: { directory: 0, pending: 0, removed: 0 } } } });
-    renderInLayout(TenantLayout, <MembersPage />, { me: OWNER });
-
-    expect(await screen.findByText('This office has no members yet.')).toBeInTheDocument();
-
-    await userEvent.type(screen.getByLabelText('Search'), 'nobody');
-    expect(await screen.findByText('Nobody matches that.')).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: 'Clear the filters' }));
-    expect(await screen.findByText('This office has no members yet.')).toBeInTheDocument();
-  });
-
-  it('asks for removed members explicitly, on their own tab', async () => {
-    const { calls } = stubFetch({ '/members': { body: { members: [], nextCursor: null, counts: { directory: 0, pending: 0, removed: 0 } } } });
-    renderInLayout(TenantLayout, <MembersPage />, { me: OWNER });
-
-    await userEvent.click(await screen.findByRole('button', { name: 'Removed' }));
-    await vi.waitFor(() => expect(calls[calls.length - 1].url).toContain('status=removed'));
-    expect(await screen.findByText('Nobody has been removed from this office.')).toBeInTheDocument();
-  });
-
-  it('P3.1-T14: asks the server once per pause, not once per letter', async () => {
-    // The search box had no debounce, so it fired a request per keystroke. Harmless while
-    // the old rows stayed put; a flicker per letter once they correctly clear. The two
-    // belong together.
-    const { calls } = stubFetch({
-      '/members': {
-        body: { members: [], nextCursor: null, counts: { directory: 0, pending: 0, removed: 0 } },
-      },
-    });
-    renderInLayout(TenantLayout, <MembersPage />, { me: OWNER });
-    await vi.waitFor(() => expect(calls.length).toBeGreaterThan(0));
-    const before = calls.length;
-
-    await userEvent.type(screen.getByLabelText('Search'), 'Rina');
-
-    await vi.waitFor(() => expect(calls[calls.length - 1].url).toContain('q=Rina'));
-    // Four letters, one request — and it carries the whole word, not the first letter.
-    expect(calls.length - before).toBe(1);
-  });
-
-  it('P3.1-T14: clears the previous tab before the next one arrives', async () => {
-    // The defect this pins. `load()` refetched on a tab switch but reset nothing, so the
-    // previous tab's rows stayed on screen for the whole request — under a column header
-    // that had already flipped, because the header reads `tab` synchronously. Switching
-    // Directory → Removed showed active members beneath a "Removed" heading, each one
-    // displaying an em dash where a removal date should be.
-    let release = () => {};
-    let memberCalls = 0;
-    const json = (body: unknown) =>
-      ({ ok: true, status: 200, json: async () => body }) as Response;
-
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (url: string) => {
-        if (!url.includes('/members')) return json({ items: [], unreadCount: 0 });
-        memberCalls += 1;
-        // The Removed request never settles here. That pending window is where the bug
-        // lived, and it is the only place the assertion can be made.
-        if (memberCalls > 1) await new Promise<void>((r) => { release = r; });
-        return json({
-          members: [member()],
-          nextCursor: null,
-          counts: { directory: 187, pending: 14, removed: 3 },
-        });
-      }),
-    );
-
-    renderInLayout(TenantLayout, <MembersPage />, { me: OWNER });
-    expect(await screen.findByRole('row', { name: /Rina/ })).toBeInTheDocument();
-
-    await userEvent.click(screen.getByRole('button', { name: /^Removed/ }));
-
-    await vi.waitFor(() => {
-      expect(screen.queryByRole('row', { name: /Rina/ })).not.toBeInTheDocument();
-      expect(screen.getByRole('status')).toHaveTextContent('Loading removed members…');
-    });
-
-    // The counts survive the switch: they are the same three numbers on every tab, so
-    // blanking them would put a flicker in the one part of the screen not changing.
-    expect(screen.getByRole('button', { name: 'Directory (187)' })).toBeInTheDocument();
-
-    release();
-    await screen.findByRole('row', { name: /Rina/ });
-  });
-
-  it('P3-T7 AC-2: the Removed tab says when they left, not that they are removed', async () => {
-    // Every row on this tab reads "Removed", so a Status column answers nothing. When
-    // is the question the list is actually asked.
-    const { calls } = stubFetch({
-      '/members': {
-        body: {
-          members: [
-            member({ status: 'removed', removedAt: '2026-07-19T04:00:00.000Z' }),
-          ],
-          nextCursor: null,
-        },
-      },
-    });
-    renderInLayout(TenantLayout, <MembersPage />, { me: OWNER });
-
-    await userEvent.click(await screen.findByRole('button', { name: 'Removed' }));
-    await vi.waitFor(() => expect(calls[calls.length - 1].url).toContain('status=removed'));
 
     const table = await screen.findByRole('table');
-    expect(within(table).getByRole('columnheader', { name: 'Removed' })).toBeInTheDocument();
-    expect(within(table).queryByRole('columnheader', { name: 'Status' })).not.toBeInTheDocument();
-    expect(within(table).getByRole('row', { name: /Rina/ })).toHaveTextContent('19 Jul 2026');
+    expect(rowOf(table, 'mem-wilson')).toHaveTextContent('Top Producers 2026Group Leader');
+    expect(rowOf(table, 'mem-maya')).toHaveTextContent('No group');
+    const dewiRow = rowOf(table, 'mem-dewi');
+    expect(dewiRow).toHaveTextContent('Top Producers 2026follows AB Agus');
+    expect(within(dewiRow).queryByRole('button', { name: /Change the group/ })).not.toBeInTheDocument();
 
-    // Their code and their leader are still there — the row is kept, not blanked.
-    expect(within(table).getByRole('row', { name: /Rina/ })).toHaveTextContent('KPM0417-001');
+    await userEvent.click(within(table).getByRole('button', { name: 'Change the group of Wilson Tanoto' }));
+    expect(await screen.findByRole('dialog')).toBeInTheDocument();
   });
 
-  describe('Last activity and Last coached (P18-T1 AC-8, D-directory)', () => {
-    const page = (members: ReturnType<typeof member>[]) => ({
-      '/members': { body: { members, nextCursor: null, counts: { directory: members.length, pending: 0, removed: 0 } } },
+  it('P19.20-T1 AC-2 Melapor ke with the unit under it, and the two coloured pills', async () => {
+    atWidth(1024);
+    stubFetch({ '/members': page([row(), dewi]) });
+    renderInLayout(TenantLayout, <MembersPage />, { me: OWNER });
+
+    const table = await screen.findByRole('table');
+    const agus = rowOf(table, 'mem-agus');
+    expect(agus).toHaveTextContent('Wilson Tanoto9 direct · 18 in unit');
+    expect(within(agus).getByText('Today').closest('[data-tone]')).toHaveAttribute('data-tone', 'green');
+    expect(within(agus).getByText('Never').closest('[data-tone]')).toHaveAttribute('data-tone', 'red');
+    const dewiRow = rowOf(table, 'mem-dewi');
+    expect(dewiRow).toHaveTextContent('No team');
+    expect(within(dewiRow).getByText('23 days ago').closest('[data-tone]')).toHaveAttribute('data-tone', 'amber');
+  });
+
+  it('P19.20-T1 AC-2 the search and the filter, ★ Core leader included, are the server’s', async () => {
+    const { calls } = stubFetch({ '/members': page([row()]) });
+    renderInLayout(TenantLayout, <MembersPage />, { me: OWNER });
+
+    await screen.findAllByText('Agus Prasetyo');
+    await userEvent.click(screen.getByRole('button', { name: /★ Core leader/ }));
+    await vi.waitFor(() => expect(calls[calls.length - 1].url).toContain('coreLeader=true'));
+    await userEvent.click(screen.getByRole('button', { name: /^AAB/ }));
+    await vi.waitFor(() => expect(calls[calls.length - 1].url).toContain('role=aab'));
+    await userEvent.type(screen.getByPlaceholderText('Search name or agent code'), 'dewi');
+    await vi.waitFor(() => expect(calls[calls.length - 1].url).toContain('q=dewi'));
+  });
+
+  it('P19.20-T1 AC-2 See all (n) reads every page after the first', async () => {
+    const { calls } = stubFetch({
+      '/members': [page([row()], { nextCursor: '25', counts: { directory: 30, pending: 0, removed: 0 } }), page([dewi])],
     });
+    renderInLayout(TenantLayout, <MembersPage />, { me: OWNER });
 
-    it('AC-8: the directory carries both columns, beside Reports to, as the prototype places them', async () => {
-      stubFetch(page([member({ lastActivityOn: '2026-10-09', lastActivityDays: 0, lastCoachedDays: 1 })]));
-      renderInLayout(TenantLayout, <MembersPage />, { me: OWNER });
+    await userEvent.click(await screen.findByRole('button', { name: 'See all (30)' }));
+    await vi.waitFor(() => expect(calls.some((c) => c.url.includes('cursor=25'))).toBe(true));
+    expect((await screen.findAllByText('Dewi Lestari')).length).toBeGreaterThan(0);
+  });
 
-      const table = await screen.findByRole('table');
-      expect(within(table).getAllByRole('columnheader').map((h) => h.textContent)).toEqual([
-        'Name', 'Agent code', 'Role', 'Reports to', 'Last activity', 'Last coached', 'Unit', 'Status',
-      ]);
-    });
+  it('P19.20-T1 AC-3 ⋯ on an AB: core leader, group leader · <group>, Ubah group, Ubah peran / leader, Keluarkan (red)', async () => {
+    atWidth(1024);
+    stubFetch({ '/members': page([row()]) });
+    renderInLayout(TenantLayout, <MembersPage />, { me: OWNER });
 
-    it('AC-8: Today, "{n} days ago" and Never, from the server’s counts in the office’s calendar', async () => {
-      stubFetch(page([
-        member({ membershipId: 'a', fullName: 'Today Person', preferredName: null, lastActivityOn: '2026-10-09', lastActivityDays: 0, lastCoachedDays: 0 }),
-        member({ membershipId: 'b', fullName: 'One Day', preferredName: null, lastActivityOn: '2026-10-08', lastActivityDays: 1, lastCoachedDays: 14 }),
-        member({ membershipId: 'c', fullName: 'Never Person', preferredName: null, lastActivityOn: null, lastActivityDays: null, lastCoachedDays: null }),
-      ]));
-      renderInLayout(TenantLayout, <MembersPage />, { me: OWNER });
+    const table = await screen.findByRole('table');
+    await userEvent.click(within(table).getByRole('button', { name: 'Actions for Agus Prasetyo' }));
+    const items = (await screen.findAllByRole('menuitem')).map((i) => i.textContent);
+    expect(items).toEqual([
+      'Remove from core leaders', 'Make group leader · Top Producers 2026', 'Change group', 'Change role / leader',
+      'Remove from the KPM',
+    ]);
+  });
 
-      const table = await screen.findByRole('table');
-      const cells = (name: RegExp) => within(within(table).getByRole('row', { name })).getAllByRole('cell').map((c) => c.textContent);
-      expect(cells(/Today Person/).slice(4, 6)).toEqual(['Today', 'Today']);
-      expect(cells(/One Day/).slice(4, 6)).toEqual(['1 day ago', '14 days ago']);
-      expect(cells(/Never Person/).slice(4, 6)).toEqual(['Never', 'Never']);
-      // The last logged day is the machine-readable date behind the words.
-      expect(within(table).getByText('1 day ago').closest('time')).toHaveAttribute('dateTime', '2026-10-08');
-    });
+  it('P19.20-T1 AC-3 ⋯ on an AAB has no Ubah group: she follows her AB', async () => {
+    atWidth(1024);
+    stubFetch({ '/members': page([dewi]) });
+    renderInLayout(TenantLayout, <MembersPage />, { me: OWNER });
 
-    it('AC-8: a row the server sent without them reads a dash, never "Never"', async () => {
-      stubFetch(page([member()]));
-      renderInLayout(TenantLayout, <MembersPage />, { me: OWNER });
+    const table = await screen.findByRole('table');
+    await userEvent.click(within(table).getByRole('button', { name: 'Actions for Dewi Lestari' }));
+    const items = (await screen.findAllByRole('menuitem')).map((i) => i.textContent);
+    expect(items).toEqual(['Make core leader', 'Change role / leader', 'Remove from the KPM']);
+  });
 
-      const row = within(await screen.findByRole('table')).getByRole('row', { name: /Rina/ });
-      expect(within(row).getAllByRole('cell').slice(4, 6).map((c) => c.textContent)).toEqual(['—', '—']);
-    });
+  it('P19.20-T2 AC-4 Keluarkan dari KPM: a centred dialog, a reason, where the team goes, Batal and a red Keluarkan', async () => {
+    atWidth(1024);
+    const { calls } = stubFetch({ 'DELETE /members/mem-agus': { body: [] }, '/members': page([row()]) });
+    renderInLayout(TenantLayout, <MembersPage />, { me: OWNER });
 
-    it('AC-8: the Removed tab keeps its own columns, as the prototype’s does', async () => {
-      stubFetch({
-        '/members': { body: { members: [member({ status: 'removed', removedAt: '2026-07-19T04:00:00.000Z', lastActivityDays: 3, lastCoachedDays: 3 })], nextCursor: null } },
+    await userEvent.click(within(await screen.findByRole('table')).getByRole('button', { name: 'Actions for Agus Prasetyo' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Remove from the KPM' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Remove AGUS PRASETYO from the KPM?' });
+    expect(within(dialog).getByRole('radio', { name: 'Moves to WILSON TANOTO' })).toBeChecked();
+    await userEvent.type(within(dialog).getByLabelText('Reason (optional)'), 'Pindah kantor');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Remove' }));
+
+    await vi.waitFor(() => {
+      const call = calls.find((c) => c.init.method === 'DELETE');
+      expect(JSON.parse(String(call?.init.body))).toEqual({
+        confirmation: 'REMOVE', reason: 'Pindah kantor', subtree: { action: 'reassign', toMembershipId: 'mem-wilson' },
       });
-      renderInLayout(TenantLayout, <MembersPage />, { me: OWNER });
-      await userEvent.click(await screen.findByRole('button', { name: 'Removed' }));
-      const table = await screen.findByRole('table');
-      await within(table).findByRole('columnheader', { name: 'Removed' });
-      expect(within(table).queryByRole('columnheader', { name: 'Last activity' })).not.toBeInTheDocument();
-      expect(within(table).queryByRole('columnheader', { name: 'Last coached' })).not.toBeInTheDocument();
-    });
-
-    it('AC-8: every page carries them — the next page’s rows too', async () => {
-      stubFetch({
-        '/members': [
-          { body: { members: [member({ lastActivityDays: 2, lastCoachedDays: 5 })], nextCursor: '50', counts: { directory: 51, pending: 0, removed: 0 } } },
-          { body: { members: [member({ membershipId: 'mem-51', agentCode: 'KPM0417-051', fullName: 'Last Page', preferredName: null, lastActivityDays: 9, lastCoachedDays: null })], nextCursor: null } },
-        ],
-      });
-      renderInLayout(TenantLayout, <MembersPage />, { me: OWNER });
-      await userEvent.click(await screen.findByRole('button', { name: 'Next' }));
-      const row = within(await screen.findByRole('table')).getByRole('row', { name: /Last Page/ });
-      expect(within(row).getAllByRole('cell').slice(4, 6).map((c) => c.textContent)).toEqual(['9 days ago', 'Never']);
     });
   });
 
-  describe('the Core Leader chip and control (P18.5-T5 AC-3, ADR-0159 §1)', () => {
-    const page = (members: Record<string, unknown>[]) => ({
-      body: { members, nextCursor: null, counts: { directory: members.length, pending: 0, removed: 0 } },
-    });
-    const AGUS = member({
-      membershipId: 'mem-agus', role: 'ab', fullName: 'Agus Salim', preferredName: null, isCoreLeader: true, canTagCoreLeader: true,
-    });
-    const SARI = member({
-      membershipId: 'mem-sari', agentCode: 'KPM0417-002', role: 'aab', fullName: 'Sari Puspita', preferredName: null,
-      isCoreLeader: false, canTagCoreLeader: true,
-    });
-    const RINA = member({ membershipId: 'mem-rina', agentCode: 'KPM0417-003', isCoreLeader: false, canTagCoreLeader: false });
+  it('P19.20-T2 AC-4 Ubah peran / leader: the rung, the leader with Ganti leader, a reason — Batal and Simpan', async () => {
+    atWidth(1024);
+    const { calls } = stubFetch({ 'PATCH /members/mem-dewi/role': { body: [] }, '/members': page([dewi]) });
+    renderInLayout(TenantLayout, <MembersPage />, { me: OWNER });
 
-    it('draws the chip on a Core Leader’s row, and the control on a leader’s row alone', async () => {
-      stubFetch({ '/members': page([AGUS, SARI, RINA]) });
-      renderInLayout(TenantLayout, <MembersPage />, { me: OWNER });
-      const table = await screen.findByRole('table');
-      const agus = within(table).getByRole('row', { name: /Agus Salim/ });
-      expect(within(agus).getByText('Core Leader')).toBeInTheDocument();
-      expect(within(agus).getByRole('button', { name: 'Remove the Core Leader tag from Agus Salim' })).toBeEnabled();
-      const sari = within(table).getByRole('row', { name: /Sari Puspita/ });
-      expect(within(sari).queryByText('Core Leader')).not.toBeInTheDocument();
-      expect(within(sari).getByRole('button', { name: 'Tag Sari Puspita Core Leader' })).toHaveTextContent('+ Core Leader');
-      const rina = within(table).getByRole('row', { name: /Rina/ });
-      expect(within(rina).queryByRole('button', { name: /Core Leader/ })).not.toBeInTheDocument();
+    await userEvent.click(within(await screen.findByRole('table')).getByRole('button', { name: 'Actions for Dewi Lestari' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Change role / leader' }));
+    const dialog = await screen.findByRole('dialog', { name: /Change role \/ leader/ });
+    expect(dialog).toHaveTextContent('Agus Prasetyo');
+    expect(within(dialog).getByRole('button', { name: 'Change leader' })).toBeInTheDocument();
+    await userEvent.selectOptions(within(dialog).getByLabelText('Role'), 'agent');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+
+    await vi.waitFor(() => expect(calls.some((c) => c.url.includes('/mem-dewi/role'))).toBe(true));
+  });
+
+  it('P19.20-T1 AC-5 a core leader’s rows outside their downline are muted and do not open', async () => {
+    atWidth(1024);
+    stubFetch({ '/members': page([row({ openable: true }), row({ membershipId: 'mem-yosef', fullName: 'Yosef Tambunan', openable: false })]) });
+    renderInLayout(TenantLayout, <MembersPage />, { me: OWNER });
+
+    const table = await screen.findByRole('table');
+    expect(within(table).getByRole('button', { name: 'Open Agus Prasetyo' })).toBeInTheDocument();
+    expect(within(table).queryByRole('button', { name: 'Open Yosef Tambunan' })).not.toBeInTheDocument();
+    expect(rowOf(table, 'mem-yosef')).toHaveAttribute('data-muted');
+  });
+
+  it('P19.20-T2 AC-1 a name opens the member sheet over the list', async () => {
+    atWidth(1024);
+    stubFetch({ '/members/mem-agus/tags': { body: {} }, '/members/mem-agus': { body: row({ personal: { dateOfBirth: null, gender: null, companyJoinMonth: null, workStatus: null, phone: null, companyName: null } }) }, '/members': page([row()]) });
+    renderInLayout(TenantLayout, <MembersPage />, { me: OWNER });
+
+    await userEvent.click(within(await screen.findByRole('table')).getByRole('button', { name: 'Open Agus Prasetyo' }));
+    const sheet = await screen.findByRole('dialog');
+    expect(await within(sheet).findByText('Profile')).toBeInTheDocument();
+  });
+
+  it('P19.20-T1 AC-2 below 768px the same content as rows, in the same order', async () => {
+    atWidth(390);
+    stubFetch({ '/members': page([row(), dewi]) });
+    renderInLayout(TenantLayout, <MembersPage />, { me: OWNER });
+
+    const list = await screen.findByRole('list', { name: 'The KPM’s members' });
+    const items = within(list).getAllByRole('listitem');
+    expect(items[0]).toHaveTextContent('Agus Prasetyo');
+    expect(items[0]).toHaveTextContent('Top Producers 2026');
+    expect(items[1]).toHaveTextContent('follows AB Agus');
+  });
+
+  it('P19.20-T1 AC-2 an empty KPM and an empty filter say so apart', async () => {
+    stubFetch({ '/members': page([]) });
+    renderInLayout(TenantLayout, <MembersPage />, { me: OWNER });
+
+    expect(await screen.findByText('This KPM has no members yet.')).toBeInTheDocument();
+    await userEvent.type(screen.getByPlaceholderText('Search name or agent code'), 'nobody');
+    expect(await screen.findByText('Nobody matches.')).toBeInTheDocument();
+  });
+
+  it('P19.20-T1 AC-2 a refused read is said', async () => {
+    stubFetch({ '/members': { status: 500, body: { error: { code: 'INTERNAL_ERROR', message: 'Something went wrong.' } } } });
+    renderInLayout(TenantLayout, <MembersPage />, { me: OWNER });
+
+    expect(await screen.findByText('Something went wrong.')).toBeInTheDocument();
+  });
+
+  describe('Menunggu (AC-4)', () => {
+    const fajar = row({
+      membershipId: 'mem-fajar', status: 'pending', role: 'agent', orgLevelCode: 'AGENT', fullName: 'Fajar Nugroho',
+      agentCode: '80011', leaderId: null, leaderName: null, groupPlace: undefined, registeredAt: '2026-11-16T02:00:00.000Z',
     });
 
-    it('tags from the row with the flag alone, and draws what the server stored', async () => {
+    it('P19.20-T1 AC-4 Sudah daftar, belum masuk unit: Pilih leader puts them under the one chosen', async () => {
       const { calls } = stubFetch({
-        '/members': page([SARI]),
-        'PUT /members/mem-sari/core-leader': ({ body }) => ({
-          body: { membershipId: 'mem-sari', fullName: 'Sari Puspita', groupIds: ['grp-1'], ...(body as object), canBeCoreLeader: true },
-        }),
+        '/transfer-requests': { body: [] },
+        '/join/requests': { body: [] },
+        '/members/tree': { body: { nodes: [{ membershipId: 'mem-agus', fullName: 'Agus Prasetyo', preferredName: null, initials: 'AP', agentCode: '80005', role: 'ab', depth: 1, layer: 1, leaderId: null, directCount: 9, directCounts: { ab: 0, aab: 3, agent: 6, total: 9 }, subtreeCount: 18, isLeader: true, isSelf: false, openable: true }], leader: null, rootIds: ['mem-agus'], selfId: null, counts: { ab: 1, aab: 0, agent: 0, total: 1 } } },
+        'PUT /people/mem-fajar/placement': { body: row({ membershipId: 'mem-fajar' }) },
+        '/members': (req: { url: string }) => (req.url.includes('status=pending') ? page([fajar]) : page([row()])),
       });
       renderInLayout(TenantLayout, <MembersPage />, { me: OWNER });
-      await userEvent.click(await screen.findByRole('button', { name: 'Tag Sari Puspita Core Leader' }));
-      const sent = calls.find((c) => c.init.method === 'PUT')!;
-      expect(sent.url).toContain('/members/mem-sari/core-leader');
-      expect(JSON.parse(sent.init.body as string)).toEqual({ isCoreLeader: true });
-      const row = within(screen.getByRole('table')).getByRole('row', { name: /Sari Puspita/ });
-      expect(await within(row).findByText('Core Leader')).toBeInTheDocument();
-      expect(within(row).getByRole('button', { name: 'Remove the Core Leader tag from Sari Puspita' })).toBeInTheDocument();
+
+      await userEvent.click(await screen.findByRole('tab', { name: /Waiting/ }));
+      const item = await screen.findByText('Fajar Nugroho');
+      expect(item.closest('li')).toHaveTextContent(/Has not chosen a leader · registered/);
+      await userEvent.click(screen.getByRole('button', { name: 'Choose a leader' }));
+      const picker = await screen.findByRole('dialog');
+      await userEvent.click(await within(picker).findByRole('radio'));
+      await userEvent.click(within(picker).getByRole('button', { name: 'Choose a leader' }));
+
+      await vi.waitFor(() => {
+        const call = calls.find((c) => c.url.includes('/placement'));
+        expect(JSON.parse(String(call?.init.body))).toEqual({ leaderMembershipId: 'mem-agus' });
+      });
     });
 
-    it('says the server’s refusal, and leaves the row as it was', async () => {
+    it('P19.20-T1 AC-4 nobody waiting reads so', async () => {
       stubFetch({
-        '/members': page([SARI]),
-        'PUT /members/mem-sari/core-leader': {
-          status: 400,
-          body: { error: { code: 'CORE_LEADER_NOT_A_LEADER', message: 'Only a leader can be a Core Leader. Move them to a leader rung first.', requestId: 'r' } },
-        },
+        '/transfer-requests': { body: [] },
+        '/join/requests': { body: [] },
+        '/members': (req: { url: string }) => (req.url.includes('status=pending') ? page([]) : page([row()])),
       });
       renderInLayout(TenantLayout, <MembersPage />, { me: OWNER });
-      await userEvent.click(await screen.findByRole('button', { name: 'Tag Sari Puspita Core Leader' }));
-      expect(await screen.findByText(/Only a leader can be a Core Leader/)).toBeInTheDocument();
-      const row = within(screen.getByRole('table')).getByRole('row', { name: /Sari Puspita/ });
-      expect(within(row).queryByText('Core Leader')).not.toBeInTheDocument();
-    });
 
-    it('offers no control on the Removed tab', async () => {
-      stubFetch({ '/members': page([{ ...AGUS, status: 'removed', removedAt: '2026-09-01T00:00:00.000Z' }]) });
-      renderInLayout(TenantLayout, <MembersPage />, { me: OWNER });
-      await userEvent.click(await screen.findByRole('button', { name: /^Removed/ }));
-      const table = await screen.findByRole('table', { name: 'Removed members' });
-      expect(within(table).queryByRole('button', { name: /Core Leader/ })).not.toBeInTheDocument();
+      await userEvent.click(await screen.findByRole('tab', { name: /Waiting/ }));
+      expect(await screen.findByText('Nobody is waiting.')).toBeInTheDocument();
     });
   });
 
-  it('draws every tab as one that opens, with none waiting on a later build', async () => {
-    // This used to loop over the unbuilt tabs, and the list had been empty since the last one
-    // shipped, so it asserted nothing. The disabled branch it guarded went with it (P10.1-T2).
-    stubFetch({ '/members': { body: { members: [], nextCursor: null, counts: { directory: 0, pending: 0, removed: 0 } } } });
-    renderInLayout(TenantLayout, <MembersPage />, { me: OWNER });
-
-    for (const name of [/^Directory/, /^Pending/, /^Removed/, 'Role change log', 'Groups']) {
-      expect(await within(screen.getByRole('main')).findByRole('button', { name })).toBeEnabled();
-    }
-    expect(within(screen.getByRole('main')).queryByText(/phase/i)).not.toBeInTheDocument();
-  });
-
-  describe('the role change log tab (P3-T6 AC-4)', () => {
-    const entry = (over: Record<string, unknown> = {}) => ({
-      membershipId: 'mem-1', fullName: 'Rina Wijaya', agentCode: 'KPM0417-001',
-      fromRole: 'agent', toRole: 'aab', reason: 'Ready to lead a unit',
-      actorName: 'Wilson Tanoto', changedAt: '2026-08-14T03:20:00.000Z', ...over,
+  describe('Riwayat (AC-4)', () => {
+    const entry = (over: Record<string, unknown>) => ({
+      id: 'h-1', kind: 'role', membershipId: 'mem-dewi', fullName: 'Dewi Lestari', agentCode: '80007', role: 'aab',
+      photoUrl: null, fromRole: 'agent', toRole: 'aab', fromLeaderName: null, toLeaderName: null,
+      reason: 'Took the AAB track after Q2', actorName: 'Agus Prasetyo', at: '2026-10-07T02:00:00.000Z', openable: true, ...over,
     });
 
-    function open(body: unknown) {
-      const stub = stubFetch({
-        '/members/role-changes': { body },
-        '/members': { body: { members: [], nextCursor: null, counts: { directory: 0, pending: 0, removed: 0 } } },
+    it('P19.20-T1 AC-4 one list: a role change, a removal, a move — each with its pill and its day', async () => {
+      stubFetch({
+        '/people/history': { body: [
+          entry({}),
+          entry({ id: 'h-2', kind: 'removed', membershipId: 'mem-dimas', fullName: 'Dimas Pratama', reason: null, actorName: 'Wilson Tanoto', openable: false }),
+          entry({ id: 'h-3', kind: 'moved', membershipId: 'mem-raka', fullName: 'Raka Aditama', role: 'agent', reason: null, fromLeaderName: 'Satria Nugraha', toLeaderName: 'Agus Prasetyo' }),
+        ] },
+        '/members': page([row()]),
       });
       renderInLayout(TenantLayout, <MembersPage />, { me: OWNER });
-      return stub;
-    }
 
-    it('reads the log, not the roster, and drops the roster filters while it is open', async () => {
-      const { calls } = open([entry()]);
-      await userEvent.click(await screen.findByRole('button', { name: 'Role change log' }));
-
-      await screen.findByRole('table');
-      expect(calls.some((c) => c.url.includes('/members/role-changes'))).toBe(true);
-      // Search and Role filter the roster; leaving them over the log would offer
-      // controls that change nothing.
-      expect(screen.queryByLabelText('Search')).not.toBeInTheDocument();
-      expect(screen.queryByLabelText('Role')).not.toBeInTheDocument();
+      await userEvent.click(await screen.findByRole('tab', { name: 'History' }));
+      const list = await screen.findByRole('list', { name: 'History, newest first' });
+      const [role, removed, moved] = within(list).getAllByRole('listitem');
+      expect(role).toHaveTextContent('“Took the AAB track after Q2” · by AGUS PRASETYO');
+      expect(role).toHaveTextContent('Agent → AAB');
+      expect(removed).toHaveTextContent('Removed');
+      expect(moved).toHaveTextContent('moved from SATRIA NUGRAHA to AGUS PRASETYO');
+      expect(moved).toHaveTextContent('Moved unit');
     });
 
-    it('shows what changed, why, and who did it', async () => {
-      open([entry()]);
-      await userEvent.click(await screen.findByRole('button', { name: 'Role change log' }));
-
-      const row = within(await screen.findByRole('table')).getByRole('row', { name: /Rina/ });
-      expect(row).toHaveTextContent('Agent→AAB');
-      // The badge abbreviates; the full name has to stay reachable, because "AAB"
-      // means nothing to somebody reading their first role change.
-      expect(within(row).getByTitle('AAB')).toBeInTheDocument();
-      expect(row).toHaveTextContent('Ready to lead a unit');
-      expect(row).toHaveTextContent('Wilson Tanoto');
-      expect(within(row).getByRole('link', { name: 'Rina Wijaya' })).toHaveAttribute(
-        'href',
-        '/people/members/mem-1',
-      );
-    });
-
-    it('says nothing rather than nothing-happened when a reason was not given', async () => {
-      // A blank cell reads as a rendering fault; an em dash reads as "not recorded".
-      open([entry({ reason: null, actorName: null })]);
-      await userEvent.click(await screen.findByRole('button', { name: 'Role change log' }));
-
-      const row = within(await screen.findByRole('table')).getByRole('row', { name: /Rina/ });
-      expect(within(row).getAllByText('—')).toHaveLength(2);
-    });
-
-    it('has an empty state of its own, not the roster one', async () => {
-      open([]);
-      await userEvent.click(await screen.findByRole('button', { name: 'Role change log' }));
-      expect(
-        await screen.findByText('Nobody has changed role in this office yet.'),
-      ).toBeInTheDocument();
-      expect(screen.queryByText('This office has no members yet.')).not.toBeInTheDocument();
-    });
-
-    it('goes back to the roster, and asks for it again', async () => {
-      const { calls } = open([entry()]);
-      await userEvent.click(await screen.findByRole('button', { name: 'Role change log' }));
-      await screen.findByRole('table');
-
-      await userEvent.click(screen.getByRole('button', { name: /^Directory/ }));
-      expect(await screen.findByLabelText('Search')).toBeInTheDocument();
-      await vi.waitFor(() =>
-        expect(calls[calls.length - 1].url).not.toContain('/members/role-changes'),
-      );
-    });
-  });
-
-  describe('the Pending tab (P3.1)', () => {
-    const request = (over: Record<string, unknown> = {}) => ({
-      requestId: 'req-1', membershipId: 'mem-asked', fullName: 'Putri Anggraini', initials: 'PA',
-      email: 'putri@kpm0417.test', agentCode: 'KPM0417-008', role: 'agent',
-      requestedAt: '2026-09-01T00:00:00.000Z', routedFromName: null, ...over,
-    });
-
-    const asked = member({
-      membershipId: 'mem-asked', fullName: 'Putri Anggraini', preferredName: null,
-      agentCode: 'KPM0417-008', email: 'putri@kpm0417.test', status: 'pending',
-    });
-    const unasked = member({
-      membershipId: 'mem-unasked', fullName: 'Fajar Nugroho', preferredName: null,
-      agentCode: 'KPM0417-009', email: 'fajar@kpm0417.test', status: 'pending',
-    });
-
-    function open(waiting = [asked, unasked], queue = [request()], extra = {}) {
-      const stub = stubFetch({
-        '/join/requests': { body: queue },
-        '/members': {
-          body: {
-            members: waiting,
-            nextCursor: null,
-            counts: { directory: 8, pending: waiting.length, removed: 1 },
-          },
-        },
-        ...extra,
-      });
+    it('P19.20-T1 AC-4 the filter is the server’s: Semua · Perubahan peran · Dikeluarkan · Pindah unit', async () => {
+      const { calls } = stubFetch({ '/people/history': { body: [] }, '/members': page([row()]) });
       renderInLayout(TenantLayout, <MembersPage />, { me: OWNER });
-      return stub;
-    }
 
-    async function openTab(...args: Parameters<typeof open>) {
-      const stub = open(...args);
-      await userEvent.click(await screen.findByRole('button', { name: /^Pending/ }));
-      await screen.findByRole('table');
-      return stub;
-    }
-
-    /** *Approve*, which opens the row's *Join date* (P18.8-T7 G1), and *Approve* again, which sends it. */
-    async function approve() {
-      await userEvent.click(screen.getByRole('button', { name: 'Approve' }));
-      await userEvent.click(screen.getByRole('button', { name: 'Approve' }));
-    }
-
-    it('lists everybody registered but not yet in a unit, not only those who asked', async () => {
-      // The bug this closes: the tab counted pending memberships and rendered open
-      // requests. Somebody who registered and asked nobody was counted and never shown —
-      // and they are the ones most in need of finding.
-      await openTab();
-      const table = screen.getByRole('table');
-      expect(within(table).getByRole('row', { name: /Putri/ })).toBeInTheDocument();
-      expect(within(table).getByRole('row', { name: /Fajar/ })).toBeInTheDocument();
-    });
-
-    it('the count matches the rows, because both are the same population', async () => {
-      await openTab();
-      expect(screen.getByRole('button', { name: 'Pending (2)' })).toBeInTheDocument();
-      expect(within(screen.getByRole('table')).getAllByRole('row')).toHaveLength(3); // header + 2
-    });
-
-    it('offers a decision only where there is one to make', async () => {
-      await openTab();
-      const table = screen.getByRole('table');
-
-      const withAsk = within(table).getByRole('row', { name: /Putri/ });
-      expect(within(withAsk).getByRole('button', { name: 'Approve' })).toBeInTheDocument();
-
-      const without = within(table).getByRole('row', { name: /Fajar/ });
-      expect(within(without).queryByRole('button', { name: 'Approve' })).not.toBeInTheDocument();
-      expect(without).toHaveTextContent('They have asked no leader');
-    });
-
-    it('says approving puts them under the leader they asked for, not under you', async () => {
-      await openTab();
-      expect(screen.getByText(/the leader they asked for/)).toBeInTheDocument();
-    });
-
-    it('approves through the queue', async () => {
-      const { calls } = await openTab([asked], [request()], {
-        '/join/requests/req-1/approve': { body: [] },
-      });
-      await approve();
-      expect(calls.find((c) => c.init.method === 'POST')!.url).toContain('/req-1/approve');
-    });
-
-    it('P18.8-T7 G1 Approve asks for the join date — the shared field, today by default — and sends it', async () => {
-      const today = dayInZone(OFFICE_TIME_ZONE, new Date());
-      const { calls } = await openTab([asked], [request()], {
-        '/join/requests/req-1/approve': { body: [] },
-      });
-      const putri = within(screen.getByRole('table')).getByRole('row', { name: /Putri/ });
-      await userEvent.click(within(putri).getByRole('button', { name: 'Approve' }));
-      // Nothing is sent yet: the first press opens the row's *Join date*.
-      expect(calls.filter((c) => c.init.method === 'POST')).toEqual([]);
-      const field = within(putri).getByLabelText('Join date');
-      expect(field).toHaveAttribute('type', 'date');
-      expect(field).toHaveValue(today);
-      expect(field).toHaveAttribute('max', today);
-      expect(within(putri).getByText('The day they joined. Today unless they joined earlier.')).toBeInTheDocument();
-
-      // An earlier day, as a leader corrects it: the face writes it the app's way, and the second press sends it.
-      fireEvent.change(field, { target: { value: '2026-09-01' } });
-      expect(field.nextElementSibling).toHaveTextContent('1 Sep 2026');
-      await userEvent.click(within(putri).getByRole('button', { name: 'Approve' }));
-      const post = calls.find((c) => c.init.method === 'POST')!;
-      expect(post.url).toContain('/join/requests/req-1/approve');
-      expect(JSON.parse(String(post.init.body))).toEqual({ joinDate: '2026-09-01' });
-    });
-
-    it('P18.8-T7 G1 a join date after today is refused before it is sent, and Cancel puts the row back', async () => {
-      const { calls } = await openTab([asked], [request()]);
-      const putri = within(screen.getByRole('table')).getByRole('row', { name: /Putri/ });
-      await userEvent.click(within(putri).getByRole('button', { name: 'Approve' }));
-      fireEvent.change(within(putri).getByLabelText('Join date'), { target: { value: '2999-01-01' } });
-      expect(within(putri).getByText(/^The join date cannot be after today, /)).toBeInTheDocument();
-      expect(within(putri).getByRole('button', { name: 'Approve' })).toBeDisabled();
-
-      await userEvent.click(within(putri).getByRole('button', { name: 'Cancel' }));
-      expect(within(putri).queryByLabelText('Join date')).not.toBeInTheDocument();
-      expect(within(putri).getByRole('button', { name: 'Decline' })).toBeInTheDocument();
-      expect(calls.filter((c) => c.init.method === 'POST')).toEqual([]);
-    });
-
-    it('has an empty state that says the office is clear', async () => {
-      open([], []);
-      await userEvent.click(await screen.findByRole('button', { name: /^Pending/ }));
-      expect(await screen.findByText('Everybody who has registered is in a unit.')).toBeInTheDocument();
-    });
-
-    it('surfaces a refusal rather than looking like it worked', async () => {
-      await openTab([asked], [request()], {
-        '/join/requests/req-1/approve': {
-          status: 409,
-          body: {
-            error: {
-              code: 'ORG_REQUEST_ALREADY_DECIDED',
-              message: 'That request was already approved.',
-              requestId: 'r-1',
-            },
-          },
-        },
-      });
-      await approve();
-      expect(await screen.findByRole('alert')).toHaveTextContent('already approved');
-    });
-
-    it('P13.2 exit review: an approval at the leader limit is said in the limit’s words, never the code', async () => {
-      await openTab([asked], [request()], {
-        '/join/requests/req-1/approve': {
-          status: 409,
-          body: {
-            error: {
-              code: 'LEADER_LIMIT_REACHED',
-              message: 'This office has reached its limit of 3 leaders.',
-              details: { maxLeaders: 3, leadersUsed: 3 },
-              requestId: 'r-2',
-            },
-          },
-        },
-      });
-      await approve();
-      const alert = await screen.findByRole('alert');
-      expect(alert).toHaveTextContent('This office has reached its limit of 3 leaders, so nobody else can be made an AB or an AAB.');
-      expect(alert).not.toHaveTextContent('LEADER_LIMIT_REACHED');
-    });
-
-    it('P18.5-T2 AC-6: asks AgencyBoost to let the joiner in, and the row then waits with Cancel request', async () => {
-      const waitingRow = {
-        requestId: 'llr-1', kpmId: 'kpm-1', kpmCode: '0603', kpmBranchName: 'Tangerang Branch',
-        subjectMembershipId: 'mem-asked', subjectName: 'Putri Anggraini', subjectAgentCode: '88008', action: 'activate',
-        fromOrgLevelCode: 'AAB', toOrgLevelCode: null, reason: null, requestedByMembershipId: 'mem-owner',
-        requestedByName: 'Wilson', status: 'pending', requestedAt: '2026-10-25T00:00:00.000Z', decidedAt: null,
-        declineReason: null, maxLeaders: 3, leadersUsed: 3,
-      };
-      await openTab([asked], [request({ role: 'aab' })], {
-        '/join/requests/req-1/approve': {
-          status: 409,
-          body: {
-            error: {
-              code: 'LEADER_LIMIT_REACHED', message: 'x', requestId: 'r-2',
-              details: { maxLeaders: 3, leadersUsed: 3, canRequest: true },
-            },
-          },
-        },
-        '/members/leader-limit-requests': [{ body: [] }, { body: [waitingRow] }],
-        'POST /members/mem-asked/leader-limit-request': { status: 201, body: waitingRow },
-      });
-      await approve();
-      const alert = await screen.findByRole('alert');
-      await userEvent.click(within(alert).getByRole('button', { name: 'Ask AgencyBoost to approve' }));
-      expect(await screen.findByText("Waiting for AgencyBoost's approval")).toBeInTheDocument();
-      expect(screen.getByText('Let in as AAB')).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'Cancel request' })).toBeInTheDocument();
-      expect(screen.queryByRole('button', { name: 'Approve' })).not.toBeInTheDocument();
+      await userEvent.click(await screen.findByRole('tab', { name: 'History' }));
+      expect(await screen.findByText('No history yet.')).toBeInTheDocument();
+      await userEvent.click(screen.getByRole('button', { name: 'Moved unit' }));
+      await vi.waitFor(() => expect(calls[calls.length - 1].url).toContain('/people/history?kind=moved'));
     });
   });
 
-  it('P3.1: carries the population in the tab label, as the prototype does', async () => {
+  it('P19.20-T1 AC-1 a notice’s ?tab=pending opens Menunggu', async () => {
+    window.history.replaceState(null, '', '/people/members?tab=pending');
     stubFetch({
-      '/members': {
-        body: {
-          members: [member()],
-          nextCursor: null,
-          counts: { directory: 187, pending: 14, removed: 3 },
-        },
-      },
+      '/transfer-requests': { body: [] },
+      '/join/requests': { body: [] },
+      '/members': page([]),
     });
     renderInLayout(TenantLayout, <MembersPage />, { me: OWNER });
 
-    expect(await screen.findByRole('button', { name: 'Directory (187)' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Removed (3)' })).toBeInTheDocument();
-    expect(screen.getByText('Pending (14)')).toBeInTheDocument();
-    // Not a population, so no number — a count there would invite the wrong question.
-    expect(screen.getByRole('button', { name: 'Role change log' })).toBeInTheDocument();
-  });
-
-  it('P3.1: indents a name by role, so the roster reads as the tree it is', async () => {
-    stubFetch({
-      '/members': {
-        body: {
-          members: [
-            member({ membershipId: 'm-ab', fullName: 'An AB', preferredName: null, role: 'ab' }),
-            member({ membershipId: 'm-aab', fullName: 'An AAB', preferredName: null, role: 'aab' }),
-            member({ membershipId: 'm-agent', fullName: 'An Agent', preferredName: null, role: 'agent' }),
-          ],
-          nextCursor: null,
-          counts: { directory: 3, pending: 0, removed: 0 },
-        },
-      },
-    });
-    renderInLayout(TenantLayout, <MembersPage />, { me: OWNER });
-
-    const table = await screen.findByRole('table');
-    const indent = (name: string) =>
-      within(table).getByRole('link', { name }).parentElement!.className;
-
-    expect(indent('An AB')).not.toMatch(/pl-/);
-    expect(indent('An AAB')).toContain('pl-4');
-    expect(indent('An Agent')).toContain('pl-8');
-  });
-
-  describe('the Groups tab (P3-T9)', () => {
-    const group = (over: Record<string, unknown> = {}) => ({
-      groupId: 'grp-1', name: 'New Agent Mentoring Circle', ownerMembershipId: 'mem-1',
-      ownerName: 'Rina Wijaya', ownerHasLeft: false, memberCount: 2, ...over,
-    });
-
-    const office = {
-      nodes: [
-        {
-          membershipId: 'mem-1', fullName: 'Rina Wijaya', preferredName: 'Rina', initials: 'RW',
-          agentCode: 'KPM0417-001', role: 'aab', depth: 0, layer: 1, leaderId: null,
-          directCount: 0, subtreeCount: 0, isLeader: false, isSelf: false,
-        },
-        // An Agent is never offered: a group's ★ is a leader (P19.13-T3; ADR-0253 §2).
-        {
-          membershipId: 'mem-2', fullName: 'Budi Santoso', preferredName: null, initials: 'BS',
-          agentCode: 'KPM0417-002', role: 'agent', depth: 1, layer: 2, leaderId: 'mem-1',
-          directCount: 0, subtreeCount: 0, isLeader: false, isSelf: false,
-        },
-      ],
-      leader: null, rootIds: ['mem-1'], selfId: null,
-      counts: { ab: 0, aab: 1, agent: 1, total: 2 },
-    };
-
-    function stub(groups: Record<string, unknown>[], extra: Record<string, unknown> = {}) {
-      return stubFetch({
-        '/members/groups': { body: groups },
-        '/members/tree': { body: office },
-        '/members': { body: { members: [member()], nextCursor: null, counts: { directory: 187, pending: 14, removed: 3 } } },
-        ...extra,
-      });
-    }
-
-    async function openTab(groups: Record<string, unknown>[] = [group()], extra = {}) {
-      const stubbed = stub(groups, extra);
-      renderInLayout(TenantLayout, <MembersPage />, { me: OWNER });
-      await userEvent.click(await screen.findByRole('button', { name: 'Groups' }));
-      return stubbed;
-    }
-
-    it('AC-1: says plainly that a group is not hierarchy and grants nothing', async () => {
-      // The one thing a reader could reasonably get wrong, so the screen says it.
-      await openTab();
-      expect(await screen.findByText(/grants nobody access to anything/)).toBeInTheDocument();
-    });
-
-    it('lists each group with its owner and how many are tagged', async () => {
-      await openTab();
-      const row = within(await screen.findByRole('table')).getByRole('row', { name: /Mentoring/ });
-      expect(row).toHaveTextContent('Rina Wijaya');
-      expect(row).toHaveTextContent('2 people');
-    });
-
-    it('drops the roster filters, which would filter nothing here', async () => {
-      await openTab();
-      await screen.findByRole('table');
-      expect(screen.queryByLabelText('Search')).not.toBeInTheDocument();
-      expect(screen.queryByLabelText('Role')).not.toBeInTheDocument();
-    });
-
-    it('creates one, sending the owner as a membership and not a name', async () => {
-      const { calls } = await openTab([], { '/members/groups': { body: [] } });
-      await userEvent.click(await screen.findByRole('button', { name: 'Create group' }));
-
-      await userEvent.type(screen.getByLabelText('Group name'), '  Top Producers 2026  ');
-      await userEvent.selectOptions(screen.getByLabelText('Group leader'), 'mem-1');
-      await userEvent.click(screen.getByRole('button', { name: 'Save' }));
-
-      const sent = calls.find((c) => c.init.method === 'POST')!;
-      expect(JSON.parse(sent.init.body as string)).toEqual({
-        name: '  Top Producers 2026  ',
-        ownerMembershipId: 'mem-1',
-      });
-    });
-
-    it('P19.13-T3 AC-2 offers every leader of the office as Group leader — never an Agent — not just the roster first page', async () => {
-      // The roster pages at 25. Picking an owner from it would silently fail to offer
-      // most of the office.
-      const { calls } = await openTab();
-      await userEvent.click(await screen.findByRole('button', { name: 'Create group' }));
-
-      expect(calls.some((c) => c.url.includes('/members/tree'))).toBe(true);
-      const picker = within(screen.getByLabelText('Group leader'));
-      expect(picker.getByRole('option', { name: 'Rina' })).toBeInTheDocument();
-      expect(picker.queryByRole('option', { name: 'Budi Santoso' })).toBeNull();
-      expect(picker.getByRole('option', { name: 'Not appointed' })).toBeInTheDocument();
-    });
-
-    it('P19.13-T3 AC-4 will not save a group with no name; a Group leader is optional, sent as null', async () => {
-      const { calls } = await openTab([]);
-      await userEvent.click(await screen.findByRole('button', { name: 'Create group' }));
-      expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
-
-      await userEvent.type(screen.getByLabelText('Group name'), 'Named');
-      expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled();
-      await userEvent.click(screen.getByRole('button', { name: 'Save' }));
-      expect(JSON.parse(calls.find((c) => c.init.method === 'POST')!.init.body as string))
-        .toEqual({ name: 'Named', ownerMembershipId: null });
-    });
-
-    it('P19.13-T3 AC-2 a group with no ★ says so', async () => {
-      await openTab([group({ ownerMembershipId: null, ownerName: null })]);
-      const row = within(await screen.findByRole('table')).getByRole('row', { name: /Mentoring/ });
-      expect(row).toHaveTextContent('No group leader yet');
-    });
-
-    it('edits an existing one through the same form, prefilled', async () => {
-      const { calls } = await openTab();
-      await userEvent.click(await screen.findByRole('button', { name: 'Edit' }));
-
-      expect(screen.getByLabelText('Group name')).toHaveValue('New Agent Mentoring Circle');
-      await userEvent.click(screen.getByRole('button', { name: 'Save' }));
-      expect(calls.find((c) => c.init.method === 'PUT')!.url).toContain('/members/groups/grp-1');
-    });
-
-    it('says what retiring does and does not do before doing it', async () => {
-      const { calls } = await openTab();
-      await userEvent.click(await screen.findByRole('button', { name: 'Retire' }));
-
-      expect(screen.getByText(/Retire New Agent Mentoring Circle\?/)).toBeInTheDocument();
-      // P19.13-T3 AC-4 (ADR-0253 §3): its people lose the tag; Core leader tags stay.
-      expect(screen.getByText(/all 2 people tagged into it lose the tag. Core leader tags stay./)).toBeInTheDocument();
-      expect(calls.some((c) => c.init.method === 'DELETE')).toBe(false);
-
-      await userEvent.click(screen.getByRole('button', { name: 'Retire group' }));
-      expect(calls.find((c) => c.init.method === 'DELETE')!.url).toContain('/members/groups/grp-1');
-    });
-
-    it('counts one person in the singular', async () => {
-      await openTab([group({ memberCount: 1 })]);
-      await userEvent.click(await screen.findByRole('button', { name: 'Retire' }));
-      expect(screen.getByText(/the person tagged into it lose the tag/)).toBeInTheDocument();
-    });
-
-    it('says when a group has lost its owner, and what to do about it', async () => {
-      // Soft delete means a removed owner is still nameable. Naming them and saying
-      // they have gone beats either half on its own.
-      await openTab([group({ ownerHasLeft: true })]);
-      const row = within(await screen.findByRole('table')).getByRole('row', { name: /Mentoring/ });
-      expect(row).toHaveTextContent('Rina Wijaya');
-      expect(row).toHaveTextContent('No longer in this office — hand it to somebody else');
-    });
-
-    it('has an empty state that says what to do', async () => {
-      await openTab([]);
-      expect(await screen.findByText(/No groups yet — create one/)).toBeInTheDocument();
-    });
-
-    it('surfaces a clashing name rather than looking like it saved', async () => {
-      // The list load answers first, the create answers second.
-      await openTab([], {
-        '/members/groups': [
-          { body: [] },
-          {
-            status: 409,
-            body: {
-              error: {
-                code: 'ORG_GROUP_NAME_TAKEN',
-                message: 'This office already has a group called “Task Force”.',
-                requestId: 'r-1',
-              },
-            },
-          },
-        ],
-      });
-      await userEvent.click(await screen.findByRole('button', { name: 'Create group' }));
-      await userEvent.type(screen.getByLabelText('Group name'), 'Task Force');
-      await userEvent.selectOptions(screen.getByLabelText('Group leader'), 'mem-1');
-      await userEvent.click(screen.getByRole('button', { name: 'Save' }));
-
-      expect(await screen.findByRole('alert')).toHaveTextContent('already has a group called');
-      // And the form stays open with what was typed, so it can be corrected.
-      expect(screen.getByLabelText('Group name')).toHaveValue('Task Force');
-    });
-  });
-
-  it('never renders for a session without the permission', () => {
-    // An office reader without the grant: anybody else is not refused here but sent to their own landing
-    // (2026-10-11, `shell-family.spec.tsx`).
-    renderInLayout(TenantLayout, <MembersPage />, { me: makeMe({ ...OWNER, permissions: [] }) });
-    expect(screen.getByRole('alert')).toHaveTextContent('Not available to you');
-    // The gate's code is on the refusal as data, and never in its words (P11-T6).
-    expect(screen.getByRole('alert')).toHaveAttribute('data-permission', 'member:read_profile');
-    expect(screen.queryByRole('table')).not.toBeInTheDocument();
-  });
-
-  it('shows the server error rather than an empty roster', async () => {
-    stubFetch({
-      '/members': {
-        status: 403,
-        body: { error: { code: 'PERM_DENIED', message: 'Nope.', requestId: 'req-9' } },
-      },
-    });
-    renderInLayout(TenantLayout, <MembersPage />, { me: OWNER });
-    expect(await screen.findByRole('alert')).toHaveTextContent('Nope.');
-  });
-});
-
-/**
- * **Below 1024px the five tabs are one row that scrolls sideways** (P18.9-T6 AC-4, ADR-0178 §2; the client's KPM Owner
- * review of 2026-10-27, UI-038: *Directory (28) · Pending (2) · Removed (2) · Role change log · Groups* on two rows at
- * 768px and at 375px). The shared tab row every strip has on a phone — `useTabRow` and the row's classes, a range wider
- * (`tablet.ts`) — so the side that has more fades and the current tab is brought into view. The tabs stay this row's
- * own buttons, with their names and `aria-current`; a row that fits reads as it did, and from 1024px it wraps as before.
- */
-/**
- * **Who came back, codes on one line, and *No team*** (P18.9-T4 AC-3, ADR-0176 §2, §5; the client's KPM Owner review
- * of 2026-10-27, UI-024: *Yanti Kusuma … in Directory with status ACTIVE while a "Removed (2)" tab exists*, *"PRU- /
- * 80003"*, *"Leads nobody"*). Yanti left and came back — two memberships, one removed and one active (invariant §2) —
- * and `GET /members` marks both (`rejoinedOn`, the server's): *Rejoined* beside her status, *Rejoined {date}* under
- * *Removed*.
- */
-describe('P18.9-T4 AC-3 the directory says who came back, on one line each', () => {
-  afterEach(() => vi.unstubAllGlobals());
-
-  const YANTI = member({
-    membershipId: 'mem-yanti-2', agentCode: 'PRU-80003', fullName: 'Yanti Kusuma', preferredName: null,
-    email: 'removed@kpm0417.test', rejoinedOn: '2026-09-30',
-  });
-  const RINA = member({ agentCode: 'PRU-80001', rejoinedOn: null });
-  const COUNTS = { directory: 28, pending: 2, removed: 2 };
-
-  it('P18.9-T4 AC-3 marks a member who came back Rejoined beside her status, and nobody else', async () => {
-    stubFetch({ '/members': { body: { members: [RINA, YANTI], nextCursor: null, counts: COUNTS } } });
-    renderInLayout(TenantLayout, <MembersPage />, { me: OWNER });
-    const table = await screen.findByRole('table');
-    const yanti = within(table).getByRole('row', { name: /Yanti Kusuma/ });
-    const status = within(yanti).getAllByRole('cell').at(-1)!;
-    expect(status).toHaveTextContent(/^ActiveRejoined$/i);
-    expect(within(table).getByRole('row', { name: /Rina/ })).not.toHaveTextContent(/Rejoined/i);
-  });
-
-  it('P18.9-T4 AC-3 reads Rejoined {date} under Removed on the membership she left', async () => {
-    const { calls } = stubFetch({
-      '/members': {
-        body: {
-          members: [member({
-            membershipId: 'mem-yanti-1', agentCode: 'PRU-80003', fullName: 'Yanti Kusuma', preferredName: null,
-            status: 'removed', removedAt: '2026-09-10T04:00:00.000Z', rejoinedOn: '2026-09-30',
-          })],
-          nextCursor: null,
-          counts: COUNTS,
-        },
-      },
-    });
-    renderInLayout(TenantLayout, <MembersPage />, { me: OWNER });
-    await userEvent.click(await screen.findByRole('button', { name: /^Removed/ }));
-    await vi.waitFor(() => expect(calls[calls.length - 1].url).toContain('status=removed'));
-    const row = within(await screen.findByRole('table')).getByRole('row', { name: /Yanti Kusuma/ });
-    const removed = within(row).getAllByRole('cell').at(-1)!;
-    expect(removed).toHaveTextContent('10 Sep 2026Rejoined 30 Sep 2026');
-    expect(within(removed).getByText('30 Sep 2026')).toHaveAttribute('dateTime', '2026-09-30');
-  });
-
-  it('P18.9-T4 AC-3 keeps an agent code on one line, and says No team for one who leads nobody', async () => {
-    stubFetch({ '/members': { body: { members: [YANTI], nextCursor: null, counts: COUNTS } } });
-    renderInLayout(TenantLayout, <MembersPage />, { me: OWNER });
-    const row = within(await screen.findByRole('table')).getByRole('row', { name: /Yanti Kusuma/ });
-    const code = within(row).getByText('PRU-80003');
-    for (const px of [375, 768, 1280]) expect(wears(code.closest('td')!, px).split(' ')).toContain('whitespace-nowrap');
-    expect(row).toHaveTextContent('No team');
-    expect(row).not.toHaveTextContent('Leads nobody');
-  });
-
-  it('P18.9-T4 AC-3 marks nothing for a read older than the mark', async () => {
-    const { rejoinedOn: _gone, ...older } = YANTI as Record<string, unknown>;
-    stubFetch({ '/members': { body: { members: [older], nextCursor: null, counts: COUNTS } } });
-    renderInLayout(TenantLayout, <MembersPage />, { me: OWNER });
-    const row = within(await screen.findByRole('table')).getByRole('row', { name: /Yanti Kusuma/ });
-    expect(row).not.toHaveTextContent(/Rejoined/i);
-  });
-});
-
-/**
- * **P19.12-T5 AC-4 — *Diundang* until the first sign-in** (ADR-0248 §4; the client's TI-1: *"Status langsung AKTIF walau
- * belum membuat kata sandi"*). Each row carries the server's `invitation`: an active member who never signed in reads
- * *Invited* (*Diundang*) when an invitation went and *Not invited* (*Belum diundang*) when none did, both grey; one who
- * has signed in, *Active*.
- */
-describe('P19.12-T5 AC-4 the directory says who has not signed in yet', () => {
-  afterEach(() => vi.unstubAllGlobals());
-
-  it('P19.12-T5 AC-4 Invited, Not invited and Active, each by the server’s invitation', async () => {
-    stubFetch({
-      '/members': {
-        body: {
-          members: [
-            member({ membershipId: 'a', fullName: 'Tes Impor Dua', preferredName: null, invitation: 'invited' }),
-            member({ membershipId: 'b', fullName: 'Tes Impor Tiga', preferredName: null, invitation: 'not_invited' }),
-            member({ membershipId: 'c', fullName: 'Rina Wijaya', invitation: 'signed_in' }),
-          ],
-          nextCursor: null,
-          counts: { directory: 3, pending: 0, removed: 0 },
-        },
-      },
-    });
-    renderInLayout(TenantLayout, <MembersPage />, { me: OWNER });
-    const table = await screen.findByRole('table');
-    const statusOf = (name: RegExp) => within(table).getByRole('row', { name }).querySelectorAll('td');
-    const last = (name: RegExp) => [...statusOf(name)].at(-1)!;
-    expect(last(/Tes Impor Dua/)).toHaveTextContent(/^Invited$/);
-    expect(within(last(/Tes Impor Dua/)).getByText('Invited').className).toContain('text-muted');
-    expect(last(/Tes Impor Tiga/)).toHaveTextContent(/^Not invited$/);
-    expect(last(/Rina/)).toHaveTextContent(/^Active$/);
-  });
-});
-
-describe('P18.9-T6 AC-4 below 1024px the members’ tabs are one row that scrolls sideways', () => {
-  afterEach(() => vi.unstubAllGlobals());
-
-  const NAMES = ['Directory (28)', 'Pending (2)', 'Removed (2)', 'Role change log', 'Groups'];
-  const COUNTS = { directory: 28, pending: 2, removed: 2 };
-  const empty = { body: { members: [], nextCursor: null, counts: COUNTS } };
-  async function open(px: number) {
-    atWidth(px);
-    stubFetch({
-      '/members/role-changes': { body: [] },
-      '/members/groups': { body: [] },
-      '/members/tree': { body: { nodes: [], leader: null, rootIds: [], selfId: null, counts: { ab: 0, aab: 0, agent: 0, total: 0 } } },
-      '/join/inbox': { body: [] },
-      '/leader-limit-requests': { body: [] },
-      '/members': empty,
-    });
-    renderInLayout(TenantLayout, <MembersPage />, { me: OWNER });
-    const first = await screen.findByRole('button', { name: 'Directory (28)' });
-    return { row: first.parentElement!, tabs: () => NAMES.map((name) => screen.getByRole('button', { name })) };
-  }
-  /** The row's widths, which jsdom never lays out: `content` wide inside `visible`, a tab every 100px, 90 wide. */
-  function layOut(row: HTMLElement, { content, visible }: { content: number; visible: number }) {
-    let left = 0;
-    Object.defineProperty(row, 'scrollWidth', { configurable: true, get: () => content });
-    Object.defineProperty(row, 'clientWidth', { configurable: true, get: () => visible });
-    Object.defineProperty(row, 'scrollLeft', {
-      configurable: true,
-      get: () => left,
-      set: (v: number) => { left = Math.max(0, Math.min(content - visible, v)); },
-    });
-    row.getBoundingClientRect = () => DOMRect.fromRect({ x: 0, y: 0, width: visible, height: 44 });
-    Array.from(row.children).forEach((tab, i) => {
-      (tab as HTMLElement).getBoundingClientRect = () => DOMRect.fromRect({ x: i * 100 - left, y: 0, width: 90, height: 44 });
-    });
-    return { get left() { return left; } };
-  }
-  /** The row as it would be printed at a width: each element's classes those that hold there, the row's own mark gone. */
-  function drawnAt(row: HTMLElement, px: number) {
-    const copy = row.cloneNode(true) as HTMLElement;
-    for (const el of [copy, ...Array.from(copy.querySelectorAll('*'))]) el.setAttribute('class', wears(el, px));
-    copy.removeAttribute('data-tab-row');
-    // P19.6-T1 AC-1: the brand tokens read as the colours they replaced, which they hold by default.
-    return asBeforeBranding(copy.outerHTML);
-  }
-  /** The row's markup on the build before P18.9-T6 (frontend `68d8d61`), rendered from this fixture on 2026-10-28. */
-  const BEFORE_T6 = '51f635406879ce0477d17fb36ddcb693d849a183cc6c9dcdfc52d907db15cc7d';
-
-  // *Changed 2026-11-05 (P19.2-T3 AC-2; UI-140):* below 1024px the tabs are pills on no rule, so no hairline is painted.
-  it.each([767, 768, 1023])('P18.9-T6 AC-4 at %ipx the row does not wrap: it scrolls inside its own box, with no rule under its pills', async (px) => {
-    const { row, tabs } = await open(px);
-    const worn = wears(row, px).split(' ');
-    expect(worn).toEqual(expect.arrayContaining(['flex-nowrap', 'overflow-x-auto', 'overflow-y-hidden', 'border-b-0']));
-    expect(worn).not.toContain('shadow-[inset_0_-1px_0_var(--color-hairline)]');
-    expect(row).toHaveAttribute('data-tab-row', 'below-desktop');
-    for (const tab of tabs()) {
-      // One line each, never squeezed, the ring inside the tab's edge.
-      expect(wears(tab, px).split(' ')).toEqual(expect.arrayContaining(['mb-0', 'shrink-0', 'whitespace-nowrap']));
-      expect(wears(tab, px)).toContain('focus-visible:[outline-offset:-2px]');
-    }
-  });
-
-  it.each([1024, 1280])('P18.9-T6 AC-4 at %ipx the row is drawn as it was, to the byte, and wraps', async (px) => {
-    const { row } = await open(px);
-    expect(createHash('sha256').update(drawnAt(row, px)).digest('hex')).toBe(BEFORE_T6);
-    expect(wears(row, px)).toBe('mb-6 flex flex-wrap gap-6 border-b border-hairline');
-    expect(row).not.toHaveAttribute('data-fade');
-  });
-
-  it('P18.9-T6 AC-4 keeps the five tabs this row’s own buttons — their names, order, the current one marked', async () => {
-    const { row, tabs } = await open(768);
-    expect(within(row).getAllByRole('button').map((b) => b.textContent)).toEqual(NAMES);
-    expect(tabs()[0]).toHaveAttribute('aria-current', 'page');
-    expect(screen.queryByRole('tablist')).toBeNull();
-    await userEvent.click(tabs()[3]);
-    expect(screen.getByRole('button', { name: 'Role change log' })).toHaveAttribute('aria-current', 'page');
-    expect(screen.getByRole('button', { name: 'Directory (28)' })).not.toHaveAttribute('aria-current');
-  });
-
-  it('P18.9-T6 AC-4 says nothing about a fade while the row fits — a tablet on the rail', async () => {
-    const { row } = await open(1023);
-    layOut(row, { content: 480, visible: 632 });
-    fireEvent.scroll(row);
-    expect(row).not.toHaveAttribute('data-fade');
-  });
-
-  it('P18.9-T6 AC-4 fades the side that has more, and follows the reader scrolling', async () => {
-    const { row } = await open(768);
-    const box = layOut(row, { content: 500, visible: 436 });
-    fireEvent.scroll(row);
-    expect(row).toHaveAttribute('data-fade', 'end');
-    row.scrollLeft = 30;
-    fireEvent.scroll(row);
-    expect(box.left).toBe(30);
-    expect(row).toHaveAttribute('data-fade', 'both');
-    row.scrollLeft = 64;
-    fireEvent.scroll(row);
-    expect(row).toHaveAttribute('data-fade', 'start');
-  });
-
-  it('P18.9-T6 AC-4 brings the chosen tab into view by scrolling the row alone — never the page', async () => {
-    const { row, tabs } = await open(767);
-    const box = layOut(row, { content: 520, visible: 335 });
-    const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
-    try {
-      await userEvent.click(tabs()[4]);
-      // *Groups*, 400–490, is brought clear of the 24px fade at the row's right edge, 335: 490 − (335 − 24).
-      expect(box.left).toBe(179);
-      expect(row).toHaveAttribute('data-fade', 'both');
-      expect(scrollTo).not.toHaveBeenCalled();
-    } finally {
-      scrollTo.mockRestore();
-    }
-  });
-});
-
-/**
- * **The directory below 1024px: the shared person rows** (P19.2-T3 AC-2; UI-140, `kpm-owner-mobile` screen 4; it was a
- * card per member below 768px, P18.9-T7 AC-1, and the table from 768px). On *Directory* and on *Removed*, which draw
- * the same roster: one 56px row per member — the avatar, the NAME in capitals, *kode · peran · ke <leader>* (*Owner* /
- * *Admin* in the leader's place), the last-activity pill, › — every row the member page's link; the search pill and
- * the role chips over it. From 1024px the table it was, to the byte (P18.9-T7's digests).
- */
-describe('P19.2-T3 AC-2 the directory as person rows on a phone and a tablet (UI-140)', () => {
-  afterEach(() => vi.unstubAllGlobals());
-
-  const COUNTS = { directory: 28, pending: 2, removed: 2 };
-  const WILSON = member({
-    membershipId: 'mem-wilson', agentCode: 'PRU-80000', role: 'ab', fullName: 'Wilson Tanoto', preferredName: null,
-    email: 'wilson@kpm0417.test', isKpmOwner: true, isLeader: true, directCount: 3, subtreeCount: 27,
-    isCoreLeader: true, canTagCoreLeader: true, lastActivityDays: 0, lastActivityOn: '2026-10-27', lastCoachedDays: null,
-  });
-  const MAYA = member({
-    membershipId: 'mem-maya', agentCode: 'PRU-80002', role: 'ab', fullName: 'Maya Halim', preferredName: null,
-    email: 'maya@kpm0417.test', isKpmAdmin: true, leaderName: 'Wilson Tanoto', canTagCoreLeader: true,
-    lastActivityDays: 3, lastActivityOn: '2026-10-24', lastCoachedDays: 12,
-  });
-  const YANTI = member({
-    membershipId: 'mem-yanti-2', agentCode: 'PRU-80003', fullName: 'Yanti Kusuma', preferredName: null, role: 'agent',
-    email: 'yanti@kpm0417.test', leaderName: 'Maya Halim', rejoinedOn: '2026-09-30', lastActivityDays: null, lastCoachedDays: null,
-  });
-  const RINA = member({
-    membershipId: 'mem-rina', agentCode: 'PRU-80004', fullName: 'Rina Wijaya', preferredName: null, role: 'agent',
-    leaderName: 'Maya Halim', lastActivityDays: 14, lastActivityOn: '2026-10-13', lastCoachedDays: null,
-  });
-  const LEFT = member({
-    membershipId: 'mem-yanti-1', agentCode: 'PRU-80003', fullName: 'Yanti Kusuma', preferredName: null, role: 'agent',
-    email: 'yanti@kpm0417.test', leaderName: 'Maya Halim', status: 'removed', removedAt: '2026-09-10T04:00:00.000Z',
-    rejoinedOn: '2026-09-30',
-  });
-  const TREE = { nodes: [], leader: null, rootIds: [], selfId: null, counts: { ab: 5, aab: 4, agent: 19, total: 28 } };
-  const page = (members: unknown[]) => ({ body: { members, nextCursor: null, counts: COUNTS } });
-  const routes = (removed = false) => ({
-    '/members/role-changes': { body: [] },
-    '/members/groups': { body: [] },
-    '/members/tree': { body: TREE },
-    '/join/inbox': { body: [] },
-    '/leader-limit-requests': { body: [] },
-    '/members': removed ? [page([WILSON, MAYA, YANTI, RINA]), page([LEFT])] : page([WILSON, MAYA, YANTI, RINA]),
-  });
-
-  /** The roster's markup on the build before P18.9-T7, each tab, rendered from this fixture's first three on 2026-10-28. */
-  const BEFORE_T7: Record<'directory' | 'removed', string> = {
-    // Re-recorded 2026-10-30 (UI V1): UI-008's card edge (`border-card-edge`) and UI-010's 44px/48px targets below 1024px.
-    directory: 'daa24fa71b9693598ea70e30984c277bbfbe13f253d15538122d7e42946c0086',
-    removed: '60bf1f0f29ca54a76de75db39811a32cb7f24c0e8a4351f8e765f49898586ef6',
-  };
-
-  it.each([1024, 1280] as const)('P19.2-T3 AC-2 at %ipx draws the directory’s and Removed’s tables as they were, to the byte', async (px) => {
-    atWidth(px);
-    stubFetch({ ...routes(true), '/members': [page([WILSON, MAYA, YANTI]), page([LEFT])] });
-    renderInLayout(TenantLayout, <MembersPage />, { me: OWNER });
-    const directory = await screen.findByRole('table', { name: 'Office roster' });
-    expect(digestAt(directory.parentElement!, px)).toBe(BEFORE_T7.directory);
-    // The laptop keeps its search field and its role select; the pill and the chips are a phone's and a tablet's.
-    expect(screen.getByLabelText('Search')).toHaveAttribute('placeholder', 'Name, email or agent code');
-    expect(screen.queryByRole('group', { name: 'Filter by role' })).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: /^Removed/ }));
-    const removed = await screen.findByRole('table', { name: 'Removed members' });
-    expect(digestAt(removed.parentElement!, px)).toBe(BEFORE_T7.removed);
-  });
-
-  const rowOf = (name: string) => screen.getByRole('link', { name }).closest('li')!;
-
-  it.each([375, 768, 1023])('P19.2-T3 AC-2 at %ipx draws a person row per member and no table: NAME, kode · peran · ke <leader>, the pill, ›', async (px) => {
-    atWidth(px);
-    stubFetch(routes());
-    renderInLayout(TenantLayout, <MembersPage />, { me: OWNER });
-    const list = await screen.findByRole('list', { name: 'Office roster' });
-    expect(screen.queryByRole('table', { name: 'Office roster' })).not.toBeInTheDocument();
-    expect(within(list).getAllByRole('listitem')).toHaveLength(4);
-
-    const wilson = rowOf('Wilson Tanoto');
-    // The whole row is the member page's link: the name, stretched over the row, in capitals, with the ›.
-    const link = within(wilson).getByRole('link', { name: 'Wilson Tanoto' });
-    expect(link).toHaveAttribute('href', '/people/members/mem-wilson');
-    expect(link.className).toContain('uppercase');
-    expect(link.className).toContain('after:inset-0');
-    expect(wilson.querySelector('[data-person-row]')!.className).toContain('min-h-14');
-    // *Owner* and *Admin* stand where the leader would; everybody else is *under* their leader's first name.
-    expect(wilson).toHaveTextContent('PRU-80000 · AB · Owner');
-    expect(rowOf('Maya Halim')).toHaveTextContent('PRU-80002 · AB · Admin');
-    expect(rowOf('Rina Wijaya')).toHaveTextContent('PRU-80004 · Agent · under Maya');
-    // What the table's other columns said is the member page's: no email, no unit, no status on the row.
-    expect(wilson).not.toHaveTextContent('wilson@kpm0417.test');
-    expect(wilson).not.toHaveTextContent('3 direct');
-  });
-
-  it('P19.2-T3 AC-2 the last-activity pill: orange within the office’s rolling week, grey older or never', async () => {
-    atWidth(375);
-    stubFetch(routes());
-    renderInLayout(TenantLayout, <MembersPage />, { me: OWNER });
-    await screen.findByRole('list', { name: 'Office roster' });
-    const pill = (name: string) => rowOf(name).querySelector('[data-recent]') as HTMLElement;
-    expect(pill('Wilson Tanoto')).toHaveTextContent('Last activity: Today');
-    expect(pill('Wilson Tanoto')).toHaveAttribute('data-recent', 'true');
-    expect(pill('Wilson Tanoto').className).toContain('text-primary-ink');
-    expect(pill('Maya Halim')).toHaveTextContent('3 days ago');
-    expect(pill('Maya Halim')).toHaveAttribute('data-recent', 'true');
-    expect(pill('Rina Wijaya')).toHaveTextContent('14 days ago');
-    expect(pill('Rina Wijaya')).toHaveAttribute('data-recent', 'false');
-    expect(pill('Rina Wijaya').className).toContain('bg-pill-grey');
-    expect(pill('Yanti Kusuma')).toHaveTextContent('Never');
-    expect(pill('Yanti Kusuma')).toHaveAttribute('data-recent', 'false');
-    expect(within(rowOf('Maya Halim')).getByText('3 days ago')).toHaveAttribute('dateTime', '2026-10-24');
-  });
-
-  it('P19.2-T3 AC-2 keeps what P18.9-T4 put on the row: Bergabung kembali beside the name of one who came back', async () => {
-    atWidth(375);
-    stubFetch(routes());
-    renderInLayout(TenantLayout, <MembersPage />, { me: OWNER });
-    await screen.findByRole('list', { name: 'Office roster' });
-    expect(within(rowOf('Yanti Kusuma')).getByText('Rejoined')).toBeInTheDocument();
-    expect(within(rowOf('Maya Halim')).queryByText('Rejoined')).not.toBeInTheDocument();
-  });
-
-  it('P19.2-T3 AC-2 draws Removed as rows too: the day she left, and Rejoined {date} in her leader’s place', async () => {
-    atWidth(768);
-    stubFetch(routes(true));
-    renderInLayout(TenantLayout, <MembersPage />, { me: OWNER });
-    await screen.findByRole('list', { name: 'Office roster' });
-    await userEvent.click(screen.getByRole('button', { name: /^Removed/ }));
-    const list = await screen.findByRole('list', { name: 'Removed members' });
-    const left = within(list).getAllByRole('listitem')[0];
-    expect(left).toHaveTextContent('PRU-80003 · Agent · Rejoined 30 Sep 2026');
-    expect(within(left).getByText('10 Sep 2026')).toHaveAttribute('dateTime', '2026-09-10T04:00:00.000Z');
-    expect(within(left).getByText('30 Sep 2026')).toHaveAttribute('dateTime', '2026-09-30');
-    // No activity on a membership that has ended, as on the Removed table.
-    expect(left.querySelector('[data-recent]')).toBeNull();
-    // *Semua* counts the removed; a role counts nobody here, the tree counting only those still in the office.
-    expect(screen.getByRole('button', { name: 'All 2' })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByRole('button', { name: 'AB' })).toBeInTheDocument();
-  });
-
-  it('P19.2-T3 AC-2 the search pill and the role chips: counted from the office tree, each sent to the server', async () => {
-    atWidth(768);
-    const { calls } = stubFetch(routes());
-    renderInLayout(TenantLayout, <MembersPage />, { me: OWNER });
-    await screen.findByRole('list', { name: 'Office roster' });
-    const search = screen.getByRole('searchbox', { name: 'Search name or agent code' });
-    expect(search).toHaveAttribute('placeholder', 'Search name or agent code');
-    const chips = screen.getByRole('group', { name: 'Filter by role' });
-    expect(await within(chips).findByRole('button', { name: 'AB 5' })).toBeInTheDocument();
-    expect(within(chips).getAllByRole('button').map((b) => b.textContent)).toEqual(['All28', 'AB5', 'AAB4', 'Agent19']);
-    expect(within(chips).getByRole('button', { name: 'All 28' })).toHaveAttribute('aria-pressed', 'true');
-    // No role select and no labelled search field below 1024px.
-    expect(screen.queryByRole('combobox', { name: 'Role' })).not.toBeInTheDocument();
-
-    await userEvent.click(within(chips).getByRole('button', { name: 'AAB 4' }));
-    await vi.waitFor(() => expect(calls.some((c) => /\/members\?(.*&)?role=aab/.test(c.url))).toBe(true));
-    expect(within(chips).getByRole('button', { name: 'AAB 4' })).toHaveAttribute('aria-pressed', 'true');
-
-    await userEvent.type(search, 'PRU-8');
-    await vi.waitFor(() => expect(calls.some((c) => c.url.includes('q=PRU-8'))).toBe(true));
-    // 44px targets below 1024px (UI-142): the pill, every chip.
-    for (const px of [375, 768]) {
-      expect(wears(search.closest('label')!, px).split(' ')).toContain('min-h-11');
-      for (const chip of within(chips).getAllByRole('button')) expect(wears(chip, px).split(' ')).toContain('min-h-11');
-    }
-  });
-
-  it('P19.2-T3 AC-2 the chips stand without numbers when the tree cannot be read — never a wrong one', async () => {
-    atWidth(375);
-    stubFetch({ ...routes(), '/members/tree': { status: 500, body: { code: 'INTERNAL', message: 'down' } } });
-    renderInLayout(TenantLayout, <MembersPage />, { me: OWNER });
-    await screen.findByRole('list', { name: 'Office roster' });
-    const chips = screen.getByRole('group', { name: 'Filter by role' });
-    expect(within(chips).getAllByRole('button').map((b) => b.textContent)).toEqual(['All28', 'AB', 'AAB', 'Agent']);
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-  });
-
-  it('P19.2-T3 AC-2 asks for the tree only below 1024px, where the chips are', async () => {
-    atWidth(1280);
-    const { calls } = stubFetch(routes());
-    renderInLayout(TenantLayout, <MembersPage />, { me: OWNER });
-    await screen.findByRole('table', { name: 'Office roster' });
-    expect(calls.some((c) => c.url.includes('/members/tree'))).toBe(false);
-  });
-
-  it.each([375, 768])('P19.2-T3 AC-2 at %ipx the row carries no Core Leader control: it is set on the member page’s Tags', async (px) => {
-    // The laptop's table keeps its *+ Core Leader* (the P18.5-T5 AC-3 tests above, at the desktop width), and the member
-    // page's *Tags* sets it at every size (`[membershipId]/page.spec.tsx`, *tags (P3-T9)*).
-    atWidth(px);
-    stubFetch(routes());
-    renderInLayout(TenantLayout, <MembersPage />, { me: OWNER });
-    await screen.findByRole('list', { name: 'Office roster' });
-    expect(screen.queryByRole('button', { name: /Core Leader/ })).not.toBeInTheDocument();
-  });
-
-  it('P19.2-T3 AC-2 the tabs below 1024px: 44px pills, the current one navy, the row with no rule under it', async () => {
-    atWidth(768);
-    stubFetch(routes());
-    renderInLayout(TenantLayout, <MembersPage />, { me: OWNER });
-    const current = await screen.findByRole('button', { name: 'Directory (28)' });
-    for (const px of [375, 768, 1023]) {
-      expect(wears(current, px).split(' ')).toEqual(expect.arrayContaining(['h-11', 'rounded-pill', 'bg-secondary', 'text-secondary-contrast', 'border-b-0']));
-      expect(wears(screen.getByRole('button', { name: 'Groups' }), px).split(' ')).toEqual(expect.arrayContaining(['h-11', 'rounded-pill']));
-      expect(wears(screen.getByRole('button', { name: 'Groups' }), px).split(' ')).not.toContain('bg-secondary');
-      expect(wears(current.parentElement!, px).split(' ')).toEqual(expect.arrayContaining(['border-b-0', 'flex-nowrap', 'overflow-x-auto']));
-    }
-    // From 1024px the underlined tabs as they were.
-    expect(wears(current, 1024).split(' ')).not.toContain('h-11');
-    expect(wears(current, 1024).split(' ')).toContain('border-primary');
-  });
-
-  it.each([375, 768])('P19.2-T3 AC-2 at %ipx never draws the roster’s table first: the width is asked before the roster answers', async (px) => {
-    atWidth(px);
-    stubFetch(routes());
-    let drew = false;
-    // The roster's table, that is: the frame before the width answers is a skeleton (`role="status"`).
-    const roster = (el: Element) => [el, ...el.querySelectorAll('table')]
-      .some((t) => t.matches('table') && t.closest('[role="status"]') === null);
-    const observer = new MutationObserver((records) => {
-      for (const record of records) {
-        for (const node of record.addedNodes) if (node instanceof Element && roster(node)) drew = true;
-      }
-    });
-    observer.observe(document.body, { childList: true, subtree: true });
-    renderInLayout(TenantLayout, <MembersPage />, { me: OWNER });
-    await screen.findByRole('list', { name: 'Office roster' });
-    observer.disconnect();
-    expect(drew).toBe(false);
+    expect(await screen.findByRole('tab', { name: /Waiting/ })).toHaveAttribute('aria-selected', 'true');
   });
 });

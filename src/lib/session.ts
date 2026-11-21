@@ -94,9 +94,9 @@ export interface Me {
   permissions: string[];
   /**
    * **The insurers their *Kelola data produk* ticks** (P19.15-T4 AC-2; ADR-0260 §5): non-empty only for an active KPM
-   * Owner or KPM Admin holding a live grant — the office menu's *Data produk*. Resolved on every request, so a removed
-   * grant leaves the menu at the next session read. The API always sends it; optional so a fixture that is about
-   * something else need not — absent reads as none.
+   * Owner or KPM Admin holding a live grant — *Data produk*, which the Pengaturan hub and *Products* open (ADR-0269).
+   * Resolved on every request. The API always sends it; optional so a fixture that is about something else need not —
+   * absent reads as none.
    */
   productDataCompanyIds?: string[];
   /**
@@ -107,12 +107,6 @@ export interface Me {
   activation: MeActivation | null;
   /** Whether the reader reaches at least one open activation: *New hires* in the nav (OD-122). */
   newHires: boolean;
-  /**
-   * **The reader's other login, linked with *Tambah akun*** (P19.2-T1 AC-8; UI-169 item 5; ADR-0199 §3): its address, its
-   * name and its views, which the avatar menu lists beside the reader's own — `null` with no link, and always in a
-   * support session. The API always sends it; optional so a fixture that is about something else need not.
-   */
-  linkedLogin?: LinkedLogin | null;
   /**
    * **What the session's KPM shows** (P19.6-T1 AC-12; ADR-0218 §8): its palette (`null`: AgencyBoost's colours), the
    * logo's size, which images and mascot poses it has, and a lesson's colours (ADR-0217 §5). `null` with no KPM. The API
@@ -155,23 +149,6 @@ export interface BrandingPalette {
   today: string;
   todayInk: string;
   sidebarText: string;
-}
-
-/** One view of a linked login, named as the reader's own are (`ViewKind`, ADR-0198 §1). */
-export interface LinkedView {
-  kind: 'self' | 'kpm_owner' | 'kpm_admin' | 'super_admin';
-  /** The office as it typed its name, on the office entry; `null` on the others. */
-  officeName: string | null;
-}
-
-export interface LinkedLogin {
-  /** For `DELETE /auth/links/:linkId` — *Hapus tautan*. */
-  linkId: string;
-  /** For `POST /auth/links/switch`. */
-  userId: string;
-  email: string;
-  fullName: string;
-  views: LinkedView[];
 }
 
 export interface MeActivation {

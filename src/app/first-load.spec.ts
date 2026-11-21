@@ -95,10 +95,12 @@ const HELD_BACK: readonly [page: string, modules: readonly string[]][] = [
   ]],
   ['app/(agent)/calendar/page.tsx', ['components/calendar/entry-dialog.tsx', 'components/calendar/detail-dialog.tsx']],
   ['app/leader-meetings/page.tsx', [
-    'components/leader-forum/meeting-screen.tsx', 'components/leader-forum/meeting-dialog.tsx',
+    'components/leader-forum/forum-screen.tsx', 'components/leader-forum/forum-dialog.tsx',
   ]],
+  // P19.22-T8: the dialog, the print and Advanced analytics' two sections load when they are opened.
   ['app/leader-meetings/[meetingId]/page.tsx', [
-    'components/leader-forum/meeting-dialog.tsx', 'components/leader-forum/share-dialog.tsx',
+    'components/leader-forum/forum-dialog.tsx', 'components/leader-forum/print-layout.tsx',
+    'components/advanced-analytics/mapa-section.tsx', 'components/advanced-analytics/subgroup-section.tsx',
   ]],
   // ADR-0185: the company's page and a template's checklist draw no editor; a section draws one, and no activation client.
   ['app/(admin)/admin/companies/[companyId]/page.tsx', [
@@ -123,19 +125,12 @@ const HELD_BACK: readonly [page: string, modules: readonly string[]][] = [
   ['app/(admin)/admin/companies/[companyId]/templates/[templateId]/page.tsx', [
     'components/kpm-template/publish-all-dialog.tsx', 'components/kpm-template/apply-to-offices-dialog.tsx',
   ]],
+  // P19.23-T2 (ADR-0277 §3): the KPM page; *Simpan sebagai template*'s dialog loads when it first opens.
   ['app/(admin)/admin/tenants/[kpmId]/page.tsx', [
-    'components/admin/platform-members.tsx', 'components/admin/kpm-billing-tab.tsx', 'components/save-as-template-dialog.tsx',
-    // *Data bulanan*'s read needs neither analytics client (`platform-reads.ts`).
-    'lib/kpm-analytics.ts', 'lib/kpm-compliance.ts',
-  ]],
-  ['app/(admin)/admin/tenants/[kpmId]/analytics/page.tsx', [
-    'components/analytics/compliance-screen.tsx', 'components/advanced-analytics/advanced-analytics-screen.tsx',
+    'components/admin/billing/calculator-dialog.tsx', 'components/save-as-template-dialog.tsx',
   ]],
   ['app/(tenant)/kpm/settings/products/page.tsx', ['components/product-proposal-editor.tsx', 'components/ui/modal.tsx']],
-  ['app/leader-meetings/[meetingId]/page.tsx', [
-    'components/leader-forum/agenda.tsx', 'components/leader-forum/action-items.tsx', 'components/leader-forum/v1-minutes.tsx',
-    'components/leader-forum/print-layout.tsx', 'lib/goals.ts', 'lib/use-inbox.ts',
-  ]],
+  ['app/leader-meetings/[meetingId]/page.tsx', ['lib/goals.ts', 'lib/use-inbox.ts']],
   ['app/profile/page.tsx', ['lib/calendar.ts', 'components/session-list.tsx', 'lib/tenant-config.ts']],
   // P19.11 (the bundle, 2026-11-10): *Aksi hari ini* draws the Calendar's rows, whose coaching link took `lib/coaching.ts`
   // and whose lead read took `lib/leads.ts` — `/home` at 204 kB. The lead and the entry open in what loads on the tap.

@@ -7,7 +7,7 @@ import { recruitmentPitchMessages } from '@/i18n/messages/recruitment-pitch';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { formatNumber } from '@/lib/format';
 import { HTML_ACCEPT, HTML_MIME_TYPE, isHtmlFile } from '@/lib/html-document';
-import { formatFileSize, PDF_MAX_BYTES } from '@/lib/recruitment-pitch';
+import { formatFileSize, PDF_MAX_BYTES, PITCH_ACCEPT, pitchFileType } from '@/lib/recruitment-pitch';
 import { signedUploadForm, type SignedUpload } from '@/lib/signed-upload';
 
 const PDF = 'application/pdf';
@@ -57,10 +57,16 @@ export function usePdfUpload<T>({
   sign,
   attach,
   onAttached,
+  formats = 'document',
 }: {
   sign: (body: { filename: string; mimeType: string; bytes: number }) => Promise<SignedUpload>;
   attach: (storageKey: string, file: File) => Promise<T>;
   onAttached: (result: T) => void;
+  /**
+   * `document` — a PDF or an HTML page, a product's document (`DOCUMENT_MIME_TYPES`); **`pitch` — any pitch format**
+   * (P19.21-T3 AC-6, ADR-0274): a PDF, a page, PowerPoint, Word, an image or a video (`PITCH_FILE_TYPES`).
+   */
+  formats?: 'document' | 'pitch';
 }): PdfUploadState {
   const t = useMessages(recruitmentPitchMessages);
   const figures = useFigureLanguage();
@@ -76,12 +82,13 @@ export function usePdfUpload<T>({
     // Some desktops report no type at all for a PDF or a page: its name decides then, and storage still checks
     // what actually arrived before anything is attached (ADR-0040).
     const html = isHtmlFile(file);
-    if (!html && !isPdfFile(file)) {
-      setError(refusal('ASSET_TYPE_NOT_ALLOWED', t.notPdf({ name: file.name })));
+    const pitchType = formats === 'pitch' ? pitchFileType(file) : null;
+    if (formats === 'pitch' ? pitchType === null : !html && !isPdfFile(file)) {
+      setError(refusal('ASSET_TYPE_NOT_ALLOWED', formats === 'pitch' ? t.notPitchFormat({ name: file.name }) : t.notPdf({ name: file.name })));
       return;
     }
     if (file.size > PDF_MAX_BYTES) {
-      setError(refusal('ASSET_TOO_LARGE', t.tooLarge({
+      setError(refusal('ASSET_TOO_LARGE', (formats === 'pitch' ? t.tooLargeAny : t.tooLarge)({
         name: file.name,
         size: formatFileSize(file.size, figures),
         max: formatNumber(PDF_MAX_BYTES / 1024 / 1024, {}, figures),
@@ -91,7 +98,9 @@ export function usePdfUpload<T>({
 
     setUploading(file.name);
     try {
-      const signed = await sign({ filename: file.name, mimeType: html ? HTML_MIME_TYPE : PDF, bytes: file.size });
+      const signed = await sign({
+        filename: file.name, mimeType: pitchType ?? (html ? HTML_MIME_TYPE : PDF), bytes: file.size,
+      });
       let sent: Response;
       try {
         sent = await fetch(signed.uploadUrl, { method: 'POST', body: signedUploadForm(signed, file) });
@@ -119,7 +128,7 @@ export function usePdfUpload<T>({
       <input
         ref={input}
         type="file"
-        accept={`${PDF},.pdf,${HTML_ACCEPT}`}
+        accept={formats === 'pitch' ? PITCH_ACCEPT : `${PDF},.pdf,${HTML_ACCEPT}`}
         hidden
         tabIndex={-1}
         data-pdf-picker=""

@@ -1,244 +1,148 @@
-import {
-  SETUP_STEPS, type KpmOverviewView, type LeaderboardRow, type NotLoggedList, type OverviewAgency, type OverviewSetup,
-  type SetupStep,
+import type {
+  ComplianceView, KpmOverviewView, OverviewPerformanceView, OverviewPerson, PerformanceRow,
 } from '@/lib/kpm-overview';
 
+/** Rp n M in sen. */
+const M = 1_000_000 * 100;
+
+/** A person on the Overview's lists (the mockup's example people). */
+export function person(membershipId: string, name: string, over: Partial<OverviewPerson> = {}): OverviewPerson {
+  return {
+    membershipId, name, role: 'agent', photoUrl: null, phone: '+6281200000001', groupId: 'grp-top',
+    abMembershipId: 'mem-agus', depth: 1, leaderIds: ['mem-agus'],
+    usage: { status: 'recent', days: 1, usedInWindow: true }, coaching: { status: 'recent', days: 3 }, ...over,
+  };
+}
+
 /**
- * The KPM Overview as the server answers it, for the page's spec and the axe pass (P18-T1). The figures are
- * the prototype's own (`KPM_Owner.html:936-1222`) — 187 members, 142 logged this month, the four ABs
- * furthest behind — so a test reads against the screen it was drawn from. `EMPTY` is 0701's: an Owner and
- * one agent, no file, no session, no lead. `NOBODY` is an office with no member at all.
+ * **The KPM Overview as the mockup draws it** (`kpm-overview-v2-tablet` frame 1): *Top Producers 2026* holds Agus's AB
+ * group — Agus, Dewi (AAB) over Wahyu, and Lukman — and *Tanpa group* Maya's. Dewi and Lukman never used the app; Wahyu
+ * last used it 18 days ago.
  */
-
-/** Rupiah in minor units: `rp(620)` is Rp 620.000.000. */
-export const rp = (millions: number) => Math.round(millions * 1_000_000 * 100);
-
-const leader = (membershipId: string, name: string, coached: number, teamSize: number, pct: number | null): LeaderboardRow => ({
-  membershipId, name, coached, teamSize, pct, leads: true,
-});
-
-/** An AB who leads nobody, as the server lists them — last, no team, no rate (P18.9-T3 AC-5, UI-017). */
-export const noTeam = (membershipId: string, name: string): LeaderboardRow => ({
-  membershipId, name, coached: 0, teamSize: 0, pct: null, leads: false,
-});
-
-/** Eight ABs with a downline, lowest first, as the server orders them (D-coverage). */
-export const LEADERBOARD: LeaderboardRow[] = [
-  leader('mem-hendra', 'Hendra Wibowo', 6, 31, 19),
-  leader('mem-budi', 'Budi Santoso', 5, 18, 28),
-  leader('mem-fajar', 'Fajar Nugroho', 9, 22, 41),
-  leader('mem-lina', 'Lina Chandra', 8, 15, 53),
-  leader('mem-rudi', 'Rudi Hartono', 7, 12, 58),
-  leader('mem-maya', 'Maya Kusuma', 9, 14, 64),
-  leader('mem-putri', 'Putri Wijaya', 8, 10, 80),
-  leader('mem-wilson', 'Wilson Tanoto', 23, 28, 82),
-];
-
-const agency = (
-  membershipId: string, name: string, achieved: number | null, target: number | null, pct: number | null,
-  aabUnits: OverviewAgency['aabUnits'] = [],
-): OverviewAgency => ({
-  membershipId, name, achievedMinor: achieved === null ? null : rp(achieved), targetMinor: target === null ? null : rp(target), pct, aabUnits,
-});
-
-const aab = (membershipId: string, name: string, achieved: number, target: number, pct: number) => ({
-  membershipId, name, achievedMinor: rp(achieved), targetMinor: rp(target), pct,
-});
-
-/** Six AB agencies, lowest attainment first; the last with no figure held sorts last (D-units). */
-export const AGENCIES: OverviewAgency[] = [
-  agency('mem-hendra', 'Hendra Wibowo', 620, 1500, 41, [
-    aab('mem-ika', 'Ika Wirawan', 210, 500, 42),
-    aab('mem-yoga', 'Yoga Pratama', 180, 400, 45),
-  ]),
-  agency('mem-budi', 'Budi Santoso', 540, 900, 60, [aab('mem-dewi', 'Dewi Anggraini', 290, 500, 58)]),
-  agency('mem-fajar', 'Fajar Nugroho', 700, 1100, 64, [
-    aab('mem-putri-l', 'Putri Lestari', 350, 500, 70),
-    aab('mem-agus', 'Agus Setiawan', 175, 300, 58),
-  ]),
-  agency('mem-lina', 'Lina Chandra', 480, 700, 69),
-  agency('mem-wilson', 'Wilson Tanoto', 1600, 1700, 94),
-  agency('mem-rudi', 'Rudi Hartono', null, 600, null),
+export const PEOPLE: OverviewPerson[] = [
+  person('mem-agus', 'Agus Prasetyo', { role: 'ab', depth: 0, leaderIds: [], coaching: { status: 'never', days: null } }),
+  person('mem-dewi', 'Dewi Lestari', {
+    role: 'aab', leaderIds: ['mem-agus'], usage: { status: 'never', days: null, usedInWindow: false },
+  }),
+  person('mem-wahyu', 'Wahyu Saputra', {
+    depth: 2, leaderIds: ['mem-agus', 'mem-dewi'], usage: { status: 'lapsed', days: 18, usedInWindow: true },
+    coaching: { status: 'lapsed', days: 27 },
+  }),
+  person('mem-lukman', 'Lukman Hakim', { usage: { status: 'never', days: null, usedInWindow: false }, phone: null }),
+  person('mem-maya', 'Maya Halim', {
+    role: 'ab', depth: 0, leaderIds: [], groupId: null, abMembershipId: 'mem-maya',
+  }),
 ];
 
 export function overviewView(over: Partial<KpmOverviewView> = {}): KpmOverviewView {
   return {
     office: { companyName: 'Prudential', code: '0417', branch: 'BSD City Branch' },
-    thresholds: { statusSplitPct: 70 },
-    today: '2026-10-09',
-    month: '2026-10',
-    year: '2026',
-    composition: {
-      total: 187,
-      newThisMonth: 6,
-      rungs: [
-        { code: 'AB', label: 'Agency Builder', count: 8 },
-        { code: 'AAB', label: 'Associate Agency Builder', count: 24 },
-        { code: 'AGENT', label: 'Agent', count: 155 },
+    today: '2026-11-20',
+    month: '2026-11',
+    usageWindow: { from: '2026-10-22', to: '2026-11-20' },
+    groups: [
+      { groupId: 'grp-top', name: 'Top Producers 2026', people: 4 },
+      { groupId: null, name: null, people: 1 },
+    ],
+    group: null,
+    usage: {
+      total: { used: 3, of: 5, pct: 60 },
+      leaders: { used: 2, of: 3, pct: 67 },
+      agents: { used: 1, of: 2, pct: 50 },
+      byGroup: [
+        {
+          groupId: 'grp-top', name: 'Top Producers 2026', total: { used: 2, of: 4, pct: 50 },
+          leaders: { used: 1, of: 2, pct: 50 }, agents: { used: 1, of: 2, pct: 50 },
+        },
+        {
+          groupId: null, name: null, total: { used: 1, of: 1, pct: 100 },
+          leaders: { used: 1, of: 1, pct: 100 }, agents: { used: 0, of: 0, pct: null },
+        },
       ],
     },
-    engagement: {
-      // P19.3-T2 (ADR-0200 §2, D1): *Aktif bulan ini* from the October upload, written on 7 October.
-      activeThisMonth: { count: 142, of: 187, pct: 76, month: '2026-10', asOf: '2026-10-07' },
-      loggedThisWeek: { logged: 118, notLogged: 69, pct: 63 },
-    },
-    coaching: {
-      coverage7d: { count: 112, of: 187, pct: 60 },
-      coverage30d: { count: 148, of: 187, pct: 79 },
-      leaderboard: LEADERBOARD,
-    },
-    recruitment: { expectedToClose: 13, pipelineNow: 80, closedLastMonth: 11, target: 15, targetMonth: '2026-10' },
+    people: PEOPLE,
     production: {
-      ytd: {
-        // Case 8: September missed and still open; October, this month, not uploaded yet.
-        achievedMinor: rp(8400), targetMinor: rp(12500), pct: 67, missingMonths: ['2026-09', '2026-10'], from: '2026-01',
-        membersWithoutGoal: 3,
-      },
-      projectionMinor: rp(11900),
-      projectionThrough: '2026-08',
-      agencies: AGENCIES,
+      currency: 'IDR',
+      months: [
+        { month: '2026-06', apeMinor: 174 * M }, { month: '2026-07', apeMinor: 271 * M }, { month: '2026-08', apeMinor: null },
+        { month: '2026-09', apeMinor: 462 * M }, { month: '2026-10', apeMinor: 597.3 * M }, { month: '2026-11', apeMinor: null },
+      ],
     },
-    // A running KPM: its setup is done (UI-149), and what waits for the Owner (UI-148, Appendix D).
     setup: null,
-    settings: { productsAwaiting: 2, checklistDraftVersion: 2 },
+    settings: { productsAwaiting: 0, checklistDraftVersion: null },
     ...over,
   };
 }
 
-/** 0701: Hadi, the Owner, leads Nadia; nothing logged, no session, no lead, no file, no goal. */
-export const EMPTY: KpmOverviewView = overviewView({
-  office: { companyName: 'Sejahtera Baru Life', code: '0701', branch: 'Cempaka Putih' },
-  thresholds: { statusSplitPct: 70 },
-  composition: {
-    total: 2,
-    newThisMonth: 0,
-    rungs: [
-      { code: 'AB', label: 'Agency Builder', count: 1 },
-      { code: 'AAB', label: 'Associate Agency Builder', count: 0 },
-      { code: 'AGENT', label: 'Agent', count: 1 },
+const actual = (over: Partial<PerformanceRow['actual']> = {}) => ({ apeMinor: 563.5 * M, apePct: 18, activeAgents: 2, rekrut: 1, ...over });
+
+/** *Performa vs target* for November (frame 8). */
+export function performanceView(over: Partial<OverviewPerformanceView> = {}): OverviewPerformanceView {
+  const agus: PerformanceRow = {
+    abMembershipId: 'mem-agus', name: 'Agus Prasetyo', agentCode: '87001', photoUrl: null, isGroupLeader: true, people: 4,
+    activeAgentTarget: 6, rekrutTarget: 3, source: 'set', fromMonth: '2026-11', rekrutYtdTarget: 3,
+    apeTargetMinor: 3100 * M, goalsSet: 3, actual: actual(),
+  };
+  const maya: PerformanceRow = {
+    abMembershipId: 'mem-maya', name: 'Maya Halim', agentCode: '87002', photoUrl: null, isGroupLeader: false, people: 1,
+    activeAgentTarget: null, rekrutTarget: null, source: 'none', fromMonth: null, rekrutYtdTarget: 0, apeTargetMinor: 0,
+    goalsSet: 0, actual: actual({ apeMinor: 0, apePct: null, activeAgents: 0, rekrut: 0 }),
+  };
+  const totals = (row: PerformanceRow) => ({
+    activeAgentTarget: row.activeAgentTarget ?? 0, rekrutTarget: row.rekrutTarget ?? 0, rekrutYtdTarget: row.rekrutYtdTarget,
+    apeTargetMinor: row.apeTargetMinor, unset: row.source === 'none' ? 1 : 0, abGroups: 1, people: row.people, actual: row.actual,
+  });
+  return {
+    month: '2026-11', currentMonth: '2026-11', earliestMonth: '2024-01', latestMonth: '2027-11', max: 999, currency: 'IDR',
+    held: true, group: null,
+    total: { ...totals(agus), unset: 1, abGroups: 2, people: 5, unplacedPeople: 0, actual: actual({ rekrut: 2 }) } as OverviewPerformanceView['total'],
+    groups: [
+      { group: { groupId: 'grp-top', name: 'Top Producers 2026' }, leaders: [{ membershipId: 'mem-agus', name: 'Agus Prasetyo' }], totals: totals(agus), abGroups: [agus] },
+      { group: null, leaders: [], totals: totals(maya), abGroups: [maya] },
     ],
-  },
-  engagement: {
-    activeThisMonth: { count: null, of: 2, pct: null, month: '2026-10', asOf: null },
-    loggedThisWeek: { logged: 0, notLogged: 2, pct: 0 },
-  },
-  coaching: {
-    coverage7d: { count: 0, of: 2, pct: 0 },
-    coverage30d: { count: 0, of: 2, pct: 0 },
-    leaderboard: [leader('mem-hadi', 'Hadi Gunawan', 0, 1, 0)],
-  },
-  recruitment: { expectedToClose: 0, pipelineNow: 0, closedLastMonth: 0, target: null, targetMonth: '2026-10' },
-  production: {
-    ytd: {
-      achievedMinor: null,
-      targetMinor: null,
-      pct: null,
-      // UI-150: only the months still open are named — October, this month.
-      missingMonths: ['2026-10'],
-      from: '2026-01',
-      membersWithoutGoal: 2,
-    },
-    projectionMinor: null,
-    projectionThrough: null,
-    agencies: [agency('mem-hadi', 'Hadi Gunawan', null, null, null)],
-  },
-  setup: null,
-  settings: { productsAwaiting: 0, checklistDraftVersion: null },
-});
+    canWrite: true,
+    ...over,
+  };
+}
 
-/** An office with no member at all: every rate is over nobody. */
-export const NOBODY: KpmOverviewView = overviewView({
-  composition: {
-    total: 0,
-    newThisMonth: 0,
-    rungs: [
-      { code: 'AB', label: 'Agency Builder', count: 0 },
-      { code: 'AAB', label: 'Associate Agency Builder', count: 0 },
-      { code: 'AGENT', label: 'Agent', count: 0 },
+/** Section 4's seven cards, lowest first (frame 6). */
+export function complianceView(over: Partial<ComplianceView> = {}): ComplianceView {
+  return {
+    today: '2026-11-20',
+    thresholds: { lowBelowPct: 34, highFromPct: 67 },
+    group: null,
+    cards: [
+      { category: 'activity', count: 1, of: 5, pct: 20 },
+      { category: 'leads', count: 2, of: 5, pct: 40 },
+      { category: 'events', count: 2, of: 4, pct: 50 },
+      { category: 'activation', count: 1, of: 2, pct: 50 },
+      { category: 'training', count: 3, of: 5, pct: 60 },
+      { category: 'goals', count: 4, of: 5, pct: 80 },
+      { category: 'campaigns', count: 0, of: 0, pct: null },
     ],
-  },
-  engagement: {
-    activeThisMonth: { count: null, of: 0, pct: null, month: '2026-10', asOf: null },
-    loggedThisWeek: { logged: 0, notLogged: 0, pct: null },
-  },
-  coaching: { coverage7d: { count: 0, of: 0, pct: null }, coverage30d: { count: 0, of: 0, pct: null }, leaderboard: [] },
-  recruitment: { expectedToClose: 0, pipelineNow: 0, closedLastMonth: 0, target: null, targetMonth: '2026-10' },
-  production: {
-    ytd: { achievedMinor: null, targetMinor: null, pct: null, missingMonths: [], from: '2026-01', membersWithoutGoal: 0 },
-    projectionMinor: null,
-    projectionThrough: null,
-    agencies: [],
-  },
-  setup: null,
-  settings: { productsAwaiting: 0, checklistDraftVersion: null },
-});
+    catalog: {
+      training: [{
+        code: 'SALES', label: 'Sales',
+        skills: [{ code: 'PROSPECTING', label: 'Prospecting', modules: [{ code: 'PROSPECT_LIST', title: 'Building Your Prospect List' }, { code: 'CLOSING', title: 'Closing' }] }],
+      }],
+      events: [],
+      campaigns: [],
+    },
+    selected: null,
+    can: { override: true },
+    ...over,
+  };
+}
 
-/** The setup card with `done` steps ticked, in the card's order. */
-export const setupWith = (done: readonly SetupStep[], over: Partial<OverviewSetup> = {}): OverviewSetup => ({
-  done: done.length,
-  steps: SETUP_STEPS.map((key) => ({ key, done: done.includes(key) })),
-  branchFilled: false,
-  members: 1,
-  openMonth: { month: '2026-11', closesOn: '2026-12-07' },
-  target: null,
-  ...over,
-});
-
-/**
- * **KaiZen Family on 3 November** (Overview case 1; UI-149, UI-150): made on 1 November, its Owner Victor Oscar alone,
- * nothing uploaded, no target, nothing waiting — *Siapkan KPM 0 dari 7*, four tiles, no ranking list, and Nov 2026 the
- * only month named.
- */
-export const KAIZEN: KpmOverviewView = overviewView({
-  office: { companyName: 'Prudential', code: '00001', branch: 'KaiZen Family' },
-  today: '2026-11-03',
-  month: '2026-11',
-  composition: { total: 1, newThisMonth: 1, rungs: [{ code: 'AB', label: 'Agency Builder', count: 1 }] },
-  engagement: {
-    activeThisMonth: { count: null, of: 1, pct: null, month: '2026-11', asOf: null },
-    loggedThisWeek: { logged: 0, notLogged: 1, pct: 0 },
-  },
-  coaching: {
-    coverage7d: { count: 0, of: 1, pct: 0 },
-    coverage30d: { count: 0, of: 1, pct: 0 },
-    leaderboard: [noTeam('mem-owner', 'Victor Oscar')],
-  },
-  recruitment: { expectedToClose: 0, pipelineNow: 0, closedLastMonth: null, target: null, targetMonth: '2026-11' },
-  production: {
-    ytd: {
-      achievedMinor: null, targetMinor: null, pct: null, missingMonths: ['2026-11'], from: '2026-11', membersWithoutGoal: 1,
+/** The Training card opened on its first module: Dewi and Lukman not done. */
+export function trainingSelected(): ComplianceView {
+  return complianceView({
+    selected: {
+      category: 'training', item: 'PROSPECT_LIST', done: 3, of: 5,
+      cells: PEOPLE.map((p) => {
+        const done = !['mem-dewi', 'mem-lukman'].includes(p.membershipId);
+        return { membershipId: p.membershipId, status: done ? 'done' : 'not_started', done, on: null };
+      }),
     },
-    projectionMinor: null,
-    projectionThrough: null,
-    agencies: [agency('mem-owner', 'Victor Oscar', null, null, null)],
-  },
-  setup: setupWith([]),
-  settings: { productsAwaiting: 0, checklistDraftVersion: null },
-});
-
-/** The not-logged list, longest silent first and never-logged first, as the server orders it. */
-export const NOT_LOGGED: NotLoggedList = {
-  total: 69,
-  members: [
-    {
-      membershipId: 'mem-sinta', name: 'Sinta Halim', rung: { code: 'AGENT', label: 'Agent' }, lastLoggedOn: null, daysSince: null,
-      leader: { membershipId: 'mem-sari', name: 'Sari Puspita' }, phone: '+6281211110001',
-    },
-    {
-      membershipId: 'mem-dedy', name: 'Dedy Pranata', rung: { code: 'AGENT', label: 'Agent' }, lastLoggedOn: '2026-09-27', daysSince: 12,
-      leader: { membershipId: 'mem-agus', name: 'Agus Prasetyo' }, phone: null,
-    },
-    {
-      membershipId: 'mem-owner', name: 'Wilson Tanoto', rung: { code: 'AB', label: 'Agency Builder' }, lastLoggedOn: '2026-09-23', daysSince: 16,
-      leader: null, phone: '+6281211110003',
-    },
-    {
-      membershipId: 'mem-rina', name: 'Rina Agustina', rung: { code: 'AAB', label: 'Associate Agency Builder' }, lastLoggedOn: '2026-09-30', daysSince: 9,
-      leader: { membershipId: 'mem-agus', name: 'Agus Prasetyo' }, phone: '+6281211110004',
-    },
-    {
-      membershipId: 'mem-tono', name: 'Tono Wibisono', rung: { code: 'AGENT', label: 'Agent' }, lastLoggedOn: '2026-10-01', daysSince: 8,
-      leader: { membershipId: 'mem-sari', name: 'Sari Puspita' }, phone: '+6281211110005',
-    },
-  ],
-};
+  });
+}

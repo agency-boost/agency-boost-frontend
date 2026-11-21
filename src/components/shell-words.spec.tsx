@@ -62,10 +62,12 @@ describe('P18.10-T1 the shells in Indonesian', () => {
     for (const item of ['Activity', 'Leads', 'Unit Dashboard', 'Strategic Leader Forum', 'Goal Setting', 'User Management']) {
       expect(within(nav).getByRole('link', { name: item })).toBeInTheDocument();
     }
-    // UI-004's groups are Indonesian words (D-20), as the *Lainnya* sheet writes them; *KPM* is kept.
-    for (const heading of ['Saya', 'Aktivitas', 'Tim saya', 'Program', 'KPM']) {
+    // UI-004's groups are Indonesian words (D-20), as the *Lainnya* sheet writes them; *KPM* and *People* are kept, and
+    // a core leader's extras carry the *Owner* tag in their name (P19.17-T3 AC-5).
+    for (const heading of ['Saya', 'Aktivitas', 'Tim saya', 'Program', 'KPM Owner', 'People Owner']) {
       expect(within(nav).getByRole('button', { name: heading })).toBeInTheDocument();
     }
+    expect(within(nav).getByRole('link', { name: 'Pengaturan Owner' })).toHaveAttribute('href', '/kpm/settings');
     // *Advanced analytics* is a working item since P19.5-T4, kept English; *Survei* is the reader's word (C-R2).
     expect(within(nav).queryByText('Segera hadir')).not.toBeInTheDocument();
     expect(within(nav).getByRole('link', { name: 'Advanced analytics' })).toBeInTheDocument();
@@ -99,13 +101,12 @@ describe('P18.10-T1 the shells in Indonesian', () => {
     finish();
   });
 
-  it('P19.2-T1 AC-5 offers an Owner the views in Indonesian, the role kept: Akun saya · KPM Owner', async () => {
+  it('P19.17-T3 AC-1 offers an Owner the same account menu in Indonesian: Akun Anda · Keluar, no Akun saya, no Tambah akun', async () => {
     renderInIndonesian(<AgentShell title="Coaching Session">body</AgentShell>, { me: member({ isKpmOwner: true }) });
     await userEvent.click(chip());
 
-    const views = within(within(panel()).getByRole('list', { name: 'Tampilan' }));
-    expect(views.getAllByRole('button').map((b) => b.textContent)).toEqual(['Akun saya', 'KPM Owner']);
-    expect(within(panel()).queryByText(/Buka tampilan/)).not.toBeInTheDocument();
+    expect(Array.from(panel().querySelectorAll('a[href], button')).map((b) => b.textContent)).toEqual(['Akun Anda', 'Keluar']);
+    expect(within(panel()).queryByText(/Akun saya|Tambah akun|Panduan|Buka tampilan/)).not.toBeInTheDocument();
   });
 
   it('AC-1 says somebody in no office has none yet, with the office called KPM (§B.9)', () => {
@@ -123,7 +124,7 @@ describe('P18.10-T1 the shells in Indonesian', () => {
     expect(screen.getByRole('link', { name: 'Your 90-day activation — selesai' })).toBeInTheDocument();
   });
 
-  it('P19.2-T1 AC-6 the office view in Indonesian: its role and its items English, Pengaturan translated, no console tag', async () => {
+  it('P19.17-T3 AC-4 the Owner in Indonesian: the role and the items English, Pengaturan translated and pinned, the tag kept', async () => {
     route.path = '/people/members';
     renderInIndonesian(<Shell family="tenant" title="All Members">body</Shell>, {
       me: member({ isKpmOwner: true }, { permissions: ['member:read_profile'] }),
@@ -131,9 +132,9 @@ describe('P18.10-T1 the shells in Indonesian', () => {
 
     expect(screen.queryByText('KPM OWNER')).not.toBeInTheDocument();
     openEveryGroup(screen.getByRole('navigation', { name: 'Utama' }));
-    expect(screen.getByRole('link', { name: 'Manage KPM admins' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Pengaturan' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'People' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'KPM admins' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Pengaturan Owner' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'People Owner' })).toBeInTheDocument();
     // *Advanced analytics* opens the survey tabs since P19.5-T4: no item is *Segera hadir*.
     expect(screen.getByRole('link', { name: 'Advanced analytics' })).toBeInTheDocument();
     expect(screen.queryByText('Segera hadir')).not.toBeInTheDocument();
@@ -149,17 +150,17 @@ describe('P18.10-T1 the shells in Indonesian', () => {
     expect(screen.getByText('SUPERADMIN')).toBeInTheDocument();
     expect(chip()).toHaveTextContent('Superadmin');
     openEveryGroup(screen.getByRole('navigation', { name: 'Utama' }));
-    expect(screen.getByRole('link', { name: messagesIn(shellMessages, 'id').admin.manageCompanies })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: messagesIn(shellMessages, 'id').admin.approvals })).toBeInTheDocument();
   });
 
-  it('P19.2-T1 AC-9 the Super Admin’s bar in Indonesian: Overview · KPMs · Perusahaan · Analytics · Lainnya', () => {
+  it('P19.23-T1 AC-1 the Super Admin’s bar in Indonesian: Dashboard · KPM · Anggota · Langganan · Lainnya', () => {
     atWidth(375);
     route.path = '/admin';
     renderInIndonesian(<Shell family="admin" title="Overview">body</Shell>, {
       me: { ...SUPER_ADMIN, permissions: ['kpm:list_all'] },
     });
     const bar = document.querySelector('[data-tab-bar]')!;
-    expect(Array.from(bar.querySelectorAll('[data-tab]')).map((t) => t.textContent)).toEqual(['Overview', 'KPMs', 'Perusahaan', 'Analytics', 'Lainnya']);
+    expect(Array.from(bar.querySelectorAll('[data-tab]')).map((t) => t.textContent)).toEqual(['Dashboard', 'KPM', 'Anggota', 'Langganan', 'Lainnya']);
   });
 });
 
@@ -175,13 +176,15 @@ describe('P18.10-T1 AC-7 every heading and item of the three shells is a kept te
    * **The one item that is the reader's word, not a kept term**: *Surveys* (ID *Survei*), the glossary's *Surveys (the
    * tile)* — translated, as the reminder mockup writes it in an Indonesian sheet (P19.5-T4, C-R2).
    */
-  // P19.6-T1 (ADR-0218 §1): and *KPM branding* (ID *Tampilan KPM*), §B7's own Indonesian for the page.
-  const TRANSLATED_ITEMS: ReadonlySet<string> = new Set([messagesIn(shellMessages, 'en').surveys, messagesIn(shellMessages, 'en').branding]);
+  // P19.17-T3 (ADR-0269 §4): and *Settings* (ID *Pengaturan*), the one item the Pengaturan group became.
+  const TRANSLATED_ITEMS: ReadonlySet<string> = new Set([messagesIn(shellMessages, 'en').surveys, messagesIn(shellMessages, 'en').settings]);
 
   /** The nav's own words: each group's heading, and each item's name before any pill or count. */
   function navWords(): string[] {
     const nav = openEveryGroup(screen.getByRole('navigation', { name: 'Main' }));
-    const headings = within(nav).queryAllByRole('button').map((b) => b.textContent ?? '');
+    // A heading's words before the extras' tag (P19.17-T3 AC-5), which is a kept role and not a nav word.
+    const headings = within(nav).queryAllByRole('button')
+      .map((b) => b.querySelector('span.truncate')?.textContent ?? b.textContent ?? '');
     // The item's words, beside its glyph or alone (a group's rows carry none since P19.13-T2, UI-196).
     const items = [...nav.querySelectorAll('li > a')].map((a) => a.querySelector('span.truncate')?.textContent ?? '');
     return [...headings, ...items].map((w) => w.trim()).filter((w) => w !== '');
@@ -192,13 +195,26 @@ describe('P18.10-T1 AC-7 every heading and item of the three shells is a kept te
     ['the field shell', () => <AgentShell title="x">x</AgentShell>, member({ directCount: 2, isCoreLeader: true }, {
       activation: { open: true, complete: false }, newHires: true,
     })],
-    // P19.2-T1: the office view and the Super Admin's menu, in the one shell.
-    ['the office view', () => <Shell family="tenant" title="x">x</Shell>, member({ isKpmOwner: true }, { permissions: ['member:read_profile'] })],
-    ['the Super Admin’s menu', () => <Shell family="admin" title="x">x</Shell>, { ...SUPER_ADMIN, permissions: ['kpm:list_all'] }],
+    // P19.17-T3: the Owner's one menu, and the Super Admin's, in the one shell.
+    ['the Owner’s menu', () => <Shell family="tenant" title="x">x</Shell>, member({ isKpmOwner: true }, { permissions: ['member:read_profile'] })],
   ];
 
+  /*
+   * *Changed 2026-11-20 (P19.23-T1 AC-1; ADR-0277 §1):* **the console's menu is translated**, the mockups' Indonesian —
+   * *Dashboard · KPM · Anggota · Perusahaan · Persetujuan · Langganan* and *Platform* — so its words are the catalogue's
+   * (`shellMessages.admin`), not kept terms.
+   */
+  it('P19.23-T1 AC-1 the Super Admin’s menu: the catalogue’s words, every one', () => {
+    route.path = '/admin';
+    renderWithSession(<Shell family="admin" title="x">x</Shell>, { me: { ...SUPER_ADMIN, permissions: ['kpm:list_all'] } });
+    const catalogue = new Set(Object.values(messagesIn(shellMessages, 'en').admin) as string[]);
+    const words = [...screen.getByRole('navigation', { name: 'Main' }).querySelectorAll('a')]
+      .map((a) => (a.querySelector('span.truncate')?.textContent ?? '').trim()).filter(Boolean);
+    expect(words).toEqual(['Dashboard', 'KPM', 'Members', 'Companies', 'Approvals', 'Subscriptions', 'Platform']);
+    for (const word of words) expect(catalogue).toContain(word);
+  });
+
   it.each(SHELLS)('%s', (_, shell, me) => {
-    // The office view is an office page's (ADR-0198 §5); the field's and the Super Admin's draw on any.
     route.path = me.membership?.isKpmOwner ? '/people/members' : me.membership ? '/coaching' : '/admin';
     renderWithSession(shell(), { me });
     const words = navWords();
@@ -211,9 +227,9 @@ describe('P18.10-T1 AC-7 every heading and item of the three shells is a kept te
   it('UI-004 the field shell’s group headings, and only those, are the catalogue’s words, translated', () => {
     renderInIndonesian(<AgentShell title="x">x</AgentShell>, { me: member({ directCount: 2, isCoreLeader: true }) });
     const nav = screen.getByRole('navigation', { name: 'Utama' });
-    const headings = Array.from(nav.querySelectorAll('[aria-controls^="nav-group"]'))
+    const headings = Array.from(nav.querySelectorAll('[aria-controls^="nav-group"] span.truncate'))
       .map((b) => (b.textContent ?? '').trim()).filter(Boolean);
-    expect(headings).toEqual(['Saya', 'Aktivitas', 'Tim saya', 'Program', 'KPM']);
+    expect(headings).toEqual(['Saya', 'Aktivitas', 'Tim saya', 'Program', 'KPM', 'People']);
   });
 });
 

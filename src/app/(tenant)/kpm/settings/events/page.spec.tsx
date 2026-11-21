@@ -52,6 +52,13 @@ function render(
   return stub;
 }
 
+/** A row's ⋯ (P19.25-T3 AC-1: the row's actions behind it), then one of its items. */
+async function choose(item: string, row = 0) {
+  const menus = await screen.findAllByRole('button', { name: /^Actions for / });
+  await userEvent.click(menus[row]);
+  await userEvent.click(await screen.findByRole('menuitem', { name: item }));
+}
+
 /**
  * The events an office runs (P5-T6).
  *
@@ -62,26 +69,29 @@ function render(
 describe('the office’s Events screen', () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it('shows an event with its phase worked out, not a stored label', async () => {
+  it('P19.25-T3 AC-1 shows an event’s status from its phase: Akan datang until it ends — a running one too — then Sudah lewat', async () => {
     render([type()], [
       event(),
       event({ id: 'e2', code: 'NOW', title: 'Happening', phase: 'running' }),
       event({ id: 'e3', code: 'LAST', title: 'Last month', phase: 'past' }),
     ]);
 
-    expect(await screen.findByText('Upcoming')).toBeInTheDocument();
-    expect(screen.getByText('Happening now')).toBeInTheDocument();
-    expect(screen.getByText('Past')).toBeInTheDocument();
+    await screen.findByText('Last month');
+    const status = (title: string) => screen.getByText(title).closest('li')!.querySelector('[data-status]')!;
+    expect(status('Kickoff 2026')).toHaveTextContent('Coming up');
+    expect(status('Happening')).toHaveTextContent('Coming up');
+    expect(status('Last month')).toHaveTextContent('Past');
+    expect(screen.queryByText('Happening now')).not.toBeInTheDocument();
   });
 
-  it('reads the audience as two plain choices, not a slash-separated string', async () => {
-    // The prototype's value is *"Prudential Event | All agents"* — one string nothing can filter.
-    render([type()], [event({
-      audience: { issuer: 'company', scope: 'leaders', inviteeMembershipIds: [] },
-    })]);
+  it('P19.25-T3 AC-1 writes the row’s line as the brief does: date · place · who it is for', async () => {
+    render([type()], [
+      event({ audience: { issuer: 'company', scope: 'leaders', inviteeMembershipIds: [] } }),
+      event({ id: 'e2', code: 'ALL', title: 'Town Hall', location: 'Kantor KPM' }),
+    ]);
 
-    expect(await screen.findByText(/Your company/)).toBeInTheDocument();
-    expect(screen.getByText(/anybody with somebody under them/)).toBeInTheDocument();
+    expect(await screen.findByText('1 Oct 2026 · Jakarta · leaders')).toBeInTheDocument();
+    expect(screen.getByText('1 Oct 2026 · Kantor KPM · all members')).toBeInTheDocument();
   });
 
   it('shows the day in the office’s timezone, as the server worked it out', async () => {
@@ -96,7 +106,7 @@ describe('the office’s Events screen', () => {
   it('archives an event type and says what that affects', async () => {
     const stub = render([type({ events: 3 })], []);
     await screen.findByRole('checkbox', { name: 'Show archived' });
-    await userEvent.click(screen.getByRole('link', { name: 'Event types' }));
+    await userEvent.click(screen.getByRole('link', { name: 'Kinds of event' }));
     await screen.findByText('Training');
 
     const button = await screen.findByRole('button', { name: 'Archive' });
@@ -108,7 +118,7 @@ describe('the office’s Events screen', () => {
 
   it('edits an event without ever sending its code', async () => {
     const stub = render([type()], [event()]);
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+    await choose('Edit');
 
     // The code is the identity and is shown locked: an event that already happened points at it.
     expect(screen.getByLabelText('Code')).toBeDisabled();
@@ -133,7 +143,7 @@ describe('the office’s Events screen', () => {
 
   it('will not let an event be added with no end time', async () => {
     render([type()], []);
-    await userEvent.click(await screen.findByRole('button', { name: 'Add an event' }));
+    await userEvent.click(await screen.findByRole('button', { name: '+ Add event' }));
 
     await userEvent.type(screen.getByLabelText('Title'), 'Kickoff');
     await userEvent.type(screen.getByLabelText('Starts'), '2026-10-01T09:00');
@@ -147,7 +157,7 @@ describe('the office’s Events screen', () => {
 
   it('fills the code in from the title', async () => {
     render([type()], []);
-    await userEvent.click(await screen.findByRole('button', { name: 'Add an event' }));
+    await userEvent.click(await screen.findByRole('button', { name: '+ Add event' }));
 
     await userEvent.type(screen.getByLabelText('Title'), 'Kickoff 2026');
     expect(screen.getByLabelText('Code')).toHaveValue('KICKOFF_2026');
@@ -157,20 +167,21 @@ describe('the office’s Events screen', () => {
     render([type({ status: 'archived' })], []);
 
     expect(await screen.findByText(/no active event types/)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Add an event' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '+ Add event' })).toBeDisabled();
   });
 
   it('shows a reader who cannot write the events without a control to change them', async () => {
     render([type()], [event()], READER);
     await screen.findByText('Kickoff 2026');
 
-    expect(screen.queryByRole('button', { name: 'Add an event' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Archive' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '+ Add event' })).not.toBeInTheDocument();
+    // An upcoming event offers a reader without the write nothing behind ⋯, so there is no ⋯.
+    expect(screen.queryByRole('button', { name: /^Actions for / })).not.toBeInTheDocument();
   });
 
   it('creates an event, sending the dates as instants and the audience as two fields', async () => {
     const stub = render([type()], []);
-    await userEvent.click(await screen.findByRole('button', { name: 'Add an event' }));
+    await userEvent.click(await screen.findByRole('button', { name: '+ Add event' }));
 
     await userEvent.type(screen.getByLabelText('Title'), 'Kickoff 2026');
     await userEvent.type(screen.getByLabelText('Starts'), '2026-10-01T09:00');
@@ -192,7 +203,7 @@ describe('the office’s Events screen', () => {
 
   it('P18.2-T5 AC-10 Chosen people and Chosen leaders are live, no longer coming soon (D-picker)', async () => {
     render([type()], []);
-    await userEvent.click(await screen.findByRole('button', { name: 'Add an event' }));
+    await userEvent.click(await screen.findByRole('button', { name: '+ Add event' }));
 
     const scope = screen.getByLabelText('Who is invited');
     expect(within(scope).getByRole('option', { name: 'Chosen people' })).toBeEnabled();
@@ -202,7 +213,7 @@ describe('the office’s Events screen', () => {
 
   it('P18.2-T5 AC-10 Chosen people: a searchable checklist of the active members, and Save waits for one', async () => {
     const stub = render([type()], []);
-    await userEvent.click(await screen.findByRole('button', { name: 'Add an event' }));
+    await userEvent.click(await screen.findByRole('button', { name: '+ Add event' }));
     await userEvent.type(screen.getByLabelText('Title'), 'Bootcamp');
     await userEvent.type(screen.getByLabelText('Starts'), '2026-10-01T09:00');
     await userEvent.type(screen.getByLabelText('Ends'), '2026-10-01T13:00');
@@ -232,7 +243,7 @@ describe('the office’s Events screen', () => {
 
   it('P18.2-T5 AC-10 Chosen leaders lists only members who lead somebody (the graph, not the title)', async () => {
     render([type()], []);
-    await userEvent.click(await screen.findByRole('button', { name: 'Add an event' }));
+    await userEvent.click(await screen.findByRole('button', { name: '+ Add event' }));
     await userEvent.selectOptions(screen.getByLabelText('Who is invited'), 'select_leaders');
     await screen.findByRole('searchbox', { name: 'Search people' });
     // Dewi is an AAB who leads nobody: she is not offered.
@@ -244,9 +255,9 @@ describe('the office’s Events screen', () => {
     const stub = render([type()], [event({
       audience: { issuer: 'kpm', scope: 'select_agents', inviteeMembershipIds: ['mem-rina', 'mem-gone'] },
     })]);
-    expect(await screen.findByText(/Chosen people · 2 invited/)).toBeInTheDocument();
+    expect(await screen.findByText(/· 2 chosen people$/)).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    await choose('Edit');
     await screen.findByRole('searchbox', { name: 'Search people' });
     expect(screen.getByRole('checkbox', { name: /Rina Wijaya/ })).toBeChecked();
     // Somebody who has left has no name on the read: one row, ticked, saying so.
@@ -268,7 +279,7 @@ describe('the office’s Events screen', () => {
     const stub = render([type()], [event({
       audience: { issuer: 'kpm', scope: 'select_leaders', inviteeMembershipIds: ['mem-agus', 'mem-dewi'] },
     })]);
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+    await choose('Edit');
     await screen.findByRole('searchbox', { name: 'Search people' });
     const dewi = screen.getByRole('checkbox', { name: /Dewi Lestari/ });
     expect(dewi).toBeChecked();
@@ -294,7 +305,7 @@ describe('the office’s Events screen', () => {
       '/kpm/settings/publish-state': { body: { publishedVersion: 1, workingVersion: 1, hasUnpublishedChanges: false, publishedAt: null } },
     });
     renderWithSession(<EventsSettingsPage />, { me: OWNER });
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+    await choose('Edit');
     await userEvent.selectOptions(screen.getByLabelText('Who is invited'), 'leaders');
     await userEvent.click(screen.getByRole('button', { name: 'Save the event' }));
     const line = await screen.findByText('People have answered this event, so its audience stays as it is.');
@@ -316,7 +327,7 @@ describe('the office’s Events screen', () => {
       '/kpm/settings/publish-state': { body: { publishedVersion: 1, workingVersion: 1, hasUnpublishedChanges: false, publishedAt: null } },
     });
     renderWithSession(<EventsSettingsPage />, { me: OWNER });
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+    await choose('Edit');
     await userEvent.clear(screen.getByLabelText('Ends'));
     await userEvent.type(screen.getByLabelText('Ends'), '2027-01-01T13:00');
     await userEvent.click(screen.getByRole('button', { name: 'Save the event' }));
@@ -327,7 +338,7 @@ describe('the office’s Events screen', () => {
 
   it('P18.2-T5 AC-10 a scope with no list sends none', async () => {
     const stub = render([type()], [event({ audience: { issuer: 'kpm', scope: 'select_agents', inviteeMembershipIds: ['mem-rina'] } })]);
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+    await choose('Edit');
     await userEvent.selectOptions(screen.getByLabelText('Who is invited'), 'all_agents');
     expect(screen.queryByRole('searchbox', { name: 'Search people' })).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Save the event' }));
@@ -336,20 +347,32 @@ describe('the office’s Events screen', () => {
     expect(sent.audience).toEqual({ issuer: 'kpm', scope: 'all_agents' });
   });
 
-  it('P18.2-T5 AC-7 View feedback on a past row only, opening the roll call and the Feedback Summary', async () => {
+  it('P19.25-T3 AC-1 Lihat masukan › on a past row only, opening Advanced analytics › Event on that event’s feedback', async () => {
+    const steward = makeMe({ membership: member, permissions: [...OWNER.permissions, 'advanced_analytics:read'] });
     render([type()], [
       event(),
       event({ id: 'e2', code: 'NOW', title: 'Happening', phase: 'running' }),
+      event({ id: 'e3', code: 'LAST', title: 'Last month', phase: 'past', startsOn: '2026-09-23' }),
+    ], steward);
+    await screen.findByText('Last month');
+    const links = screen.getAllByRole('link', { name: /^See feedback and attendance for / });
+    expect(links).toHaveLength(1);
+    expect(links[0]).toHaveTextContent('See feedback ›');
+    expect(links[0]).toHaveAttribute('href', '/kpm/advanced-analytics/events?view=feedback&event=e3&month=2026-09');
+    expect(links[0].closest('li')).toHaveTextContent('Last month');
+  });
+
+  it('P19.25-T3 AC-1 ⋯ › Record attendance on a past row opens the roll call and the named summary; not on an upcoming one', async () => {
+    render([type()], [
+      event(),
       event({ id: 'e3', code: 'LAST', title: 'Last month', phase: 'past' }),
     ]);
     await screen.findByText('Last month');
-    const buttons = screen.getAllByRole('button', { name: 'View feedback' });
-    expect(buttons).toHaveLength(1);
-    expect(buttons[0].closest('li')).toHaveTextContent('Last month');
-
-    await userEvent.click(buttons[0]);
+    await userEvent.click(screen.getByRole('button', { name: 'Actions for Kickoff 2026' }));
+    expect(screen.queryByRole('menuitem', { name: 'Record attendance' })).not.toBeInTheDocument();
+    await userEvent.keyboard('{Escape}');
+    await choose('Record attendance', 1);
     const box = await screen.findByRole('dialog', { name: 'Last month' });
-    // Two tabs since P18.5-T13 (ADR-0161 §6): the roll call open, the summary a tab away.
     expect(await within(box).findByRole('heading', { name: 'Roll call' })).toBeInTheDocument();
     await userEvent.click(within(box).getByRole('tab', { name: 'Feedback summary' }));
     expect(await within(box).findByRole('heading', { name: 'Last month — Feedback Summary' })).toBeInTheDocument();
@@ -357,12 +380,15 @@ describe('the office’s Events screen', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
-  it('P18.2-T5 AC-7 View feedback is a read: a reader who cannot write still has it', async () => {
+  it('P19.25-T3 AC-1 a reader who cannot write still has ⋯ › Record attendance on a past row, and no Edit', async () => {
     const reader = makeMe({ membership: member, permissions: ['tenant_config:read', 'event_settings:read', 'event_feedback:read'] });
     render([type()], [event({ id: 'e3', code: 'LAST', title: 'Last month', phase: 'past' })], reader);
     await screen.findByText('Last month');
-    expect(screen.getByRole('button', { name: 'View feedback' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Actions for Last month' }));
+    expect(screen.getByRole('menuitem', { name: 'Record attendance' })).toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: 'Edit' })).not.toBeInTheDocument();
+    // Without Advanced analytics there is no Lihat masukan ›.
+    expect(screen.queryByRole('link', { name: /^See feedback/ })).not.toBeInTheDocument();
   });
 
   it('P18.2-T5 AC-2 the list is the office’s administration’s: without event_settings:read nothing is read', async () => {
@@ -374,7 +400,7 @@ describe('the office’s Events screen', () => {
   it('adds and edits an event type, never resending its code', async () => {
     const stub = render([type()], []);
     await screen.findByRole('checkbox', { name: 'Show archived' });
-    await userEvent.click(screen.getByRole('link', { name: 'Event types' }));
+    await userEvent.click(screen.getByRole('link', { name: 'Kinds of event' }));
 
     await userEvent.click(await screen.findByRole('button', { name: 'Add an event type' }));
     await userEvent.type(screen.getByLabelText('Name'), 'Town hall');
@@ -401,7 +427,7 @@ describe('the office’s Events screen', () => {
     const stub = render([type()], [event({ status: 'archived' })]);
     await userEvent.click(await screen.findByRole('checkbox', { name: 'Show archived' }));
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Restore' }));
+    await choose('Restore');
 
     await waitFor(() => expect(stub.calls.some((c) => c.url.includes('/e1/restore'))).toBe(true));
   });
@@ -428,7 +454,7 @@ describe('the office’s Events screen', () => {
     });
     renderWithSession(<EventsSettingsPage />, { me: OWNER });
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Add an event' }));
+    await userEvent.click(await screen.findByRole('button', { name: '+ Add event' }));
     await userEvent.type(screen.getByLabelText('Title'), 'Kickoff');
     await userEvent.type(screen.getByLabelText('Starts'), '2026-10-01T09:00');
     await userEvent.type(screen.getByLabelText('Ends'), '2026-10-01T13:00');
@@ -438,7 +464,7 @@ describe('the office’s Events screen', () => {
     expect(screen.getByLabelText('Title')).toHaveValue('Kickoff');
   });
 
-  it('P18.5-T13 AC-2 the events are one bordered list, a row each, the row’s actions one group with View feedback first', async () => {
+  it('P19.25-T3 AC-1 one bordered list, a row each, ⋯ on each; + Add event at its foot; the one note under it', async () => {
     render([type()], [
       event(),
       event({ id: 'e3', code: 'LAST', title: 'Last month', phase: 'past' }),
@@ -449,24 +475,21 @@ describe('the office’s Events screen', () => {
     expect(lists).toHaveLength(1);
     expect(lists[0]).toHaveClass('divide-y', 'divide-hairline');
     expect(within(lists[0]).getAllByRole('listitem')).toHaveLength(2);
-    const past = screen.getByText('Last month').closest('li')!;
-    const actions = within(past).getAllByRole('button').map((b) => b.textContent);
-    expect(actions).toEqual(['View feedback', 'Edit', 'Archive']);
-    expect(within(past).getByRole('button', { name: 'View feedback' }).parentElement)
-      .toBe(within(past).getByRole('button', { name: 'Edit' }).parentElement);
+    await choose('Archive', 1);
+    const add = screen.getByRole('button', { name: '+ Add event' });
+    expect(lists[0].compareDocumentPosition(add) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByText('Feedback and attendance: Advanced analytics › Event')).toBeInTheDocument();
   });
 
-  it('P18.5-T13 AC-2 the toolbar: Show archived and the tab’s add button together, above the list, on both tabs', async () => {
+  it('P18.5-T13 AC-2 the toolbar keeps Show archived on both tabs; Event types keeps its add button there', async () => {
     render([type()], [event()]);
-    const toggle = await screen.findByRole('checkbox', { name: 'Show archived' });
-    const add = screen.getByRole('button', { name: 'Add an event' });
-    expect(toggle.closest('div')).toBe(add.parentElement);
-    expect(add.compareDocumentPosition(screen.getByRole('list')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    await screen.findByRole('checkbox', { name: 'Show archived' });
+    expect(screen.queryByRole('button', { name: 'Add an event' })).not.toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole('link', { name: 'Event types' }));
+    await userEvent.click(screen.getByRole('link', { name: 'Kinds of event' }));
     const addType = await screen.findByRole('button', { name: 'Add an event type' });
     expect(screen.getByRole('checkbox', { name: 'Show archived' }).closest('div')).toBe(addType.parentElement);
-    expect(screen.queryByRole('button', { name: 'Add an event' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '+ Add event' })).not.toBeInTheDocument();
   });
 
   it('hides archived rows until asked', async () => {
@@ -493,7 +516,7 @@ describe('the office’s Events screen in a browser outside Jakarta', () => {
   it('P18.2-T5 AC-9 a typed time is read as Jakarta’s: 09:00 there is 02:00 UTC', async () => {
     expect(new Date('2026-10-01T09:00').toISOString()).toBe('2026-10-01T16:00:00.000Z');
     const stub = render([type()], []);
-    await userEvent.click(await screen.findByRole('button', { name: 'Add an event' }));
+    await userEvent.click(await screen.findByRole('button', { name: '+ Add event' }));
     await userEvent.type(screen.getByLabelText('Title'), 'Kickoff');
     await userEvent.type(screen.getByLabelText('Starts'), '2026-10-01T09:00');
     await userEvent.type(screen.getByLabelText('Ends'), '2026-10-01T13:00');
@@ -506,7 +529,7 @@ describe('the office’s Events screen in a browser outside Jakarta', () => {
 
   it('P18.2-T5 AC-9 a stored instant is shown as Jakarta’s wall clock, and saved back unchanged when untouched', async () => {
     const stub = render([type()], [event({ startsAt: '2026-10-01T02:00:00.000Z', endsAt: '2026-10-01T06:00:00.000Z' })]);
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+    await choose('Edit');
     expect(screen.getByLabelText('Starts')).toHaveValue('2026-10-01T09:00');
     expect(screen.getByLabelText('Ends')).toHaveValue('2026-10-01T13:00');
     await userEvent.clear(screen.getByLabelText('Ends'));
@@ -567,9 +590,9 @@ describe('P19.2-T3 AC-4 the events’s targets (UI-142)', () => {
     render();
     const frame = document.body.firstElementChild!;
     frame.setAttribute('data-surface', 'v1');
-    await screen.findByText('Upcoming');
+    await screen.findByText('Coming up');
     expect(smallTargets(frame, px)).toEqual([]);
-    await userEvent.click(screen.getByRole('link', { name: 'Event types' }));
+    await userEvent.click(screen.getByRole('link', { name: 'Kinds of event' }));
     await userEvent.click(await screen.findByRole('checkbox', { name: 'Show archived' }));
     expect(smallTargets(frame, px)).toEqual([]);
   });

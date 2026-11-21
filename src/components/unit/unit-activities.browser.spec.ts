@@ -19,9 +19,9 @@ import { ActivityTable } from './unit-activities';
  */
 
 /** Sixteen people, so the person columns overflow at 375, 800 and 1024px alike; long names, as the screenshot's. */
-function crowd(view: UnitActivitiesView): ActivitiesPerson[] {
+function crowd(view: UnitActivitiesView, length = 16): ActivitiesPerson[] {
   const [first, second] = view.people;
-  return Array.from({ length: 16 }, (_, i) => ({
+  return Array.from({ length }, (_, i) => ({
     ...(i % 2 === 0 ? first : second),
     membershipId: `mem-${i}`,
     name: `Wahyuningsih Permatasari ${i}`,
@@ -42,8 +42,10 @@ const table = (scope: UnitScope, span: 'week' | 'month', phone: boolean) => {
       : type)),
   }));
   const view = activities({ people: crowd(base), sections, period: { ...base.period, span } });
-  // The page's 16px gutter, as the screen sits in it.
-  return renderToStaticMarkup(createElement('div', { className: 'p-4' }, createElement(ActivityTable, { view, scope, phone })));
+  // The page's 16px gutter, as the screen sits in it. Every category opened (P19.18-T2 AC-1: they start closed, and a
+  // static page has no hand to tap), so a type's row is there to measure.
+  const opened = view.sections.map((s) => s.code);
+  return renderToStaticMarkup(createElement('div', { className: 'p-4' }, createElement(ActivityTable, { view, scope, phone, opened })));
 };
 
 /** For each row type, scrolled by `by` (or to the end): the two sticky cells' edges and what is under the boundary. */
@@ -171,11 +173,32 @@ describe.skipIf(!CHROME)('P19.11-T6 AC-2 the activity table’s sticky columns, 
     }
   }, 30_000);
 
+  it('P19.18-T2 AC-2 the whole office — forty columns at a laptop’s 1280px: the people slide, Aktivitas and Total stay put', async () => {
+    const base = activities();
+    const view = activities({ people: crowd(base, 40) });
+    await browser.show(await pageFor(renderToStaticMarkup(
+      createElement('div', { className: 'p-4' }, createElement(ActivityTable, {
+        view, scope: 'group', phone: false, opened: view.sections.map((s) => s.code),
+      })),
+    )), 1280);
+    for (const by of [0, 400, 'end'] as const) {
+      const m = await browser.tab.evaluate<Measured>(MEASURE(by));
+      expect(m.overflows).toBe(true);
+      for (const row of Object.values(m.rows)) {
+        expect([row.activityLeft, row.activityWidth, row.totalWidth, row.personWidth]).toEqual([0, 200, 64, 56]);
+        expect(row.totalLeft - row.activityRight).toBe(0);
+        expect([row.leftOfBoundaryIsActivity, row.rightOfBoundaryIsTotal]).toEqual([true, true]);
+      }
+    }
+  }, 30_000);
+
   it('P19.11-T6 AC-2 with few people the table fills the card, the people sharing the room, and the sticky columns keep their widths', async () => {
     // Two people: 132 + 44 + 2 × 56 = 288px, inside the phone's 343px card.
     const view = activities({ people: activities().people.slice(0, 2) });
     await browser.show(await pageFor(renderToStaticMarkup(
-      createElement('div', { className: 'p-4' }, createElement(ActivityTable, { view, scope: 'unit', phone: true })),
+      createElement('div', { className: 'p-4' }, createElement(ActivityTable, {
+        view, scope: 'unit', phone: true, opened: view.sections.map((s) => s.code),
+      })),
     )), 375);
     const m = await browser.tab.evaluate<Measured>(MEASURE(0));
     expect(m.overflows).toBe(false);

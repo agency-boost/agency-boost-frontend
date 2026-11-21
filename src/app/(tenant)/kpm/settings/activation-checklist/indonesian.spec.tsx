@@ -1,7 +1,7 @@
 import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { atWidth, makeMe, renderInIndonesian, stubFetch, wears } from '@test/harness';
+import { makeMe, renderInIndonesian, stubFetch } from '@test/harness';
 import ActivationChecklistPage from './page';
 
 vi.mock('next/navigation', () => ({
@@ -61,106 +61,89 @@ function render(checklist: unknown = { published: PUBLISHED, draft: null, window
   renderInIndonesian(<ActivationChecklistPage />, { me: OWNER });
 }
 
-const NEW_VERSIONS = 'Versi baru hanya berlaku untuk new hire.';
-const LINKED = 'Item yang tertaut selesai secara otomatis.';
 /** Our own English words, which ID mode no longer writes (*Item* is §B.4's, spelled alike; its plural is not). */
-const ENGLISH = /\b(Save draft|Publish version|Hires starting|Nothing is published|The window is|days|Rename|Remove|Edit|Add aspect|Add item|Completes from|No link|Feature|items)\b/;
+const ENGLISH = /\b(Save draft|Publish to agents|New hires are given|Nothing is published|Draft\.|days|Rename|Remove|Add aspect|Add item|Completes|No link|Feature|items)\b/;
+
+const rowOf = (text: string) => screen.getByText(text).closest('li') as HTMLElement;
+async function openItem(label: string) {
+  await userEvent.click(within(rowOf(label)).getByRole('button', { name: new RegExp(`^${label}`) }));
+  return screen.findByRole('dialog', { name: label });
+}
 
 /**
  * **P18.10-T4, Settings › Activation checklist in ID mode**: the screen's words the approved glossary's Indonesian, its
  * title, the features an item completes from and *new hire* English (§A), and the office's aspects and items as typed.
- * The two grey sentences keep their verdict per size in Indonesian (P18.9-T4 AC-6). In English: `page.spec.tsx`.
+ * Drawn since P19.21-T3 AC-3 as the client's 19 November card (mockup f16). In English: `page.spec.tsx`.
  */
 describe('P18.10-T4 Settings › Activation checklist in Indonesian', () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it('AC-2 says the version card and the controls in Indonesian, the title kept English', async () => {
-    atWidth(1280);
-    render({ published: PUBLISHED, draft: DRAFT, windowDays: 90 });
-    await screen.findByText('Pelajari dasar-dasar asuransi');
-
+  it('AC-2 P19.21-T3 AC-3 says the note, the cards and their lines in Indonesian, as the mockup words them', async () => {
+    render();
+    expect(await screen.findByText(
+      'New hire mendapat versi 1 · 90 hari. Perubahan menjadi versi baru, hanya untuk new hire berikutnya.',
+    )).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Activation checklist', level: 1 })).toBeInTheDocument();
-    expect(screen.getByText('Yang dijalani setiap new hire dalam 90 hari pertamanya.')).toBeInTheDocument();
-    const version = screen.getByText(/^New hire yang mulai sekarang mendapat/);
-    expect(version).toHaveTextContent(
-      'New hire yang mulai sekarang mendapat versi 1. Anda punya draf yang belum diterbitkan, yang akan menjadi versi 2.',
-    );
-    expect(within(version).getByText('versi 1').tagName).toBe('STRONG');
-    expect(screen.getByText(/^Jangka waktunya/)).toHaveTextContent('Jangka waktunya 90 hari.');
-    expect(screen.getByRole('button', { name: 'Simpan draf' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Terbitkan versi 2' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '+ Tambah aspek' })).toBeInTheDocument();
-    expect(screen.getAllByRole('button', { name: '+ Tambah item' })).toHaveLength(2);
-    expect(screen.getAllByRole('button', { name: 'Ganti nama' })).toHaveLength(2);
-    expect(screen.getByText('2 item')).toBeInTheDocument();
-    expect(screen.getAllByLabelText('Diselesaikan dari')).toHaveLength(3);
+    expect(screen.getByRole('region', { name: '1. Pengenalan' })).toHaveTextContent('2 item');
+    expect(within(rowOf('Pelajari dasar-dasar asuransi')).getByText('Selesai otomatis dari: manual')).toBeInTheDocument();
+    expect(within(rowOf('Atur goal: target APE & aktivitas')).getByText('Selesai otomatis dari: Goal Setting')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Tambah item ke 1. Pengenalan' })).toHaveTextContent('Tambah item');
+    expect(screen.getByRole('button', { name: 'Tambah aspek' })).toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(ENGLISH);
   });
 
-  it('AC-2 keeps the features an item completes from English, and the office’s module as typed', async () => {
-    render();
+  it('AC-2 P19.21-T3 AC-3 says the draft bar in Indonesian: Draf, the version agents are on, Simpan draf, Terbitkan ke agent', async () => {
+    render({ published: PUBLISHED, draft: DRAFT, windowDays: 90 });
     await screen.findByText('Pelajari dasar-dasar asuransi');
-    const select = screen.getAllByLabelText('Diselesaikan dari')[0];
-
-    expect(within(select).getByRole('option', { name: 'Tanpa tautan (manual)' })).toBeInTheDocument();
-    expect(within(select).getByRole('group', { name: 'Fitur' })).toBeInTheDocument();
-    expect(within(select).getByRole('group', { name: 'Modul Training' })).toBeInTheDocument();
-    for (const name of ['Goal Settings', 'Leads Management', 'Activity Management', 'Menyusun daftar prospek']) {
-      expect(within(select).getByRole('option', { name })).toBeInTheDocument();
-    }
+    const bar = document.querySelector<HTMLElement>('[data-draft-bar]')!;
+    expect(bar).toHaveTextContent('Draf. Agent masih memakai versi 1.');
+    expect(within(bar).getByRole('button', { name: 'Simpan draf' })).toBeDisabled();
+    expect(within(bar).getByRole('button', { name: 'Terbitkan ke agent' })).toBeEnabled();
+    expect(document.body.textContent).not.toMatch(ENGLISH);
   });
 
-  it('AC-1 says the other versions’ sentences in Indonesian', async () => {
-    render({ published: null, draft: { ...DRAFT, version: 1 }, windowDays: 90 });
-    expect(await screen.findByText(/^Belum ada yang diterbitkan, jadi belum ada new hire yang mendapat checklist\./))
-      .toHaveTextContent(/Draf Anda akan menjadi versi 1\.ⓘ/);
+  it('AC-1 says the other versions’ sentences in Indonesian, with the window', async () => {
+    render({ published: null, draft: DRAFT, windowDays: 90 });
+    expect(await screen.findByText(/^Belum ada yang diterbitkan, jadi belum ada new hire yang mendapat checklist\. Draf Anda akan menjadi/))
+      .toBeInTheDocument();
+    expect(screen.getByText(/Jangka waktunya/)).toHaveTextContent('Jangka waktunya 90 hari.');
+    expect(document.querySelector('[data-draft-bar]')).toHaveTextContent('Draf. Belum ada yang diterbitkan.');
   });
 
   it('AC-1 says the standard checklist’s sentence in Indonesian, its name in bold', async () => {
-    render({ published: null, draft: { ...DRAFT, id: undefined, version: 1 }, windowDays: 90 });
-    const line = await screen.findByText(/^Belum ada yang diterbitkan/);
-    expect(line).toHaveTextContent(/Yang Anda lihat adalah checklist standar, siap diubah — simpan, lalu terbitkan versi 1\.ⓘ/);
-    expect(within(line).getByText('checklist standar').tagName).toBe('STRONG');
+    render({ published: null, draft: { ...DRAFT, id: '', version: 1 }, windowDays: 90 });
+    expect((await screen.findByText('checklist standar')).tagName).toBe('STRONG');
   });
 
   it('AC-1 adds an aspect and edits an item with the fields in Indonesian', async () => {
-    atWidth(1280);
-    render();
-    await userEvent.click(await screen.findByRole('button', { name: '+ Tambah aspek' }));
-    expect(screen.getByRole('heading', { name: 'Tambah aspek' })).toBeInTheDocument();
-    expect(screen.getByLabelText('Aspek')).toBeInTheDocument();
-    expect(screen.getByLabelText('Kode')).toHaveAccessibleDescription('Diisi dari nama. Permanen setelah disimpan.');
-    expect(screen.getByLabelText('Item pertamanya')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Tambah aspek ini' })).toBeDisabled();
-    await userEvent.click(screen.getByRole('button', { name: 'Batal' }));
-
-    const row = screen.getByText('Pahami pola pikir karier agency').closest('li')!;
-    expect(within(row).getByRole('button', { name: 'Hapus' })).toBeEnabled();
-    await userEvent.click(within(row).getByRole('button', { name: 'Ubah' }));
-    expect(screen.getByLabelText('Item')).toHaveValue('Pahami pola pikir karier agency');
-    // The read-only code's label is the shared `CodeField`'s; its reason is this screen's.
-    expect(screen.getByDisplayValue('POLA_PIKIR')).toHaveAccessibleDescription(
-      'Progres setiap new hire pada item ini merujuk ke kode ini.',
-    );
-  });
-
-  it('AC-1 says why Remove is held, and what it takes, in Indonesian', async () => {
-    atWidth(1280);
     render();
     await screen.findByText('Pelajari dasar-dasar asuransi');
-    const aspect = screen.getByRole('heading', { name: '1. Pengenalan' }).closest('[data-row]')!;
-    expect(within(aspect as HTMLElement).getAllByRole('button', { name: 'Hapus' })[0])
-      .toHaveAttribute('title', 'Menghapus 1. Pengenalan beserta 2 itemnya dari versi berikutnya.');
-    const lone = screen.getByText('Atur goal: target APE & aktivitas').closest('li')!;
-    expect(within(lone).getByRole('button', { name: 'Hapus' }))
-      .toHaveAttribute('title', 'Aspek memerlukan setidaknya satu item — hapus aspeknya saja.');
+    await userEvent.click(screen.getByRole('button', { name: 'Tambah aspek' }));
+    expect(screen.getByRole('heading', { name: 'Tambah aspek' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Aspek')).toBeInTheDocument();
+    expect(screen.getByLabelText('Item pertamanya')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Batal' }));
+
+    const sheet = await openItem('Pelajari dasar-dasar asuransi');
+    expect(within(sheet).getByDisplayValue('DASAR_ASURANSI')).toHaveAccessibleDescription(
+      'Progres setiap new hire pada item ini merujuk ke kode ini.',
+    );
+    const select = within(sheet).getByLabelText('Diselesaikan dari');
+    expect([...select.querySelectorAll('optgroup')].map((g) => g.label)).toEqual(['Fitur', 'Modul Training']);
+    expect(within(select).getByRole('option', { name: 'Tanpa tautan (manual)' })).toBeInTheDocument();
+    expect(within(select).getByRole('option', { name: 'Menyusun daftar prospek' })).toBeInTheDocument();
   });
 
-  it('AC-4 shows the office’s aspects and items as typed', async () => {
+  it('AC-1 says why Hapus is held, and what it takes, in Indonesian', async () => {
     render();
-    for (const words of ['1. Pengenalan', '2. Persiapan awal', 'Pelajari dasar-dasar asuransi', 'Atur goal: target APE & aktivitas']) {
-      expect(await screen.findByText(words)).toBeInTheDocument();
-    }
+    await screen.findByText('Pelajari dasar-dasar asuransi');
+    const sheet = await openItem('Atur goal: target APE & aktivitas');
+    expect(within(sheet).getByRole('button', { name: 'Hapus' }))
+      .toHaveAttribute('title', 'Aspek memerlukan setidaknya satu item — hapus aspeknya saja.');
+    await userEvent.keyboard('{Escape}');
+    await userEvent.click(screen.getByRole('button', { name: 'Aksi untuk 1. Pengenalan' }));
+    expect(screen.getByRole('menuitem', { name: 'Hapus' }))
+      .toHaveAccessibleDescription('Menghapus 1. Pengenalan beserta 2 itemnya dari versi berikutnya.');
   });
 
   it('AC-1 says the empty checklist in Indonesian', async () => {
@@ -169,46 +152,6 @@ describe('P18.10-T4 Settings › Activation checklist in Indonesian', () => {
   });
 });
 
-/**
- * **The grey sentences per size, in Indonesian** (P18.9-T4 AC-6, ADR-0176 §6; UI-027): the same verdicts as in English
- * — *New versions* *ⓘ · ⓘ · Show*, *Linked items* *Remove · ⓘ · Show* — read from the classes CSS would apply.
- */
-describe('P18.10-T4 the checklist’s grey text per size, in Indonesian', () => {
-  afterEach(() => vi.unstubAllGlobals());
-
-  async function drawnAt(px: number) {
-    atWidth(px);
-    render();
-    await screen.findByText(/^New hire yang mulai sekarang mendapat/);
-    const shown = (el: Element | null | undefined) => (el ? !wears(el, px).split(' ').includes('hidden') : false);
-    const sentence = (text: string) => screen.getAllByText(text)
-      .find((el) => !el.classList.contains('sr-only') && el.getAttribute('role') !== 'tooltip');
-    const tip = (text: string) => screen.getByRole('button', { name: text }).parentElement;
-    return {
-      newVersions: { sentence: shown(sentence(NEW_VERSIONS)), tip: shown(tip(NEW_VERSIONS)) },
-      linked: { sentence: shown(sentence(LINKED)), tip: shown(tip(LINKED)) },
-    };
-  }
-
-  it.each([1024, 1280])('at %ipx shows both sentences and draws neither ⓘ', async (px) => {
-    expect(await drawnAt(px)).toEqual({ newVersions: { sentence: true, tip: false }, linked: { sentence: true, tip: false } });
-  });
-
-  it.each([768, 1023])('at %ipx puts both behind their ⓘ', async (px) => {
-    expect(await drawnAt(px)).toEqual({ newVersions: { sentence: false, tip: true }, linked: { sentence: false, tip: true } });
-  });
-
-  it('at 767px keeps the new versions’ ⓘ and removes the linked items’ sentence altogether', async () => {
-    expect(await drawnAt(767)).toEqual({ newVersions: { sentence: false, tip: true }, linked: { sentence: false, tip: false } });
-  });
-});
-
-/**
- * **P18.10-T4 (new hires and activation): the link badge and *From {data}* in Indonesian** — the hire's activation's
- * words (`lib/activation.ts`' `autoBadge`, `byHandBadge`, `fromDataWords`), which read English here until that module
- * moved: *Otomatis* for a live link, *Dicentang manual* for one that does not complete its item, and a data-backed item's
- * *Dari {data}*. The registry's sentence and a link's label are the server's, as it sends them.
- */
 describe('P18.10-T4 the checklist’s link badges in Indonesian', () => {
   afterEach(() => vi.unstubAllGlobals());
 
@@ -237,14 +180,17 @@ describe('P18.10-T4 the checklist’s link badges in Indonesian', () => {
   it('AC-2 says Otomatis and Dicentang manual, the registry’s sentence as sent, and Dari {data}', async () => {
     render({ published: WITH_LINKS, draft: null, windowDays: 90 });
     await screen.findByText('Atur goal: target APE & aktivitas');
-    const goals = screen.getByText('Atur goal: target APE & aktivitas').closest('li')!;
-    expect(within(goals).getByRole('button', { name: 'Otomatis — selesai saat the hire has saved any goal since joining' }))
-      .toHaveTextContent('Otomatis');
-    const training = screen.getByText('Selesaikan modul prospek').closest('li')!;
-    expect(within(training).getByRole('button', { name: /^Dicentang manual — tautan ini tidak menyelesaikan item/ }))
+    expect(within(rowOf('Selesaikan modul prospek')).getByRole('button', { name: /^Dicentang manual — tautan ini tidak menyelesaikan item/ }))
       .toHaveTextContent('Dicentang manual');
-    const sale = screen.getByText('Tutup case pertama secara mandiri').closest('li')!;
-    expect(within(within(sale).getByLabelText('Diselesaikan dari')).getByRole('option', { name: 'Dari Sales data' })).toBeInTheDocument();
+    expect(within(rowOf('Selesaikan modul prospek')).getByText('Selesai otomatis dari: Training › Menyusun daftar prospek'))
+      .toBeInTheDocument();
+    expect(within(rowOf('Tutup case pertama secara mandiri')).getByText('Selesai otomatis dari: Sales data')).toBeInTheDocument();
+    let sheet = await openItem('Atur goal: target APE & aktivitas');
+    expect(within(sheet).getByRole('button', { name: 'Otomatis — selesai saat the hire has saved any goal since joining' }))
+      .toHaveTextContent('Otomatis');
+    await userEvent.keyboard('{Escape}');
+    sheet = await openItem('Tutup case pertama secara mandiri');
+    expect(within(within(sheet).getByLabelText('Diselesaikan dari')).getByRole('option', { name: 'Dari Sales data' })).toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(/\bTicked by hand\b|\bFrom Sales data\b/);
   });
 });

@@ -73,10 +73,8 @@ const KEPT: Record<string, { tokens: string[]; why: string }> = {
     tokens: ['bg-amber/[0.14]'],
     why: 'an NPS *passive*, as the survey tab’s (§7)',
   },
-  'app/(admin)/admin/page.tsx': {
-    tokens: ['bg-amber/12', 'text-amber-deep'],
-    why: 'the attention queue’s *template* severity, beside *structural* red and *approval* blue (§7)',
-  },
+  // *Removed 2026-11-20 (P19.23; ADR-0277):* `app/(admin)/admin/page.tsx`'s attention queue, whose *template* severity
+  // read the fixed amber — the rebuilt *Perlu tindakan* rows read the status pills' own `pill-amber` now.
   'components/ui/toast.tsx': {
     tokens: ['text-amber'],
     why: 'the action word on the toast’s fixed ink, where it reads 6.9:1; a KPM’s colour could not be read there',

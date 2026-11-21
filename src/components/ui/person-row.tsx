@@ -56,6 +56,7 @@ const HEIGHT = { 48: 'min-h-12', 56: 'min-h-14', 60: 'min-h-[3.75rem]', 64: 'min
  */
 export function PersonRow({
   name,
+  avatarName,
   photoUrl,
   seed,
   meta,
@@ -73,6 +74,11 @@ export function PersonRow({
   className,
 }: {
   name: string;
+  /**
+   * **The person's own name, for the avatar's initials**, where `name` is a label of them — the Coaching roster's
+   * *Anda (WILSON)* on the reader's row, whose initials read *A(* (found 2026-11-20). `name` when absent.
+   */
+  avatarName?: string;
   photoUrl?: string | null;
   /** The avatar tint's seed: the membership id, so a renamed person keeps their colour. */
   seed?: string;
@@ -147,7 +153,7 @@ export function PersonRow({
     >
       {lead ?? (
         <Avatar
-          name={name}
+          name={avatarName ?? name}
           photoUrl={photoUrl}
           seed={seed}
           size={avatarSize ?? (tone === 'muted' ? 28 : 36)}

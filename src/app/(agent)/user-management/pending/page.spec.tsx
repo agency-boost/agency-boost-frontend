@@ -301,7 +301,7 @@ describe('the approval inbox (P3-T5)', () => {
     await approve();
 
     expect(await screen.findByRole('alert')).toHaveTextContent('already approved');
-    expect(calls.filter((c) => c.url.endsWith('/join/requests')).length).toBeGreaterThan(1);
+    expect(calls.filter((c) => c.url.endsWith('/join/requests?scope=mine')).length).toBeGreaterThan(1);
   });
 
   it('P13.2 exit review: an approval at the leader limit is said in the limit’s words, never the code', async () => {
@@ -391,5 +391,24 @@ describe('the approval inbox (P3-T5)', () => {
       await userEvent.click(screen.getByRole('button', { name: 'Cancel request' }));
       expect(calls.some((c) => c.init.method === 'DELETE')).toBe(true);
     });
+  });
+});
+
+describe('P19.20-T6 AC-1 Pending Requests is joining the reader’s own unit, the Owner’s too', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('P19.20-T6 AC-1 asks for scope=mine: the KPM’s other requests and moves stay in All members › Menunggu', async () => {
+    const owner = makeMe({
+      membership: {
+        membershipId: 'mem-wilson', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab',
+        isKpmOwner: true, isKpmAdmin: false, status: 'active', directCount: 4,
+      },
+      permissions: ['leader_request:read_inbox', 'leader_request:approve'],
+    });
+    const { calls } = stubFetch({ '/join/requests/routing': { body: [] }, '/join/requests': { body: [] }, '/members/leader-limit-requests': { body: [] } });
+    renderInLayout(AgentLayout, <PendingPage />, { me: owner });
+
+    await vi.waitFor(() => expect(calls.some((c) => c.url.endsWith('/join/requests?scope=mine'))).toBe(true));
+    expect(calls.some((c) => /\/join\/requests$/.test(c.url))).toBe(false);
   });
 });

@@ -658,7 +658,11 @@ export default function RatioBenchmarksPage() {
 
   return (
     <SettingsScreen
-      title={kept('Ratio benchmarks')}
+      /*
+       * P19.21-T3 AC-1 (ADR-0274; OD: Ratio benchmarks stays a tab): the setting is *Activity types*, this its second
+       * tab, as *Lead statuses* is the setting and *Sales | Recruitment* its tabs — the hub lists it under that name.
+       */
+      title={kept('Activity types')}
       subtitle={t.subtitle}
       permission="tenant_config:read"
       tabs={ACTIVITY_SETTINGS_TABS}

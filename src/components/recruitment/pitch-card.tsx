@@ -2,8 +2,9 @@
 
 import { useId, useState } from 'react';
 import { PdfUploadNotice, usePdfUpload } from '@/components/recruitment/pdf-upload';
-import { useSandboxedDocument } from '@/components/sandboxed-document';
+import { usePitchOpen } from '@/components/recruitment/pitch-open';
 import { ConfigBadge } from '@/components/ui/config-badge';
+import { LineIcon } from '@/components/ui/line-icon';
 import { Button, ErrorBanner } from '@/components/ui/field';
 import { InlineSaveStatus, useInlineSave, type InlineSaveOutcome } from '@/components/ui/inline-save-status';
 import type { MessagesOf } from '@/i18n/catalogue';
@@ -14,7 +15,7 @@ import { cn } from '@/lib/cn';
 import { formatShortDay } from '@/lib/format';
 import { isHtmlDocument } from '@/lib/html-document';
 import {
-  attachPitchDocument, formatFileSize, pitchDocumentUrl,
+  attachPitchDocument, formatFileSize,
   requestPitchUpload, setPitchConfirmation, type PitchSlot,
 } from '@/lib/recruitment-pitch';
 
@@ -55,7 +56,8 @@ const BADGE: Record<Tone, { pill: string; dot: string }> = {
 function badgeOf(
   slot: PitchSlot, audience: PitchAudience, t: MessagesOf<typeof recruitmentPitchMessages.en>,
 ): { tone: Tone; label: string } | null {
-  if (!slot.file || slot.state === 'missing') {
+  // A link is a material as a file is (P19.21-T3 AC-6, ADR-0274).
+  if ((!slot.file && !slot.link) || slot.state === 'missing') {
     return slot.required ? { tone: 'alert', label: t.missing } : null;
   }
   if (slot.state === 'partial') return { tone: 'review', label: t.needsConfirmation };
@@ -105,7 +107,7 @@ type Notice =
  * missing card's red one; filled, it is uploaded, opened and replaced as the four are.
  *
  * **Writes are the office's alone** (`canWrite`: `tenant_config:write`, which a read-only support
- * session never holds): *Upload PDF*, *Replace*, and the checklist's boxes, each written at once.
+ * session never holds): *Upload file* (any format since P19.21-T3), *Replace*, and the checklist's boxes, each written at once.
  * A tick names the slot's `version`, so one made against a file replaced since is refused `409`; the
  * card says so and the page reads every slot again (D-replace).
  *
@@ -136,21 +138,25 @@ export function PitchCard({
   const figures = useFigureLanguage();
   const titleId = useId();
   const boxId = useId();
-  const [opening, setOpening] = useState(false);
   const [pending, setPending] = useState<Record<string, boolean>>({});
   const [notice, setNotice] = useState<Notice | null>(null);
   const [said, setSaid] = useState('');
-  const page = useSandboxedDocument();
+  // A link, a page, a download or a file in a tab — by what the material is (P19.21-T3 AC-6, ADR-0274).
+  const opener = usePitchOpen(slot);
+  const opening = opener.opening;
   const html = isHtmlDocument(slot.file?.mimeType);
+  const link = slot.link ?? null;
 
   const office = audience === 'office';
   const writes = office && canWrite;
   const badge = badgeOf(slot, audience, t);
-  const missing = !slot.file;
+  const missing = !slot.file && !link;
   // The dashed edge says the slot is empty; red only where that is a gap in the pitch (a required document).
   const edge = !missing ? 'border-hairline' : slot.required ? 'border-dashed border-alert/35' : 'border-dashed border-hairline';
 
   const upload = usePdfUpload({
+    // Any pitch format (P19.21-T3 AC-6): PDF, a page, PowerPoint, Word, an image or a video.
+    formats: 'pitch',
     sign: requestPitchUpload,
     attach: (storageKey) => attachPitchDocument(slot.slot, storageKey),
     onAttached: (next: PitchSlot) => {
@@ -161,34 +167,10 @@ export function PitchCard({
   });
 
   const open = async () => {
-    // Ignored while it signs, rather than disabled: a disabled button drops the focus.
-    if (opening) return;
-    setOpening(true);
     setNotice(null);
-    if (html) {
-      // An HTML page: the window, never a tab (ADR-0217 §3, §4).
-      await page.open(slot.title, async () => (await pitchDocumentUrl(slot.slot)).url)
-        .catch((err: unknown) => setNotice({ kind: 'link', error: toDisplayError(err) }))
-        .finally(() => setOpening(false));
-      return;
-    }
-    const tab = window.open('', '_blank');
-    if (tab) tab.opener = null;
-    try {
-      // The link was signed a moment ago for 300 seconds, so it is opened as it comes: comparing its
-      // expiry with this device's clock would refuse every link on a phone whose clock runs fast.
-      const { url } = await pitchDocumentUrl(slot.slot);
-      if (tab) tab.location.href = url;
-      else window.open(url, '_blank', 'noopener');
-    } catch (err) {
-      tab?.close();
-      setNotice({ kind: 'link', error: toDisplayError(err) });
-    } finally {
-      setOpening(false);
-    }
+    await opener.open();
   };
 
-  /** Each box's *Saving… → Saved ✓*, or *Couldn't save — retry* (P18.7-T1 AC-5). */
   const inline = useInlineSave();
   const saveKey = (item: string) => `${slot.slot}\n${item}`;
 
@@ -243,13 +225,23 @@ export function PitchCard({
         {badge && <PitchBadge tone={badge.tone} label={badge.label} />}
       </div>
 
-      {slot.file ? (
+      {link ? (
+        <div className="flex items-center gap-2.5 rounded-md border border-hairline bg-base px-3.5 py-3" data-pitch-link="">
+          <span aria-hidden="true" className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-md bg-secondary/10 text-navy">
+            <LineIcon name="link" className="h-4 w-4" />
+          </span>
+          <div className="min-w-0">
+            <p className="m-0 break-all text-base font-semibold text-navy">{link.url}</p>
+            <p className="m-0 text-sm text-muted">{t.linkLine({ day: formatShortDay(link.addedOn, { year: true }, figures) })}</p>
+          </div>
+        </div>
+      ) : slot.file ? (
         <div className="flex items-center gap-2.5 rounded-md border border-hairline bg-base px-3.5 py-3">
           <span
             aria-hidden="true"
             className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-md bg-alert/10 text-xs font-extrabold text-alert"
           >
-            {html ? t.fileIconPage : t.fileIcon}
+            {html ? t.fileIconPage : fileIconOf(slot.file.name, t.fileIcon)}
           </span>
           <div className="min-w-0">
             <p className="m-0 break-all text-base font-semibold text-navy">{slot.file.name}</p>
@@ -265,7 +257,7 @@ export function PitchCard({
         <p className="m-0 text-base italic text-muted">{t.noFile}</p>
       )}
 
-      {office && slot.file && slot.checklist.length > 0 && (
+      {office && !missing && slot.checklist.length > 0 && (
         <fieldset className="m-0 min-w-0 border-0 p-0 pt-1">
           <legend className="mb-2.5 p-0 text-xs font-bold uppercase tracking-wide text-muted">
             {t.checklist}
@@ -337,16 +329,16 @@ export function PitchCard({
         </fieldset>
       )}
 
-      {(slot.file || writes) && (
+      {(!missing || writes) && (
         <div className="mt-auto flex flex-wrap items-center gap-2.5">
-          {slot.file && (
+          {!missing && (
             <Button
-              aria-label={html ? t.viewPageName({ title: slot.title }) : t.viewName({ title: slot.title })}
+              aria-label={openName(opener.kind, slot, t)}
               aria-disabled={opening || undefined}
               className="aria-disabled:opacity-60"
               onClick={() => void open()}
             >
-              {opening ? t.opening : html ? t.viewPage : t.viewPdf}
+              {opening ? t.opening : openWords(opener.kind, slot, t)}
             </Button>
           )}
           {writes && (
@@ -358,7 +350,7 @@ export function PitchCard({
               className="aria-disabled:cursor-not-allowed aria-disabled:opacity-40"
               onClick={() => { if (!upload.busy) upload.choose(); }}
             >
-              {slot.file ? t.replace : t.uploadPdf}
+              {slot.file ? t.replace : t.uploadFile}
             </Button>
           )}
           {writes && upload.picker}
@@ -379,8 +371,39 @@ export function PitchCard({
         </div>
       )}
 
+      {opener.error && notice === null && (
+        <div className="flex flex-col gap-1.5">
+          <p className="m-0 text-base text-alert">{html ? t.pageLinkFailed : t.linkFailed}</p>
+          <ErrorBanner {...opener.error} />
+        </div>
+      )}
+
       <p role="status" className="sr-only">{said}</p>
-      {html && page.dialog}
+      {opener.dialog}
     </article>
   );
+}
+
+type PitchWords = MessagesOf<typeof recruitmentPitchMessages.en>;
+
+/** A file's icon, as words: its extension in capitals (*PPTX*, *MP4*), the PDF's where it has none (P19.21-T3 AC-6). */
+function fileIconOf(name: string, fallback: string): string {
+  const extension = /\.([a-z0-9]{2,4})$/i.exec(name)?.[1];
+  return extension ? extension.toUpperCase() : fallback;
+}
+
+/** The open button's words, by what the material is (P19.21-T3 AC-6): a PDF keeps *View PDF*, as it always read. */
+function openWords(kind: ReturnType<typeof usePitchOpen>['kind'], slot: PitchSlot, t: PitchWords): string {
+  if (kind === 'link') return t.openLink;
+  if (kind === 'sandboxed') return t.viewPage;
+  if (kind === 'download') return t.download;
+  return slot.file?.mimeType && slot.file.mimeType !== 'application/pdf' ? t.viewFile : t.viewPdf;
+}
+
+function openName(kind: ReturnType<typeof usePitchOpen>['kind'], slot: PitchSlot, t: PitchWords): string {
+  const title = slot.title;
+  if (kind === 'link') return t.openLinkName({ title });
+  if (kind === 'sandboxed') return t.viewPageName({ title });
+  if (kind === 'download') return t.downloadName({ title });
+  return slot.file?.mimeType && slot.file.mimeType !== 'application/pdf' ? t.viewFileName({ title }) : t.viewName({ title });
 }

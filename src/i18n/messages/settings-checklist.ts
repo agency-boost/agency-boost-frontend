@@ -90,6 +90,23 @@ const en = {
   feature: 'Feature',
   trainingModule: 'Training module',
   itemCodeHint: 'Filled in from the item. Permanent once saved.',
+
+  /**
+   * **The 19 November card** (P19.21-T3 AC-3; mockup f16): the note under *‹ Pengaturan* once a version is published —
+   * the version hires are given, the window, and who a change reaches.
+   */
+  note: ({ version, days }: { version: number; days: string }) =>
+    `New hires are given version ${version} · ${days} days. Changes become a new version, for the next new hires only.`,
+  /** An item's line: where it completes from — a feature, a module, the office's data — or *manual*. */
+  completesFromLine: ({ source }: { source: string }) => `Completes automatically from: ${source}`,
+  manual: 'ticked by hand',
+  /** The page's own orange bar while a draft waits (the frame's bar; the checklist publishes on its own, ADR-0031). */
+  draftWord: 'Draft.',
+  stillOn: ({ version }: { version: number }) => `Agents are still on version ${version}.`,
+  noneYet: 'Nothing is published yet.',
+  publishToAgents: 'Publish to agents',
+  /** The *+ Tambah item* line's name, naming its aspect; it begins with the line's words (WCAG 2.5.3). */
+  addItemTo: ({ name }: { name: string }) => `Add item to ${name}`,
 };
 
 const id: MessagesOf<typeof en> = {
@@ -152,6 +169,16 @@ const id: MessagesOf<typeof en> = {
   feature: 'Fitur',
   trainingModule: `Modul ${kept('Training')}`,
   itemCodeHint: 'Diisi dari item. Permanen setelah disimpan.',
+
+  note: ({ version, days }) => `${kept('New hire')} mendapat versi ${version} · ${days} hari. Perubahan menjadi versi `
+    + `baru, hanya untuk ${kept('new hire')} berikutnya.`,
+  completesFromLine: ({ source }) => `Selesai otomatis dari: ${source}`,
+  manual: 'manual',
+  draftWord: 'Draf.',
+  stillOn: ({ version }) => `Agent masih memakai versi ${version}.`,
+  noneYet: 'Belum ada yang diterbitkan.',
+  publishToAgents: 'Terbitkan ke agent',
+  addItemTo: ({ name }) => `Tambah item ke ${name}`,
 };
 
 export const checklistMessages = defineMessages({ en, id });

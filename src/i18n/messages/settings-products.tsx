@@ -28,7 +28,8 @@ type ScriptField = 'goodFit' | 'opening' | 'benefits' | 'fullScript' | 'objectio
  */
 const en = {
   title: kept('Products'),
-  tabs: { products: kept('Products'), approvals: kept('Script approvals') },
+  /** P19.21-T3 AC-5 (frame 21): *Produk | Persetujuan script*, and *Data produk* — the Phase 19.15 page — as a tab (ADR-0274). */
+  tabs: { products: 'Products', approvals: 'Scripts to approve', productData: 'Product data' },
   tabsLabel: 'Product sections',
   subtitle: ({ company }: { company: string }) =>
     `What your office sells from ${company}’s catalog, and the words you sell it with.`,
@@ -38,7 +39,7 @@ const en = {
   /** The shelf. */
   noProducts: ({ company }: { company: string }) => `${company} has no products on its catalog yet.`,
   /** The shelf's one grey sentence, in the client's words (P18.9-T4 AC-6). */
-  shelfNote: 'Your changes apply to this office only.',
+  shelfNote: 'Changes apply to this office only',
   /** The shelf's count, as built (*1 products* included); `selling` is drawn bold; `withdrawn` null when none is. */
   shelfCount: ({ n, selling, withdrawn, company }: {
     n: number; selling: ReactNode; withdrawn: number | null; company: string;
@@ -60,7 +61,18 @@ const en = {
   /** The shelf on a phone (P19.2-T3 AC-3; UI-141, `kpm-owner-mobile` 7): its search and its chips. */
   search: 'Search products',
   noMatch: 'No product matches.',
-  chips: { label: 'Filter products', all: 'All', pending: 'Waiting', rejected: 'Sent back' },
+  chips: { label: 'Filter products', all: 'All', pending: 'Waiting for you', rejected: 'Sent back' },
+  /**
+   * **A row's one pill** (P19.21-T3 AC-5, frame 21): the script's review — *Menunggu Anda*, *Dikembalikan*,
+   * *Disetujui* — and otherwise whether agents sell it. *Tidak dijual* where they do not (a Fill: data honesty).
+   */
+  pill: {
+    pending: 'Waiting for you', rejected: 'Sent back', approved: 'Approved', selling: 'Sold by agents', notSelling: 'Not sold',
+  },
+  /** The list's foot (frame 21): *"n dari N produk dijual agent"*. */
+  footSelling: ({ selling, n }: { selling: number; n: number }) => `${selling} of ${n} products sold by agents`,
+  /** A row's ⋯: the product's sheet — its switch, *Customize*, its documents. */
+  moreFor: ({ name }: { name: string }) => `More for ${name}`,
   agentsSellIt: 'Agents sell it',
   agentsSellItFor: ({ name }: { name: string }) => `Agents sell it, ${name}`,
   customize: 'Customize',
@@ -148,14 +160,14 @@ const en = {
 
 const id: MessagesOf<typeof en> = {
   title: kept('Products'),
-  tabs: { products: kept('Products'), approvals: kept('Script approvals') },
+  tabs: { products: 'Produk', approvals: `Persetujuan ${kept('script')}`, productData: 'Data produk' },
   tabsLabel: 'Bagian produk',
   subtitle: ({ company }) =>
     `Yang dijual ${kept('KPM')} Anda dari katalog ${company}, dan kata-kata yang Anda pakai untuk menjualnya.`,
   yourCompany: 'perusahaan Anda',
 
   noProducts: ({ company }) => `${company} belum punya produk di katalognya.`,
-  shelfNote: `Perubahan Anda hanya berlaku untuk ${kept('KPM')} ini.`,
+  shelfNote: `Perubahan hanya berlaku untuk ${kept('KPM')} ini`,
   shelfCount: ({ n, selling, withdrawn, company }) => words(
     `${n} produk · `,
     selling,
@@ -173,7 +185,12 @@ const id: MessagesOf<typeof en> = {
   reviewName: ({ name }) => `Tinjau ${name}`,
   search: 'Cari produk',
   noMatch: 'Tidak ada produk yang cocok.',
-  chips: { label: 'Saring produk', all: 'Semua', pending: 'Menunggu', rejected: 'Dikembalikan' },
+  chips: { label: 'Saring produk', all: 'Semua', pending: 'Menunggu Anda', rejected: 'Dikembalikan' },
+  pill: {
+    pending: 'Menunggu Anda', rejected: 'Dikembalikan', approved: 'Disetujui', selling: 'Dijual agent', notSelling: 'Tidak dijual',
+  },
+  footSelling: ({ selling, n }) => `${selling} dari ${n} produk dijual agent`,
+  moreFor: ({ name }) => `Lainnya untuk ${name}`,
   agentsSellIt: 'Agent menjualnya',
   agentsSellItFor: ({ name }) => `Agent menjualnya, ${name}`,
   customize: 'Sesuaikan',

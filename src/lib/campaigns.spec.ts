@@ -141,14 +141,13 @@ describe('the list’s sections (P18.2-T7 AC-2, D-lists)', () => {
     expect(all.map((s) => s.empty)).toEqual(['No running campaigns right now.', 'No upcoming campaigns.', 'No ended campaigns to show.']);
   });
 
-  it('P18.2-T7 AC-2 Promotion Criteria and Production Clubs for the structural view, a running structural one never seasonal', () => {
+  it('P18.2-T7 AC-2, P19.25-T5 AC-1 one Structural section — no Production Clubs —, a running structural one never seasonal', () => {
     const sections = structuralSections(LIST.campaigns);
     expect(sections.map((s) => [s.heading, s.items.map((c) => c.code)])).toEqual([
-      ['Promotion Criteria', ['PROMOTION_AGENT_AAB', 'PROMOTION_AAB_AB']],
-      ['Production Clubs', ['MDRT_QUALIFICATION']],
+      ['Structural', ['PROMOTION_AGENT_AAB', 'PROMOTION_AAB_AB', 'MDRT_QUALIFICATION']],
     ]);
     expect(seasonalSections([MDRT], 'all').every((s) => s.items.length === 0)).toBe(true);
-    expect(sections.map((s) => s.empty)).toEqual(['No promotion criteria published yet.', 'No ongoing incentives right now.']);
+    expect(sections.map((s) => s.empty)).toEqual(['No structural campaigns right now.']);
   });
 
   it('D-lists: the server’s order is kept, not re-sorted', () => {

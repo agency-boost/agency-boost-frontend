@@ -92,25 +92,40 @@ const inIndonesian = (page: React.ReactElement, me: Me = LEADER) =>
  */
 
 const rosterRow = (membershipId: string, name: string, over: Record<string, unknown> = {}) => ({
-  membershipId, name, rung: { code: 'AGENT', label: 'Agent' }, depth: 1,
+  membershipId, name, photoUrl: null, rung: { code: 'AGENT', label: 'Agent' }, depth: 1,
   lastOneOnOne: { days: 9, date: '2026-09-23', overdue: true, coach: { membershipId: 'mem-agus', name: 'Agus Santoso' } },
-  status: 'watch_closely', ...over,
+  status: 'watch_closely',
+  coaching: { status: 'recent', days: 9, coach: { membershipId: 'mem-agus', name: 'Agus Santoso' } },
+  phone: '+6281211002200', isReader: false, opens: true, ...over,
 });
+/** P19.18-T5: *Unit Anda* with two agents, then an AAB's unit — the redesign's shape (ADR-0271 §9). */
 const ROSTER = {
   today: '2026-10-02',
   overdueAfterDays: 7,
-  directAgents: [
-    rosterRow('mem-rina', 'Rina Wijaya'),
-    rosterRow('mem-melati', 'Melati Putri', { lastOneOnOne: null, status: 'no_goal_set' }),
+  scope: 'direct',
+  scopes: { offered: ['unit', 'direct'], default: 'direct' },
+  total: 4,
+  sections: [
+    {
+      key: 'own', kind: 'own', leader: { membershipId: 'mem-jordan', name: 'Jordan Pratama', photoUrl: null }, count: 2,
+      rows: [
+        rosterRow('mem-rina', 'Rina Wijaya'),
+        rosterRow('mem-melati', 'Melati Putri', { lastOneOnOne: null, status: 'no_goal_set', coaching: { status: 'never', days: null, coach: null } }),
+      ],
+      teams: [],
+    },
+    {
+      key: 'mem-dimas', kind: 'unit', leader: { membershipId: 'mem-dimas', name: 'Dimas Aditya', photoUrl: null }, count: 2,
+      rows: [
+        rosterRow('mem-dimas', 'Dimas Aditya', {
+          rung: { code: 'AAB', label: 'Associate Agency Builder' }, status: 'on_track',
+          coaching: { status: 'lapsed', days: 20, coach: null },
+        }),
+        rosterRow('mem-tono', 'Tono Saputra', { depth: 2, status: 'needs_attention' }),
+      ],
+      teams: [],
+    },
   ],
-  units: [{
-    head: rosterRow('mem-dimas', 'Dimas Aditya', { rung: { code: 'AAB', label: 'Associate Agency Builder' }, status: 'on_track' }),
-    members: [
-      rosterRow('mem-tono', 'Tono Saputra', {
-        depth: 2, status: 'needs_attention', lastOneOnOne: { days: 0, date: '2026-10-02', overdue: false, coach: null },
-      }),
-    ],
-  }],
 };
 
 describe('P18.10-T4 the coaching roster in Indonesian', () => {
@@ -120,38 +135,35 @@ describe('P18.10-T4 the coaching roster in Indonesian', () => {
     renderInLayout(AgentLayout, <CoachingRosterPage />, { me: LEADER });
     await screen.findByRole('link', { name: 'Rina Wijaya' });
     expect(englishShown(document.body, COACHING_ENGLISH)).toEqual(
-      expect.arrayContaining(['Everyone you coach', 'Your direct agents', 'Watch closely', 'My Coaching Notes']),
+      expect.arrayContaining(['Everyone', 'Your Unit', 'My Coaching Notes']),
     );
   });
 
-  it('P18.10-T4 AC-1, AC-2, UI-033 the rows: the title kept, the columns, groups, pills and lines Indonesian; No 1:1 yet grey', async () => {
+  it('P18.10-T4 AC-1, P19.18-T5 AC-1, AC-2 the rows: the title kept, the head, unit lines, tiles and oleh Indonesian', async () => {
     stubFetch({ ...SHELL, '/coaching/coachees': { body: ROSTER } });
     inIndonesian(<CoachingRosterPage />);
     await screen.findByRole('link', { name: 'Rina Wijaya' });
     expect(screen.getByRole('heading', { level: 1, name: 'Coaching' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { level: 2, name: 'Semua orang yang Anda coaching' })).toBeInTheDocument();
-    expect(screen.getByText('Terakhir di-coaching oleh').parentElement).toHaveTextContent('Nama1:1 terakhirTerakhir di-coaching olehStatus');
-    expect(screen.getByRole('heading', { level: 3, name: /Agen langsung Anda/ })).toHaveTextContent('Agen langsung Anda· 2');
-    expect(screen.getByRole('heading', { level: 3, name: 'Unit AAB' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 2, name: /Semua orang/ })).toHaveTextContent('Semua orang· 4');
+    expect(screen.getByText('1:1 terakhir')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Unit Anda/ })).toHaveTextContent('Unit Anda2 orang');
+    expect(screen.getByRole('button', { name: /Unit DIMAS ADITYA/ })).toHaveTextContent('2 orang');
     const row = (name: string) => screen.getByRole('link', { name }).closest('[data-person-row]') as HTMLElement;
-    expect(row('Rina Wijaya')).toHaveTextContent('9 hari lalu · terlambat');
-    expect(within(row('Rina Wijaya')).getByText('Perlu dipantau')).toBeInTheDocument();
+    expect(within(row('Rina Wijaya')).getByText('Coaching 9 hari lalu')).toBeInTheDocument();
+    expect(within(row('Rina Wijaya')).getByText('oleh AGUS SANTOSO')).toBeInTheDocument();
+    expect(within(row('Melati Putri')).getByText('Belum pernah coaching')).toBeInTheDocument();
+    expect(within(row('Dimas Aditya')).getByText('Coaching 20 hari lalu')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Rina Wijaya' })).toHaveAttribute('href', '/coaching/mem-rina/session');
-    const melati = row('Melati Putri').querySelector('[data-roster-line]') as HTMLElement;
-    expect(melati).toHaveTextContent('Belum ada 1:1');
-    expect(melati).toHaveClass('text-signal-grey');
-    expect(row('Melati Putri')).toHaveTextContent('Goal belum diatur');
-    expect(row('Dimas Aditya')).toHaveTextContent('Sesuai target');
-    expect(row('Tono Saputra')).toHaveTextContent('Hari ini');
-    expect(row('Tono Saputra')).toHaveTextContent('Perlu perhatian');
-    expect(screen.getByRole('list', { name: 'Unit Dimas Aditya' })).toBeInTheDocument();
-    expect(screen.queryByText('Coaching Anda sendiri')).not.toBeInTheDocument();
+    const controls = document.querySelector('[data-roster-controls]') as HTMLElement;
+    expect(within(controls).getByRole('button', { name: /Tampilan/ })).toHaveTextContent('Grup langsung');
+    expect(screen.queryByText('Unit AAB')).not.toBeInTheDocument();
+    expect(screen.queryByText('Agen langsung Anda')).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Catatan coaching saya' })).toHaveAttribute('href', '/coaching/me');
     noEnglishLeft();
   });
 
   it('P18.10-T4 AC-1, P19-T4 AC-3 a leader nobody reports to: Belum ada data, the Contoh, Tambah agent pertama', async () => {
-    stubFetch({ ...SHELL, '/coaching/coachees': { body: { ...ROSTER, directAgents: [], units: [] } } });
+    stubFetch({ ...SHELL, '/coaching/coachees': { body: { ...ROSTER, total: 0, sections: [] } } });
     inIndonesian(<CoachingRosterPage />);
     expect(await screen.findByText('Belum ada data')).toBeInTheDocument();
     expect(screen.getByText('Contoh')).toBeInTheDocument();

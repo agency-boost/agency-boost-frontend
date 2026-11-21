@@ -13,14 +13,14 @@ import { kpmOverviewMessages } from '@/i18n/messages/kpm-overview';
  * by `backend/src/domain/metrics/registry.spec.ts` (`P19.3-T1 AC-2 …`).
  */
 const LOGGING_KEYS = [
-  // *Changed 2026-11-05 (P19.3-T2; ADR-0200 §3):* the month's logging tile and the week's card are gone; logging is the
-  // first tile's pill, *Pengguna aktif* over 7 days, and *Belum mencatat · 7 hari*.
-  'weekPill', 'weekPillLabel', 'notLoggedTitle', 'notLoggedOf', 'neverLogged', 'everybodyLogged', 'loadingList',
+  // *Changed 2026-11-20 (P19.19; ADR-0272 §2):* the Overview's second version counts logging as *Pakai* — section 1's
+  // *Sudah pakai AgencyBoost* over 30 days, section 2's three tiles and a person's *Pakai n hari lalu*.
+  'usageTitle', 'usedHeadline', 'usedOf', 'usedName', 'usageNever', 'usageLapsed', 'usageRecent', 'usedDaysAgo', 'usedToday',
 ] as const;
 
 /** A message as a reader sees it: a function given a figure, a string as it is. */
 const text = (value: unknown): string => (typeof value === 'function'
-  ? String((value as (a: object) => string)({ notLogged: 6, n: 6, of: 28 }))
+  ? String((value as (a: object) => string)({ notLogged: 6, n: '6', of: '28', used: '6', pct: '21%', system: 'AgencyBoost' }))
   : String(value));
 
 /** The word *active* or *aktif*, anywhere but inside the name *Pengguna aktif*. */
@@ -35,12 +35,12 @@ describe('P19.3-T1 AC-2 — no logging label says active (ADR-0200 §3)', () => 
     }
   });
 
-  it('P19.3-T2 AC-1 the first tile is Aktif bulan ini — D1, production — and the pill under it names Pengguna aktif', () => {
+  it('P19.19-T1 AC-2 section 1 says Sudah pakai, the brief’s word: production’s Active Agent is section 5’s alone', () => {
     const id = messagesIn(kpmOverviewMessages, 'id');
-    expect(id.activeMonth).toBe('Aktif bulan ini');
-    expect(id.weekPill({ n: 8 })).toBe('7 hari: 8 belum ›');
-    expect(id.weekPillLabel({ n: 8, of: 28 })).toMatch(/^Pengguna aktif, 7 hari: 8 dari 28 belum mencatat/);
-    expect(id.notLoggedTitle).toBe('Belum mencatat · 7 hari');
+    expect(id.usedHeadline({ system: 'AgencyBoost' })).toBe('Sudah pakai AgencyBoost');
+    expect(id.usageTitle({ system: 'AgencyBoost' })).toBe('1 · Pemakaian AgencyBoost');
+    expect(id.usedDaysAgo({ n: '18' })).toBe('Pakai 18 hari lalu');
+    expect(id.activeAgent).toBe('Active Agent');
   });
 
   it('P19.3-T1 AC-2 the rule lets Pengguna aktif through, and nothing else with the word', () => {

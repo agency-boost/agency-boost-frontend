@@ -79,6 +79,13 @@ const WHO = {
 } as const;
 
 /**
+ * *Re-recorded 2026-11-20 by P19.17-T3, the change meant to move them all (AC-3, AC-5, AC-6, AC-7; ADR-0269; part E):*
+ * **every width, the sheet and the account menu** — the menu's Tabler outline icons, one set everywhere (the tab bar's
+ * four and *Lainnya*'s at 360, 375 and 768px); from 1024px every row with its icon, the group names grey capitals with a
+ * chevron, every group open in a part that scrolls with no scrollbar, the rail's one icon per group, a navy current
+ * icon, the name in capitals; the sheet's bold headings, 48px tiles and outlined *Keluar*; *📘 Panduan* gone from the
+ * sidebar, the sheet and the account menu — which is now the same for the Agent as for the leaders.
+ *
  * *Re-recorded 2026-11-12 by P19.13-T1 and T2, the change meant to move them (UI-192, UI-194, UI-196; ADR-0252):* **1024
  * and 1280 only** — `main` the page frame (`lg:mx-auto lg:max-w-frame lg:px-frame`), the title row's 24px under it, and
  * the floating sidebar: the app icon and the branch's name, *Search agent* a field under the logo, the top section Home ·
@@ -103,41 +110,41 @@ const WHO = {
  */
 const BEFORE: Record<keyof typeof WHO, Record<number, string>> = {
   AB: {
-    360: '1e89a233bda38fd35ed3c9409c9d4015a2b0cc6602e19d5168cdd28f9c795f39',
-    375: '1e89a233bda38fd35ed3c9409c9d4015a2b0cc6602e19d5168cdd28f9c795f39',
-    768: '0fe9d12836bbe531446d48a6af5fc7b1d3622a234272b687e1607e50610aa23b',
-    1024: 'b82afb90cddf0aa1a458e5e0d3fa119ade72aa87a104e09cbe8df6addf406ae9',
-    1280: '77184cd8f0dfde69c5383b8b40b1ea778183cb5b3a2da0701aee6f7ed179cdc4',
+    360: '8f0d9464837e84d78b3f4b96072edcdeac1f4c3fd8b775cb598853c360a3e6ec',
+    375: '8f0d9464837e84d78b3f4b96072edcdeac1f4c3fd8b775cb598853c360a3e6ec',
+    768: 'ad2ea50cd53ab4fc483c4e5b119fe0305e13f8e90511e30007d187ab0da95baf',
+    1024: 'ec4e682503e4df62362a5cace75028ab909fe84f120af9da4bf2c543b03639f0',
+    1280: '8b181c9fbe527d035a78e47b919c5b5452e67be797fb6af1449c38983df94cef',
   },
   AAB: {
-    360: '1e89a233bda38fd35ed3c9409c9d4015a2b0cc6602e19d5168cdd28f9c795f39',
-    375: '1e89a233bda38fd35ed3c9409c9d4015a2b0cc6602e19d5168cdd28f9c795f39',
-    768: '0fe9d12836bbe531446d48a6af5fc7b1d3622a234272b687e1607e50610aa23b',
-    1024: 'd6f344868c1d35b818e9a9349336bf8e10c7008c3c0ffcfda7f36ae81f321279',
-    1280: '145ca702103d13389273b9c441b4a0432bf026801c2aecdc9f12e641c107bad3',
+    360: '8f0d9464837e84d78b3f4b96072edcdeac1f4c3fd8b775cb598853c360a3e6ec',
+    375: '8f0d9464837e84d78b3f4b96072edcdeac1f4c3fd8b775cb598853c360a3e6ec',
+    768: 'ad2ea50cd53ab4fc483c4e5b119fe0305e13f8e90511e30007d187ab0da95baf',
+    1024: '5b420c99645990ddda657824df2edf294d7e1079feb1abd9a2b2f45d24488f53',
+    1280: '81ee8ef702ea4f9bfc8f4a99ab5ae21101db9df396d27041e57244378e73b95a',
   },
   Agent: {
-    360: '5f393d37c40729b86dfda3332f2fbc43d7f4703fec45d0d70cfcdbfd6c339c91',
-    375: '5f393d37c40729b86dfda3332f2fbc43d7f4703fec45d0d70cfcdbfd6c339c91',
-    768: '57e87f13b08420e52a2bf2a57924db131e9b1fda6dea80dac762e88d69b39925',
-    1024: '857ba12321b2f75aaefb8c1bd2a23e0eee8bc559b0e941ff8c701688f659c271',
-    1280: 'f1234fc5cfbaa9824f62247d0dc61d06b0646d42e61d1d936742a1fa071ba857',
+    360: 'c2da0524e1a6e45a488ae5a39821bf28aa23c62df8e18e03acc093c34f400ace',
+    375: 'c2da0524e1a6e45a488ae5a39821bf28aa23c62df8e18e03acc093c34f400ace',
+    768: '20e82ea68dae01fd91c337415595dba5539a7720c83a1b5ff0544588c8bffc8e',
+    1024: 'ca5a890f0849c725979a91b97ae7042dac4c5798ac20895782767945465d81c8',
+    1280: 'b52c421a6974154fce376d66eb1600cabe985e6f6378916c4f001457cf156564',
   },
 };
 
 /** The *Lainnya* sheet open at 375px, and the sidebar's account menu open at 1280px: recorded as above. */
 const OPENED: Record<keyof typeof WHO, { sheet: string; menu: string }> = {
   AB: {
-    sheet: 'dc87746fb30236ebe55119c4bc081469ab4694503fe28dba8cbb92516a7fcda1',
-    menu: '0661eb30dbc32f6ce12fd22e7fff8e18a92b252d2c5d4e57abcba6cf1cd2bdb7',
+    sheet: 'e114aae57de5477b09d42b40b0f5ab846cb6a44c74d51d0d4ae3d15711684df9',
+    menu: 'db8f36a698509ba97978dff0e03c07aef8f623e934189c65d4a775cccaf70566',
   },
   AAB: {
-    sheet: '828ce794a7e2bbe60d9dfef9b451a6b113ef59037c25647e17316e2bc759ebf8',
-    menu: '0661eb30dbc32f6ce12fd22e7fff8e18a92b252d2c5d4e57abcba6cf1cd2bdb7',
+    sheet: '447a00748e6a69ee5c0b272d907d0f3f2b16b37bd2acbab99ab193a4eb23072a',
+    menu: 'db8f36a698509ba97978dff0e03c07aef8f623e934189c65d4a775cccaf70566',
   },
   Agent: {
-    sheet: '6be8179aecb86319c25e480c82bff8b76bd6413868ec27c2683a2b8dbe8f101a',
-    menu: 'd30345e7eff56612681186862c11e89baf78a00aa1b1ce098d71f1203bafe820',
+    sheet: 'fb1a233037214e0e98951eddc72e4c7483f0ba54cef0bba02a36e6bc084c1f02',
+    menu: 'db8f36a698509ba97978dff0e03c07aef8f623e934189c65d4a775cccaf70566',
   },
 };
 

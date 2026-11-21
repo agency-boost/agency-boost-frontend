@@ -6,35 +6,20 @@ import { kept } from '@/i18n/kept';
 import { useMessages } from '@/i18n/language-provider';
 import { rosterImportMessages } from '@/i18n/messages/roster-import';
 import { useSession } from '@/lib/session';
+import { enteredKpmId } from '@/lib/super-admin-kpm';
 
 /**
- * The same import, for the office you are in.
- *
- * An Owner or Admin does not name an office: their session already says which one, and
- * the API refuses any other as a **404** — the same answer as an office that does not
- * exist, because a 403 would confirm the id is real.
- *
- * Its own controls are 44px tall below 1024px (`touchTargets`; P19.2-T3 AC-4, UI-142).
+ * **Import people** (P19.20-T5; ADR-0273 §6): the KPM the reader is in — their membership's, or the one a Super Admin has
+ * entered (ADR-0268 §3) — never named on the screen. The API refuses any other as a **404**.
  */
 export default function PeopleImportPage() {
   const t = useMessages(rosterImportMessages);
   const { me } = useSession();
-  const kpmId = me?.membership?.kpmId;
+  const kpmId = me?.membership?.kpmId ?? enteredKpmId();
 
   return (
-    <Page
-      title={kept('Import people')}
-      subtitle={t.importSubtitle}
-      permission="kpm:import_roster"
-    >
-      {/* P19.13-T4 AC-3 (UI-198): from 1024px the form layout, at most 720px from the frame's left edge. */}
-      <div className="lg:max-w-form">
-        {kpmId ? (
-          <RosterImport kpmId={kpmId} backHref="/people/members" touchTargets />
-        ) : (
-          <p className="text-md text-muted">{t.notInOffice}</p>
-        )}
-      </div>
+    <Page title={kept('Import people')} permission="kpm:import_roster">
+      {kpmId ? <RosterImport kpmId={kpmId} /> : <p className="text-md text-muted">{t.notInOffice}</p>}
     </Page>
   );
 }

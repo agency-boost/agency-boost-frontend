@@ -54,6 +54,7 @@ export default function PendingPage() {
         )}
         {/* The list, and approving with the join date (P18.8-T3 AC-5): one component, the one /new-hires opens too. */}
         <RequestInbox
+          scope="mine"
           onCount={setCount}
           empty={(
             <div className="flex items-center gap-4" data-testid="pending-empty">

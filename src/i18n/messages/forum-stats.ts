@@ -5,8 +5,8 @@ import { kept } from '@/i18n/kept';
  * **A forum meeting's *Overview & Stats*: the client's reference slide** (P18.10-T4, people and forum; ADR-0175;
  * `functional/leader-forum.md`, *Overview & Stats* and *The module's own strings*) — the strip, the table's columns, its
  * groups and rows, the section bands, the numbered footnotes, the *(\*)* notes, a cell's words for a screen reader, a
- * phone's card and a *Monthly Target*'s field. Drawn by `components/leader-forum/scorecard.tsx` and the print, and
- * written by `lib/leader-meeting-tabs.ts`.
+ * phone's card and a *Monthly Target*'s field. Written by `lib/leader-meeting-tabs.ts`, which Advanced analytics' *MAPA
+ * driver* reads; the forum's own scorecard tab went in P19.22 (ADR-0276).
  *
  * **English is the source**: the slide's labels as built and the module's own (D-copy), none of the six words in either
  * language. **Almost all of it is kept** (§A.4): every KPI and row name, the columns and their groups, *TBD* and *AS
@@ -16,9 +16,11 @@ import { kept } from '@/i18n/kept';
  * language (`useFigureLanguage()`) and passed in.
  *
  * @moved lib/leader-meeting-tabs.ts
- * @moved components/leader-forum/scorecard.tsx
  */
 const en = {
+  /** Names joined as a sentence joins them: *a*, *a and b*, *a, b and c* — a (\*) note's months. */
+  list: ({ items }: { items: readonly string[] }) =>
+    (items.length <= 1 ? items.join('') : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`),
   /** The KPI strip (UI-011), in its order. */
   chips: {
     manpower: kept('Manpower'),
@@ -133,6 +135,11 @@ const en = {
 };
 
 const id: MessagesOf<typeof en> = {
+  list: ({ items }) => {
+    if (items.length <= 1) return items.join('');
+    if (items.length === 2) return `${items[0]} dan ${items[1]}`;
+    return `${items.slice(0, -1).join(', ')}, dan ${items[items.length - 1]}`;
+  },
   chips: {
     manpower: kept('Manpower'),
     agents: kept('# of agents'),

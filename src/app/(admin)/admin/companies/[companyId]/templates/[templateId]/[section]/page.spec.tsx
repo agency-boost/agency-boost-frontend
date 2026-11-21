@@ -25,7 +25,8 @@ const SAVED = { timeout: 3000 };
 
 function render(section: string, routes: Record<string, StubReply | StubReply[]>, templateId = 't-default') {
   const stub = stubFetch({
-    '/admin/companies': { body: [PRUDENTIAL] },
+    // The Default template's section (P19.23-T4, ADR-0278 §7): it has no KPM, so it publishes here, as before.
+    '/admin/companies': { body: [{ ...PRUDENTIAL, kind: 'template' }] },
     '/admin/companies/c1/templates': { body: [DEFAULT_TEMPLATE, BSD_CITY, ARCHIVED] },
     ...routes,
   });
@@ -58,11 +59,12 @@ describe('P18.11-T20 a template section', () => {
   beforeEach(() => window.history.replaceState(null, '', '/'));
   afterEach(() => vi.unstubAllGlobals());
 
-  it('names the section and its template, leads back to the checklist, and draws its parts as pills', async () => {
+  it('names the section and its template, leads back to Pengaturan template, and draws its parts as pills', async () => {
     activity();
     expect(await screen.findByRole('heading', { level: 1, name: 'Activities & ratios' })).toBeInTheDocument();
-    expect(await screen.findByRole('link', { name: 'Prudential template' }))
-      .toHaveAttribute('href', '/admin/companies/c1/templates/t-default');
+    // P19.23-T4 AC-4 (ADR-0278 §1): back to *Pengaturan template*.
+    expect(await screen.findByRole('link', { name: 'Template settings' }))
+      .toHaveAttribute('href', '/admin/companies/c1/settings');
     const pills = within(screen.getByRole('navigation', { name: 'Activities & ratios parts' }));
     expect(pills.getAllByRole('link').map((l) => l.textContent)).toEqual(['Activity types', 'Ratio benchmarks']);
     expect(await screen.findByText('Submission polis')).toBeInTheDocument();
@@ -249,8 +251,8 @@ describe('P18.11-T20 a template section', () => {
   it('says a section that does not exist, and leads back', async () => {
     render('nothing', {});
     expect(await screen.findByText('This section does not exist.')).toBeInTheDocument();
-    expect((await screen.findAllByRole('link', { name: 'Prudential template' }))[0])
-      .toHaveAttribute('href', '/admin/companies/c1/templates/t-default');
+    expect((await screen.findAllByRole('link', { name: 'Template settings' }))[0])
+      .toHaveAttribute('href', '/admin/companies/c1/settings');
   });
 
   it('says a failed read, and reads again on Try again', async () => {

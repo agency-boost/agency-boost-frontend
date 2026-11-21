@@ -38,7 +38,8 @@ export interface SegmentedTab {
  *
  * **On a phone a segment never breaks its words over two lines** (ADR-0167; UI-013): the segments share
  * the track while their words fit, and when they do not the track scrolls sideways, fading on the side
- * that has more, with the selected one in view. Below 768px only (`phone.ts`, `use-tab-row.ts`).
+ * that has more, with the selected one in view. Below 768px only (`phone.ts`, `use-tab-row.ts`). From 768px a
+ * segment's words do not break either (`md:whitespace-nowrap`), so a track sized to its content fits every label.
  *
  * **A header control at every size** (P19.8-T1 AC-1; R6, D-38, MOB UI-171): each segment 13px, 600 and 44px tall at least —
  * `HEADER_CONTROL` — on a laptop as on a phone. It was 44px below 1024px alone, and some 35px wider.
@@ -120,7 +121,13 @@ export function Segmented({
                 // 1024px alone (UI V1, UI-010), whose class stays for the field shell's touch rule.
                 HEADER_CONTROL,
                 SEGMENT_TOUCH,
-                phoneLayout === 'scroll' ? SEGMENT_PHONE : SEGMENT_WRAP_PHONE,
+                /*
+                 * **A segment's words never break from 768px either** (found 2026-11-20: *MAPA / driver* on the forum at
+                 * 1280): in a track sized to its content (`md:w-fit`) the `flex-1` segments share it equally, so a long label
+                 * got a short one's width and wrapped. Unbroken, a label is its segment's least width. Not for two options
+                 * (`wrap`), whose halves stay equal and whose words wrap inside them, as below 768px.
+                 */
+                phoneLayout === 'scroll' ? cn(SEGMENT_PHONE, 'md:whitespace-nowrap') : SEGMENT_WRAP_PHONE,
                 on ? 'bg-secondary text-secondary-contrast' : 'text-muted hover:text-navy',
               )}
             >

@@ -61,7 +61,8 @@ const en = {
   ringName: ({ done, total }: { done: number; total: number }) => `${done} of ${total} documents complete`,
   viewName: ({ title }: { title: string }) => `View PDF, ${title} — opens in a new tab`,
   viewPageName: ({ title }: { title: string }) => `View page, ${title} — opens in this window`,
-  uploadName: ({ title }: { title: string }) => `Upload PDF, ${title}`,
+  // P19.21-T3 AC-6: any format, so *Upload file* — the button's own words, which its name begins with (WCAG 2.5.3).
+  uploadName: ({ title }: { title: string }) => `Upload file, ${title}`,
   replaceName: ({ title }: { title: string }) => `Replace, ${title}`,
   opening: 'Opening…',
   linkFailed: 'Could not open this PDF.',
@@ -91,6 +92,39 @@ const en = {
   notPdf: ({ name }: { name: string }) =>
     `“${name}” is not a PDF or an HTML page. Only a PDF or an HTML page can be uploaded here.`,
   sendFailed: ({ name }: { name: string }) => `“${name}” did not finish uploading. Check your connection and try again.`,
+
+  /**
+   * **Pengaturan › Recruitment pitch as one list** (P19.21-T3 AC-6, ADR-0274; `data-upload-pengaturan-*` frame 22): the
+   * six materials agents see, no required/optional split, *"2/6 materi siap"*, each with its state and one button, and
+   * **any format or a link**. The agents' side opens a link, a download or a file by what it is.
+   */
+  readyLine: 'materials ready · used by agents in Recruitment › Pitch Materials',
+  readyName: ({ ready, total }: { ready: number; total: number }) => `${ready} of ${total} materials ready`,
+  ready: 'Ready',
+  needsCheck: 'Needs checking',
+  uploadFile: 'Upload file',
+  replaceFile: 'Replace file',
+  useLink: 'Use a link',
+  changeLink: 'Change link',
+  anyFormat: 'Any format: PDF, PowerPoint, Word, image, video, or a link',
+  fileLine: ({ name, day }: { name: string; day: string }) => `${name} · ${day}`,
+  linkLine: ({ day }: { day: string }) => `Link · ${day}`,
+  actionsFor: ({ title }: { title: string }) => `More for ${title}`,
+  viewMaterialName: ({ title }: { title: string }) => `View ${title}: its file, its checklist and its link`,
+  linkTitle: ({ title }: { title: string }) => `A link for ${title}`,
+  linkLabel: 'Address (https://)',
+  linkHint: 'A video too large to upload, or a shared folder. Agents open it in a new tab.',
+  linkSaved: ({ title }: { title: string }) => `The link for ${title} is saved.`,
+  notPitchFormat: ({ name }: { name: string }) =>
+    `“${name}” is not a pitch format. Upload a PDF, PowerPoint, Word file, image or video — or give a link.`,
+  tooLargeAny: ({ name, size, max }: { name: string; size: string; max: string }) =>
+    `“${name}” is ${size}. A file can be ${max} MB at most — give a longer video as a link.`,
+  openLink: 'Open link',
+  openLinkName: ({ title }: { title: string }) => `Open link, ${title} — opens in a new tab`,
+  download: 'Download',
+  downloadName: ({ title }: { title: string }) => `Download, ${title}`,
+  viewFile: 'View file',
+  viewFileName: ({ title }: { title: string }) => `View file, ${title} — opens in a new tab`,
 };
 
 const id: MessagesOf<typeof en> = {
@@ -123,7 +157,7 @@ const id: MessagesOf<typeof en> = {
   ringName: ({ done, total }) => `${done} dari ${total} dokumen lengkap`,
   viewName: ({ title }) => `Lihat PDF, ${title} — terbuka di tab baru`,
   viewPageName: ({ title }) => `Lihat halaman, ${title} — terbuka di jendela ini`,
-  uploadName: ({ title }) => `Unggah PDF, ${title}`,
+  uploadName: ({ title }) => `Unggah file, ${title}`,
   replaceName: ({ title }) => `Ganti, ${title}`,
   opening: 'Membuka…',
   linkFailed: 'Tidak dapat membuka PDF ini.',
@@ -143,6 +177,34 @@ const id: MessagesOf<typeof en> = {
   tooLarge: ({ name, size, max }) => `“${name}” berukuran ${size}. Ukuran PDF maksimal ${max} MB.`,
   notPdf: ({ name }) => `“${name}” bukan PDF atau halaman HTML. Hanya PDF atau halaman HTML yang dapat diunggah di sini.`,
   sendFailed: ({ name }) => `“${name}” tidak selesai diunggah. Periksa koneksi Anda, lalu coba lagi.`,
+
+  readyLine: `materi siap · dipakai agent di ${kept('Recruitment')} › ${kept('Pitch Materials')}`,
+  readyName: ({ ready, total }) => `${ready} dari ${total} materi siap`,
+  ready: 'Siap',
+  needsCheck: 'Perlu dicek',
+  uploadFile: 'Unggah file',
+  replaceFile: 'Ganti file',
+  useLink: 'Pakai link',
+  changeLink: 'Ganti link',
+  anyFormat: 'Format apa saja: PDF, PowerPoint, Word, gambar, video, atau link',
+  fileLine: ({ name, day }) => `${name} · ${day}`,
+  linkLine: ({ day }) => `Link · ${day}`,
+  actionsFor: ({ title }) => `Lainnya untuk ${title}`,
+  viewMaterialName: ({ title }) => `Lihat ${title}: file, daftar cek, dan link-nya`,
+  linkTitle: ({ title }) => `Link untuk ${title}`,
+  linkLabel: 'Alamat (https://)',
+  linkHint: 'Video yang terlalu besar untuk diunggah, atau folder bersama. Agent membukanya di tab baru.',
+  linkSaved: ({ title }) => `Link untuk ${title} tersimpan.`,
+  notPitchFormat: ({ name }) =>
+    `“${name}” bukan format materi pitch. Unggah PDF, PowerPoint, Word, gambar, atau video — atau berikan link.`,
+  tooLargeAny: ({ name, size, max }) =>
+    `“${name}” berukuran ${size}. Ukuran file maksimal ${max} MB — berikan video yang lebih besar sebagai link.`,
+  openLink: 'Buka link',
+  openLinkName: ({ title }) => `Buka link, ${title} — terbuka di tab baru`,
+  download: 'Unduh',
+  downloadName: ({ title }) => `Unduh, ${title}`,
+  viewFile: 'Lihat file',
+  viewFileName: ({ title }) => `Lihat file, ${title} — terbuka di tab baru`,
 };
 
 export const recruitmentPitchMessages = defineMessages({ en, id });

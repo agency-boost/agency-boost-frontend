@@ -2,6 +2,14 @@ import { api } from './api-client';
 import { brandingFileUrl } from './branding-files';
 import type { BrandingPalette, SessionBranding } from './session';
 import { signedUploadForm, type SignedUpload } from './signed-upload';
+import { setSystemName } from '@/i18n/system-name';
+
+/**
+ * **The session's branding with its *Nama sistem*** (P19.21-T4 AC-1; ADR-0274): `GET /auth/me`'s `branding.systemName`,
+ * `null` for *AgencyBoost*. Widened here rather than on `SessionBranding`, whose module the shell owns; absent reads as
+ * `null`.
+ */
+export type NamedBranding = SessionBranding & { systemName?: string | null };
 
 /**
  * **A KPM's branding in the browser** (P19.6-T1; ADR-0218 §6, §8, §10). The API derives every colour
@@ -98,6 +106,7 @@ export function clearBranding(): void {
   }
   applyPalette(null);
   applyBrandLinks(null);
+  setSystemName(null);
 }
 
 // ----------------------------------------------------------------- the favicon, the touch icon, the manifest (§10)
@@ -138,10 +147,12 @@ export function applyBrandLinks(branding: SessionBranding | null | undefined): v
 }
 
 /** Everything the session's branding sets in the document: the palette, the links, and the cache for the next paint. */
-export function applySessionBranding(branding: SessionBranding | null | undefined): void {
+export function applySessionBranding(branding: NamedBranding | null | undefined): void {
   applyPalette(branding?.palette ?? null);
   applyBrandLinks(branding ?? null);
   writeBrandingCache(branding ?? null);
+  // P19.21-T4 (ADR-0274): every message `useMessages` resolves says the KPM's name where it says AgencyBoost.
+  setSystemName(branding?.systemName ?? null);
 }
 
 // ----------------------------------------------------------------- the API (`functional/branding.md`, Data contract)
@@ -157,7 +168,7 @@ export interface BrandingView {
 export interface BrandingSettings {
   own: BrandingView | null;
   template: BrandingView | null;
-  shown: SessionBranding & { source: { logos: 'own' | 'template' | null; colours: 'own' | 'template' | null; mascot: 'own' | 'template' | null } };
+  shown: NamedBranding & { source: { logos: 'own' | 'template' | null; colours: 'own' | 'template' | null; mascot: 'own' | 'template' | null } };
   version: number;
   canWrite: boolean;
 }
@@ -179,6 +190,8 @@ export interface SaveBranding {
   primary: string | null;
   secondary: string | null;
   mascot: { default: string; poses: Record<string, string> } | null;
+  /** *Nama sistem* (P19.21-T4): `null` clears it — the app is called AgencyBoost again. Absent keeps it. */
+  systemName?: string | null;
   expectedVersion: number;
 }
 export interface PublicBranding {
@@ -186,6 +199,8 @@ export interface PublicBranding {
   version: string | null;
   palette: BrandingPalette | null;
   logo: { width: number; height: number } | null;
+  /** *Nama sistem* (P19.21-T4): what a KPM's link calls the app; `null` or absent is AgencyBoost. */
+  systemName?: string | null;
 }
 
 /** Where a page's pictures go: the KPM's own settings, or a template's *Tampilan* (`company_template:write`). */

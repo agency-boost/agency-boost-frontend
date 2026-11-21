@@ -24,7 +24,8 @@ import { flattenTraining } from '@/lib/training-view';
 import { TRAINING_DESCRIPTION_MAX } from '@/lib/training-text';
 import { CHECK_LINE_TOUCH, TEXT_BUTTON_TOUCH } from '../../settings-touch';
 
-const BACK = '/kpm/settings/training#modules';
+// P19.25-T4: one tree, no tabs — back to the tree itself (ADR-0282 §1).
+const BACK = '/kpm/settings/training';
 
 /** A value with nothing to show: a mark, not a word. */
 const NONE = '—';

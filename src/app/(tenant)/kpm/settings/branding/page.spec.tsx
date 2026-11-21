@@ -1,7 +1,9 @@
 import { act, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { axe } from 'vitest-axe';
 import { InLanguage, makeMe, renderWithSession, stubFetch } from '@test/harness';
+import { formatRupiahCompact } from '@/lib/format';
 import BrandingPage from './page';
 
 vi.mock('next/navigation', () => ({
@@ -56,13 +58,25 @@ afterEach(() => {
 });
 
 describe('P19.6-T1 /kpm/settings/branding — Tampilan KPM', () => {
-  it('P19.6-T1 AC-2 the Owner sees the five fields, the preview, Simpan and Kembalikan ke default', async () => {
+  it('P19.21-T4 AC-2 P19.6-T1 AC-2 the Owner sees the six rows, the preview, Simpan and Kembalikan ke default', async () => {
     stubFetch({ '/kpm/settings/branding': { body: OWN }, 'POST /kpm/settings/branding/preview': { body: PREVIEW } });
     renderWithSession(<InLanguage language="id"><BrandingPage /></InLanguage>, { me: OWNER });
     expect(await screen.findByRole('heading', { name: 'Tampilan KPM' })).toBeInTheDocument();
-    for (const label of ['Logo', 'Logo (persegi, opsional)', 'Warna utama', 'Warna kedua', 'Maskot']) {
+    // Frame 24's rows, in its order, each with its line.
+    const rows = [...document.querySelectorAll('[data-row]')].map((r) => r.getAttribute('data-row'));
+    expect(rows).toEqual(['system-name', 'image-logo', 'image-logo_square', 'image-mascot', 'colour', 'colour']);
+    for (const [label, line] of [
+      ['Nama sistem', 'Menggantikan tulisan "AgencyBoost" di aplikasi KPM ini'],
+      ['Logo', 'PNG/JPG/SVG ≤ 1 MB · tinggi 32 px di navbar'],
+      ['Logo persegi', 'PNG 512 × 512 · ikon & favicon'],
+      ['Maskot', 'PNG transparan ≥ 512 px · menggantikan Boost'],
+      ['Warna utama', 'Tombol, tab aktif, progress bar'],
+      ['Warna kedua', 'Kartu header, chip, badge'],
+    ]) {
       expect(screen.getAllByText(label).length).toBeGreaterThan(0);
+      expect(screen.getByText(line)).toBeInTheDocument();
     }
+    expect(screen.getAllByRole('button', { name: /Pilih file|Ganti/ }).length).toBe(3);
     expect(screen.getAllByDisplayValue('#0a6e5c').length).toBeGreaterThan(0);
     expect(screen.getByRole('region', { name: 'Pratinjau langsung' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Simpan' })).toBeEnabled();
@@ -138,7 +152,7 @@ describe('P19.6-T1 /kpm/settings/branding — Tampilan KPM', () => {
     await waitFor(() => expect(saved).toHaveBeenCalled());
     expect(saved.mock.calls[0][0]).toEqual({
       logo: { key: 'dev/k/branding/01JC0000000000000000000001' }, logoSquare: null,
-      primary: '#0a6e5c', secondary: '#1b2b4b', mascot: null, expectedVersion: 3,
+      primary: '#0a6e5c', secondary: '#1b2b4b', mascot: null, systemName: null, expectedVersion: 3,
     });
   });
 
@@ -177,5 +191,113 @@ describe('P19.6-T1 /kpm/settings/branding — Tampilan KPM', () => {
     await waitFor(() => expect(save).toBeEnabled(), { timeout: 4000 });
     await act(async () => { await userEvent.click(save); });
     expect(await screen.findByRole('status')).toHaveTextContent('Someone else saved this page');
+  });
+});
+
+describe('P19.21-T4 /kpm/settings/branding — Nama sistem and the live phone', () => {
+  const NAMED = { ...OWN, shown: { ...SHOWN, systemName: 'Dynamic Smart System' } };
+  const BRANCH_OWNER = makeMe({
+    membership: { ...membership, office: { branch: 'BSD City Branch' } } as never,
+    permissions: ['tenant_config:read', 'tenant_config:write'],
+    user: { fullName: 'Wilson Tanoto', preferredName: null } as never,
+  });
+
+  it('P19.21-T4 AC-1 shows the saved name in Nama sistem, and the phone’s header names the app and the branch', async () => {
+    stubFetch({ '/kpm/settings/branding': { body: NAMED }, 'POST /kpm/settings/branding/preview': { body: PREVIEW } });
+    renderWithSession(<InLanguage language="id"><BrandingPage /></InLanguage>, { me: BRANCH_OWNER });
+    expect(await screen.findByLabelText('Nama sistem')).toHaveValue('Dynamic Smart System');
+    expect(document.querySelector('[data-preview-part="name"]')).toHaveTextContent('Dynamic Smart System');
+    expect(document.querySelector('[data-preview-part="header"]')).toHaveTextContent('BSD City Branch');
+  });
+
+  it('P19.21-T4 AC-2 the phone changes as the name is typed, and reads AgencyBoost when it is emptied', async () => {
+    stubFetch({ '/kpm/settings/branding': { body: OWN }, 'POST /kpm/settings/branding/preview': { body: PREVIEW } });
+    renderWithSession(<InLanguage language="id"><BrandingPage /></InLanguage>, { me: OWNER });
+    const field = await screen.findByLabelText('Nama sistem');
+    expect(field).toHaveValue('');
+    expect(field).toHaveAttribute('placeholder', 'AgencyBoost');
+    expect(field).toHaveAttribute('maxLength', '40');
+    expect(document.querySelector('[data-preview-part="name"]')).toHaveTextContent('AgencyBoost');
+    await userEvent.type(field, 'Dynamic Smart System');
+    expect(document.querySelector('[data-preview-part="name"]')).toHaveTextContent('Dynamic Smart System');
+    await userEvent.clear(field);
+    expect(document.querySelector('[data-preview-part="name"]')).toHaveTextContent('AgencyBoost');
+  });
+
+  it('P19.21-T4 AC-1 Simpan sends the name trimmed, and null for an emptied one', async () => {
+    const saved = vi.fn();
+    stubFetch({
+      '/kpm/settings/branding': { body: NAMED },
+      'PUT /kpm/settings/branding': (req) => { saved(req.body); return { body: { ...NAMED, version: 4 } }; },
+      'POST /kpm/settings/branding/preview': { body: PREVIEW },
+      '/auth/me': { body: OWNER },
+    });
+    renderWithSession(<InLanguage language="id"><BrandingPage /></InLanguage>, { me: OWNER });
+    const field = await screen.findByLabelText('Nama sistem');
+    await userEvent.clear(field);
+    await userEvent.type(field, '  DSS  ');
+    const save = screen.getByRole('button', { name: 'Simpan' });
+    await waitFor(() => expect(save).toBeEnabled(), { timeout: 4000 });
+    await userEvent.click(save);
+    await waitFor(() => expect(saved).toHaveBeenCalledTimes(1));
+    expect(saved.mock.calls[0][0]).toMatchObject({ systemName: 'DSS', expectedVersion: 3 });
+    await userEvent.clear(screen.getByLabelText('Nama sistem'));
+    await userEvent.click(screen.getByRole('button', { name: 'Simpan' }));
+    await waitFor(() => expect(saved).toHaveBeenCalledTimes(2));
+    expect(saved.mock.calls[1][0]).toMatchObject({ systemName: null });
+  });
+
+  it('P19.21-T4 AC-2 the phone draws the status bar, header, target card, three tiles, the main button and the bottom bar, its figures called an example', async () => {
+    stubFetch({ '/kpm/settings/branding': { body: OWN }, 'POST /kpm/settings/branding/preview': { body: PREVIEW } });
+    renderWithSession(<InLanguage language="id"><BrandingPage /></InLanguage>, { me: BRANCH_OWNER });
+    await screen.findByLabelText('Nama sistem');
+    for (const part of ['status', 'header', 'card', 'tiles', 'button', 'nav']) {
+      expect(document.querySelector(`[data-preview-part="${part}"]`)).not.toBeNull();
+    }
+    const phone = screen.getByRole('region', { name: 'Pratinjau langsung' });
+    expect(phone).toHaveTextContent('Selamat pagi,');
+    expect(phone).toHaveTextContent('Wilson');
+    expect(phone).toHaveTextContent('Target bulan ini');
+    // The shared formatter's compact rupiah, as every summary writes it (ADR-0240).
+    expect(phone).toHaveTextContent(formatRupiahCompact(59_700_000_000, {}, 'id'));
+    expect(phone).toHaveTextContent('87% dari target');
+    expect(phone).toHaveTextContent('Catat aktivitas');
+    expect(screen.getByText('Warna dan nama berubah langsung saat Anda mengetik · Angka contoh')).toBeInTheDocument();
+  });
+
+  it('P19.21-T4 AC-1 a reader without tenant_config:write sees the name disabled, and no Simpan', async () => {
+    stubFetch({ '/kpm/settings/branding': { body: { ...NAMED, canWrite: false } }, 'POST /kpm/settings/branding/preview': { body: PREVIEW } });
+    renderWithSession(<InLanguage language="id"><BrandingPage /></InLanguage>, { me: makeMe({ membership, permissions: ['tenant_config:read'] }) });
+    expect(await screen.findByLabelText('Nama sistem')).toBeDisabled();
+    expect(screen.queryByRole('button', { name: 'Simpan' })).toBeNull();
+  });
+
+  it('P19.21-T4 AC-1 a refusal of the name is shown in the API’s words', async () => {
+    stubFetch({
+      '/kpm/settings/branding': { body: OWN },
+      'PUT /kpm/settings/branding': { status: 400, body: { error: { code: 'VALIDATION_FAILED', message: 'Nama sistem paling panjang 40 karakter.', details: { field: 'systemName' } } } },
+      'POST /kpm/settings/branding/preview': { body: PREVIEW },
+    });
+    renderWithSession(<InLanguage language="id"><BrandingPage /></InLanguage>, { me: OWNER });
+    const save = await screen.findByRole('button', { name: 'Simpan' });
+    await waitFor(() => expect(save).toBeEnabled(), { timeout: 4000 });
+    await userEvent.click(save);
+    expect(await screen.findByText('Nama sistem paling panjang 40 karakter.')).toBeInTheDocument();
+  });
+
+  it('P19.21-T4 AC-2 shows a skeleton shaped like the two cards while it reads, and the error when the read fails', async () => {
+    stubFetch({ '/kpm/settings/branding': { status: 500, body: { error: { code: 'INTERNAL', message: 'Server error' } } } });
+    renderWithSession(<InLanguage language="id"><BrandingPage /></InLanguage>, { me: OWNER });
+    expect(document.querySelector('[aria-busy="true"]')).not.toBeNull();
+    expect(await screen.findByText('Server error')).toBeInTheDocument();
+    expect(document.querySelector('[aria-busy="true"]')).toBeNull();
+  });
+
+  it('P19.21-T4 AC-2 is clean under axe, populated', async () => {
+    stubFetch({ '/kpm/settings/branding': { body: NAMED }, 'POST /kpm/settings/branding/preview': { body: PREVIEW } });
+    const { container } = renderWithSession(<InLanguage language="id"><BrandingPage /></InLanguage>, { me: BRANCH_OWNER });
+    await screen.findByLabelText('Nama sistem');
+    const results = await axe(container, { rules: { 'color-contrast': { enabled: false } } });
+    expect(results.violations).toEqual([]);
   });
 });

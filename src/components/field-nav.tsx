@@ -18,7 +18,7 @@ import type { FieldDestination } from '@/lib/field-nav';
  *
  * Built once here and drawn by `AppShell` when the field shell passes it `field`; a page sets only its title row's
  * control and which of its sub-lines to hide, through `PageHeader` (`Page`). **The chrome's context, the title row's
- * avatar, its view menu and Home's bell are `field-chrome.tsx`'s** (the bundle, 2026-11-06): every page's header draws
+ * avatar and Home's bell are `field-chrome.tsx`'s** (the bundle, 2026-11-06): every page's header draws
  * them, and none of it needs the tab bar.
  */
 
@@ -117,7 +117,8 @@ export function TabBar({ chrome }: { chrome: FieldChrome }) {
             aria-label={surveyDot ? `${t.more}${t.surveyWaiting}` : undefined}
             className={cn('flex h-full w-full min-w-0 items-center justify-center', surveyDot && 'relative')}
           >
-            <TabFace icon="grid" label={t.more} current={open || chrome.nav.inSheet} />
+            {/* P19.17-T3 (part E; the phone mockups' bar: *Lainnya, layout-grid*): Tabler's, as the four tabs' are. */}
+            <TabFace icon="ti-layout-grid" label={t.more} current={open || chrome.nav.inSheet} />
             {/* P19.5-T4 (C-R2): the red dot while a survey the reader was invited to waits, open and not sent. */}
             {surveyDot && (
               <span

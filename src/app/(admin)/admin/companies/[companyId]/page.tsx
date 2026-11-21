@@ -1,112 +1,102 @@
 'use client';
 
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { use, useEffect, useState } from 'react';
-import { CompanyFrame, useCompany } from '@/components/kpm-template/company-frame';
-import { NewTemplateDialog } from '@/components/kpm-template/new-template-dialog';
-import { TemplateCard } from '@/components/kpm-template/template-card';
-import { Button, ErrorBanner } from '@/components/ui/field';
+import { CompanyFrame, useCompany, useCompanyName } from '@/components/kpm-template/company-frame';
 import { EmptyState } from '@/components/ui/empty-state';
+import { Button, ErrorBanner } from '@/components/ui/field';
 import { LineIcon } from '@/components/ui/line-icon';
-import { Skeleton, SkeletonBar } from '@/components/ui/skeleton';
-import { listTemplates, type NamedTemplate } from '@/lib/admin';
+import { RowMenu } from '@/components/ui/rows-and-sheets';
+import { SkeletonCards } from '@/components/ui/skeleton';
+import { listOrgLevels, type OrgLevel } from '@/lib/admin';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
-import { templateHref } from '@/lib/template-sections';
 import { useMessages } from '@/i18n/language-provider';
-import { adminTemplateMessages } from '@/i18n/messages/admin-template';
+import { adminCompaniesConsoleMessages } from '@/i18n/messages/admin-companies-console';
+
+/** Where a rung is changed: the ladder editor, this company chosen (`?company=`). */
+const editorHref = (companyId: string) => `/admin/org-levels?company=${companyId}`;
 
 /**
- * **A company's page, tab *Template KPM*** (ADR-0185 §2; P18.11-T20 AC-1): a card per template — the default first,
- * then the others, then the archived — and *Template baru*. Opening a card opens its checklist. **A new company has
- * none** (ADR-0213 §3, B1-8): the page says so and opens on *+ Template baru*, whose first template is the default.
+ * **A company's page, tab *Jenjang*** (`/admin/companies/[companyId]`; P19.23-T4 AC-2; ADR-0278 §1; frame 29): the
+ * company's active rungs junior first — *1. Agent*, *2. AAB*, *3. AB* — each with its tier on a pill (*Bukan leader*,
+ * *Leader · Associate*, *Leader · Senior*) and ⋯, then *+ Tambah jenjang*, and the line *Urutan dari yang paling junior ·
+ * dipakai semua KPM {company}*.
  *
- * Super Admin only: `company_template:read` to see it, and the API refuses every tenant role whatever this renders.
+ * **A rung is changed on the ladder editor** (`/admin/org-levels`, ADR-0168 §3), this company chosen: ⋯'s *Ubah* and *+
+ * Tambah jenjang* open it there, where the label, the tier, archiving and deleting keep their checks (a tier a member
+ * holds, a rung something names, a version somebody else saved). The drag handle is not drawn: the API keeps no reorder
+ * of a ladder. Parity I-1191.
  */
-export default function CompanyPage({ params }: { params: Promise<{ companyId: string }> }) {
+export default function CompanyLadderPage({ params }: { params: Promise<{ companyId: string }> }) {
   const { companyId } = use(params);
-  const t = useMessages(adminTemplateMessages).card;
+  const t = useMessages(adminCompaniesConsoleMessages);
   const router = useRouter();
   const company = useCompany(companyId);
-  const [templates, setTemplates] = useState<NamedTemplate[] | null>(null);
+  const name = useCompanyName(company);
+  const [rungs, setRungs] = useState<OrgLevel[] | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [attempt, setAttempt] = useState(0);
-  const [creating, setCreating] = useState(false);
 
   useEffect(() => {
     let live = true;
-    setTemplates(null);
     setError(null);
-    void listTemplates(companyId)
-      .then((rows) => { if (live) setTemplates(rows); })
+    void listOrgLevels(companyId)
+      .then((rows) => {
+        if (live) setRungs(rows.filter((r) => r.status === 'active').sort((a, b) => a.displayOrder - b.displayOrder));
+      })
       .catch((err) => { if (live) setError(toDisplayError(err)); });
     return () => { live = false; };
   }, [companyId, attempt]);
 
-  const newTemplate = (
-    <Button className="gap-1" onClick={() => setCreating(true)}>
-      <LineIcon name="plus" className="h-4 w-4" />
-      {t.newTemplate}
-    </Button>
-  );
-
-  // The default first, then the active by name, then the archived — the API's order, kept.
-  const ordered = templates
-    ? [...templates.filter((x) => x.status === 'active'), ...templates.filter((x) => x.status === 'archived')]
-    : null;
+  const tierOf = (r: OrgLevel) => (r.leaderTier === 'senior' ? t.ladder.senior
+    : r.leaderTier === 'associate' ? t.ladder.associate : t.ladder.notLeader);
 
   return (
-    <CompanyFrame companyId={companyId} company={company} permission="company_template:read">
+    <CompanyFrame companyId={companyId} company={company} permission="company_template:read" active="ladder">
       {error && (
-        <div className="mb-4 flex flex-col gap-2">
+        <div className="flex flex-col gap-2">
           <ErrorBanner {...error} />
           <Button variant="secondary" className="self-start" onClick={() => setAttempt((n) => n + 1)}>{t.retry}</Button>
         </div>
       )}
-
-      {!error && ordered === null && <CardsSkeleton label={t.loading} />}
-
-      {/* A new company has none (ADR-0213 §3, B1-8): the page opens on *+ Template baru*, its one way on. */}
-      {ordered?.length === 0 && (
+      {!error && rungs === null && <SkeletonCards count={3} label={t.ladder.caption} />}
+      {rungs?.length === 0 && (
         <div className="rounded-lg border border-card-edge bg-card">
-          <EmptyState boost="thinking" title={t.none} action={newTemplate} />
+          <EmptyState title={t.ladder.empty} action={<AddRung companyId={companyId} />} />
         </div>
       )}
-
-      {ordered && ordered.length > 0 && (
-        <ul aria-label={t.list} className="flex flex-col gap-3">
-          {ordered.map((template) => (
-            <li key={template.id}><TemplateCard companyId={companyId} template={template} /></li>
-          ))}
-        </ul>
+      {rungs && rungs.length > 0 && (
+        <>
+          <div className="overflow-hidden rounded-lg border border-card-edge bg-card">
+            <ol aria-label={t.ladder.caption} className="[&>li+li]:border-t [&>li+li]:border-divider">
+              {rungs.map((r, i) => (
+                <li key={r.orgLevelId} data-rung={r.code} className="flex min-h-12 items-center gap-3 px-4 py-2">
+                  <span className="min-w-0 flex-1 text-md font-bold text-navy">{`${i + 1}. ${r.label}`}</span>
+                  <span className="rounded-pill bg-pill-grey px-2.5 py-0.5 text-sm font-semibold text-navy">{tierOf(r)}</span>
+                  <RowMenu
+                    name={t.ladder.menu({ rung: r.label })}
+                    items={[{ label: t.ladder.edit, onSelect: () => router.push(editorHref(companyId)) }]}
+                  />
+                </li>
+              ))}
+            </ol>
+            <div className="border-t border-divider px-4 py-2"><AddRung companyId={companyId} /></div>
+          </div>
+          <p className="mt-2 text-sm text-muted">{t.ladder.note({ company: name })}</p>
+        </>
       )}
-
-      {ordered && ordered.length > 0 && <div className="mt-4">{newTemplate}</div>}
-
-      <NewTemplateDialog
-        open={creating}
-        companyId={companyId}
-        onClose={() => setCreating(false)}
-        onCreated={(made) => {
-          setCreating(false);
-          router.push(templateHref(companyId, made.id));
-        }}
-      />
     </CompanyFrame>
   );
 }
 
-/** The cards on their way: a name, a pill and the line under them, as each card draws them. */
-function CardsSkeleton({ label }: { label: string }) {
+/** *+ Tambah jenjang*: the ladder editor, this company chosen. */
+function AddRung({ companyId }: { companyId: string }) {
+  const t = useMessages(adminCompaniesConsoleMessages).ladder;
   return (
-    <Skeleton label={label}>
-      <div className="flex flex-col gap-3">
-        {[0, 1].map((i) => (
-          <div key={i} className="rounded-lg border border-card-edge bg-card px-5 py-4">
-            <SkeletonBar className="h-5 w-48" />
-            <SkeletonBar className="mt-2 w-64 max-w-full" />
-          </div>
-        ))}
-      </div>
-    </Skeleton>
+    <Link href={editorHref(companyId)} className="inline-flex min-h-10 items-center gap-1 text-md font-bold text-primary-ink">
+      <LineIcon name="plus" className="h-4 w-4" />
+      {t.add}
+    </Link>
   );
 }

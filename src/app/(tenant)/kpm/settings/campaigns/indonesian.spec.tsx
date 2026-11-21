@@ -9,9 +9,9 @@ import { settingsCampaignsMessages } from '@/i18n/messages/settings-campaigns';
 import CampaignsSettingsPage from './page';
 
 /**
- * **Settings › Campaigns in Indonesian** (P18.10-T4 AC-1 to AC-4, events, campaigns and the calendar): the campaigns'
- * rows with their phase and requirements, the panel with its requirement rows, and the carrier's tiers and MOC with the
- * line saying whose they are. The approved glossary's words, the title, tabs, *Target* and the metrics' names kept (§A),
+ * **Pengaturan › Campaigns in Indonesian** (P18.10-T4 AC-1 to AC-4; P19.25-T5 AC-1): the filter *Semua · Struktural ·
+ * Musiman*, the rows with their tag, their requirements and their dates, the notes, and the form with its requirement
+ * rows — no tiers and no MOC since P19.25-T5. The approved glossary's words, the title, tabs, *Target* and the metrics' names kept (§A),
  * what the office and the company typed as typed, and none of the module's English left. English is `page.spec.tsx`'s.
  */
 vi.mock('next/navigation', () => ({
@@ -37,26 +37,11 @@ const campaign = (over: Record<string, unknown> = {}) => ({
   reward: 'Extra unit budget', status: 'active', version: 1, kind: 'seasonal', subtype: null, window: 'campaign_dates',
   appliesToOrgLevelCodes: [], poster: { emoji: '⭐', color: 'amber' }, blurb: 'The last push of the year.', ...over,
 });
-const tier = {
-  id: 't1', kind: 'production_club', code: 'STAR_CLUB', name: 'Star Club', appliesToOrgLevelCodes: [],
-  criteriaGroups: [{ mode: 'all', criteria: [{ metricKey: 'APE_ACHIEVED', metricName: 'APE achieved', comparator: 'gte', value: 120_000_000_000, unit: 'idr_minor' }] }],
-  groupMode: 'all', reward: 'Promotion bonus', rank: 1, waitingOnMetrics: [],
-};
-const moc = {
-  id: 'm1', kind: 'moc', code: 'MOC_AB', name: 'Maintenance of Contract — AB', appliesToOrgLevelCodes: ['AB'],
-  criteriaGroups: [
-    { mode: 'all', criteria: [{ metricKey: 'NET_APE', metricName: 'NET_APE', comparator: 'gte', value: 60_000_000_000, unit: 'idr_minor' }] },
-    { mode: 'all', criteria: [{ metricKey: 'DIRECT_AB_COUNT', metricName: 'DIRECT_AB_COUNT', comparator: 'gte', value: 5, unit: 'count' }] },
-  ],
-  groupMode: 'any', reward: '', rank: 1, waitingOnMetrics: ['NET_APE', 'DIRECT_AB_COUNT'],
-};
-
 const ENGLISH = englishOnly(settingsCampaignsMessages, settingsMessages, campaignsMessages);
 const noEnglishLeft = () => expect(englishShown(document.body, ENGLISH)).toEqual([]);
 
 function render(campaigns: unknown[] = [campaign()]) {
   stubFetch({
-    '/kpm/settings/campaigns/rules': { body: [tier, moc] },
     '/kpm/settings/campaigns': { body: campaigns },
     '/metrics': { body: [{ key: 'APE_ACHIEVED', name: 'APE achieved', unit: 'idr_minor', phase: '9', computed: true, campaign: true }] },
     '/kpm/settings/publish-state': {
@@ -69,25 +54,38 @@ function render(campaigns: unknown[] = [campaign()]) {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('P18.10-T4 Settings › Campaigns in Indonesian', () => {
-  it('P18.10-T4 AC-1 to AC-4 a campaign’s row: phase, KPM ini, requirements in words, its prize as typed', async () => {
+  it('P18.10-T4 AC-1 to AC-4, P19.25-T5 AC-1 a campaign’s row: its tag, its requirements in words, its dates', async () => {
     render();
     expect(await screen.findByText('Year-End Star Club Drive')).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 1, name: 'Campaigns' })).toBeInTheDocument();
-    for (const name of ['Campaigns', 'Production club tiers']) expect(screen.getByRole('link', { name })).toBeInTheDocument();
-    expect(screen.getByText('Berjalan')).toBeInTheDocument();
-    expect(screen.getByText('KPM ini')).toBeInTheDocument();
-    // The metric's name as served (§A.4), the comparison Indonesian, the figure the reader's.
-    expect(screen.getByText('APE achieved minimal Rp 500 Jt')).toBeInTheDocument();
-    expect(screen.getByText(/^Net APE kurang dari Rp 600 Jt/)).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Production club tiers' })).toBeNull();
+    expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['Semua 1', 'Struktural 0', 'Musiman 1']);
+    expect(screen.getByText('Musiman', { selector: 'span' })).toBeInTheDocument();
+    // The metric's name as served (§A.4), the comparison Indonesian, the figure the reader's; the office's dates.
+    expect(screen.getByText('APE achieved minimal Rp 500 Jt + Net APE kurang dari Rp 600 Jt · 1 Okt – 31 Des 2026')).toBeInTheDocument();
     expect(screen.getByText('Belum diukur')).toBeInTheDocument();
-    expect(screen.getByText('Hadiah: Extra unit budget')).toBeInTheDocument();
+    expect(screen.getByText('Struktural = berlaku terus (jenjang, MDRT)')).toBeInTheDocument();
+    expect(screen.getByText('Musiman = ada tanggal mulai dan selesai')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Tambah campaign' })).toBeInTheDocument();
+    noEnglishLeft();
+  });
+
+  it('P19.25-T5 AC-1 a Struktural campaign in Indonesian: setiap tahun, sepanjang tahun', async () => {
+    render([
+      campaign({ id: 'c2', title: 'MDRT Qualification', kind: 'structural', window: 'calendar_year', endsAt: null, requirements: [] }),
+      campaign({ id: 'c3', title: 'Kenaikan jenjang AAB → AB', kind: 'structural', window: 'rolling_12m', endsAt: null, requirements: [] }),
+    ]);
+    await screen.findByText('MDRT Qualification');
+    expect(screen.getByText('setiap tahun')).toBeInTheDocument();
+    expect(screen.getByText('sepanjang tahun')).toBeInTheDocument();
+    expect(screen.getAllByText('Struktural', { selector: 'span' })).toHaveLength(2);
     noEnglishLeft();
   });
 
   it('P18.10-T4 AC-1 the panel and its requirement rows, the money field’s mark the reader’s', async () => {
     render();
-    await userEvent.click(await screen.findByRole('button', { name: 'Ubah' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Lainnya untuk Year-End Star Club Drive' }));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Ubah' }));
     for (const label of ['Judul', 'Kode', 'Jenis', 'Mulai', 'Selesai', 'Emoji poster', 'Warna poster', 'Kalimat kartu', 'Deskripsi', 'Hadiah']) {
       expect(screen.getByLabelText(label)).toBeInTheDocument();
     }
@@ -101,20 +99,6 @@ describe('P18.10-T4 Settings › Campaigns in Indonesian', () => {
     expect(screen.getByRole('button', { name: 'Hapus syarat 1' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '+ Tambah syarat' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Simpan campaign' })).toBeInTheDocument();
-    noEnglishLeft();
-  });
-
-  it('P18.10-T4 AC-1 the carrier’s tiers and MOC: whose they are, the rules in words, what they wait on', async () => {
-    render();
-    await screen.findByText('Year-End Star Club Drive');
-    await userEvent.click(screen.getByRole('link', { name: 'Production club tiers' }));
-    expect(await screen.findByText('Ini milik perusahaan asuransi Anda, bukan milik KPM Anda.')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { level: 2, name: 'Maintenance of Contract' })).toBeInTheDocument();
-    // A company's tier and rule names as typed; a group joined by *atau*.
-    expect(screen.getByText('Star Club')).toBeInTheDocument();
-    expect(screen.getByText(/^atau/)).toBeInTheDocument();
-    expect(screen.getByText('Belum ada yang mengukur NET_APE, DIRECT_AB_COUNT, jadi aturan ini belum dapat dihitung. Tidak ada yang ditebak di sini.'))
-      .toBeInTheDocument();
     noEnglishLeft();
   });
 

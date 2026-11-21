@@ -45,8 +45,11 @@ export const unitPeriods = (language: Language = SOURCE_LANGUAGE): readonly { id
 
 export const UNIT_PERIODS: readonly { id: UnitPeriod; label: string }[] = unitPeriods();
 
-/** *This month* is selected first (`:3896`), and an address with no period, or one it does not know, reads it. */
-export const DEFAULT_PERIOD: UnitPeriod = 'month';
+/**
+ * ***Tahun ini* is selected first** (P19.18-T1 AC-1; ADR-0271 §1; the brief of 19 November 2026, part A), and an address
+ * with no period, or one it does not know, reads it. It was *This month* (`:3896`).
+ */
+export const DEFAULT_PERIOD: UnitPeriod = 'year';
 
 export function periodFrom(value: string | string[] | null | undefined): UnitPeriod {
   const one = Array.isArray(value) ? value[0] : value;
@@ -54,12 +57,13 @@ export function periodFrom(value: string | string[] | null | undefined): UnitPer
 }
 
 /**
- * **The three views** (the client's message of 11 November 2026, item 7; ADR-0249): *Grup langsung*, *Grup informal*,
- * *Semua downline* — the API's `scope` enum, in the picker's order, which the screen puts in its address. The views
- * offered and the default are the server's (`scopes`); the screen never decides them.
+ * **The four views** (the client's message of 11 November 2026, item 7; ADR-0249; P19.18-T1 AC-2, ADR-0271 §2): ***Direct
+ * Unit***, *Grup langsung*, *Grup informal*, *Semua downline* — the API's `scope` enum, in the picker's order, which the
+ * screen puts in its address. The views offered and the default are the server's (`scopes`); the screen never decides
+ * them.
  */
-export type UnitView = 'direct' | 'informal' | 'downline';
-export const UNIT_VIEWS: readonly UnitView[] = ['direct', 'informal', 'downline'];
+export type UnitView = 'unit' | 'direct' | 'informal' | 'downline';
+export const UNIT_VIEWS: readonly UnitView[] = ['unit', 'direct', 'informal', 'downline'];
 
 /** `?scope=` as the address carries it: one of the three, or `null` — the reader's stored choice, then the default. */
 export function viewFrom(value: string | string[] | null | undefined): UnitView | null {
@@ -196,6 +200,23 @@ export interface FollowUp {
   overdueDays: number | null;
 }
 
+/**
+ * ***The coaching status tile*** on a row (P19.18-T1 AC-8, AC-9; ADR-0267 §5, `COACHING_STATUS`): the server's status — red
+ * *Belum pernah coaching*, green *Coaching n hari lalu* up to 14 days, yellow after — the reader's own row included.
+ */
+export interface UnitCoachingStatus {
+  status: 'never' | 'recent' | 'lapsed';
+  /** `DAYS_SINCE_LAST_COACHING`; `null` for *Belum pernah coaching*. */
+  days: number | null;
+  coach: UnitPerson | null;
+}
+
+/** A person's leads by type: *Leads sales n · Leads rekrut n*, and the person card's *n potensi*. */
+export interface UnitLeadsByType {
+  sales: number;
+  recruitment: number;
+}
+
 export interface UnitRow {
   membershipId: string;
   name: string;
@@ -233,6 +254,14 @@ export interface UnitRow {
   activity: UnitActivity;
   /** Coaching's own reading; `null` for *No 1:1 yet*, and on the reader's own row. */
   lastOneOnOne: LastOneOnOne | null;
+  /** `COACHING_STATUS` (P19.18-T1 AC-8): the tile under the bar on a tablet and a laptop, and in the person card. */
+  coaching: UnitCoachingStatus;
+  /** *Leads sales n · Leads rekrut n* (P19.18-T1 AC-8): their leads registered within the period, by type. */
+  periodLeads: UnitLeadsByType;
+  /** The person card's *n potensi* (AC-9): their leads switched on for the office's month and still open. */
+  potensi: UnitLeadsByType;
+  /** The person card's *Aktivitas · 7 hari terakhir* (AC-9): every activity they logged in the last 7 days. */
+  activity7d: number;
   status: RosterStatus;
   /** `PACING_TO_MAA`: the ✓. `null` without a target. */
   pacingToMaa: boolean | null;
@@ -278,14 +307,52 @@ export interface PotentialActive {
   of: number;
 }
 
+/** One person behind *Active Agent* (P19.18-T1 AC-4): who, their unit on the roster, and the month's APE and policies. */
+export interface UnitActiveAgent {
+  membershipId: string;
+  name: string;
+  photoUrl: string | null;
+  /** The roster's unit they sit in, by its leader — *Unit Anda* when `isReader` — or `null` under *Belum punya leader*. */
+  unit: UnitActiveAgentUnit | null;
+  apeMinor: number | null;
+  policies: number | null;
+}
+
+export interface UnitActiveAgentUnit {
+  membershipId: string;
+  name: string;
+  isReader: boolean;
+}
+
 /**
- * *Active Agent*'s tile (UI-013): out of manpower, with its *Unit* (head + direct agents), *AAB* (the rest of the head's
- * *Grup langsung*) and *AB* (everybody outside it; none in *Grup langsung* — ADR-0249 §3) split.
+ * ***Active Agent · {Bulan}*** (P19.18-T1 AC-3, AC-4; ADR-0267 §2): from the uploaded production — APE above 0 or a policy
+ * in the office's current month — and the people behind it. `count` is `null` while the month is not uploaded: drawn as
+ * *–*, never 0.
  */
-export interface ActiveAgentTile extends PotentialActive {
-  unit: PotentialActive;
-  aab: PotentialActive;
-  ab: PotentialActive;
+export interface ActiveAgentTile {
+  month: string;
+  held: boolean;
+  count: number | null;
+  people: UnitActiveAgent[];
+}
+
+/** One new hire behind *Recruitment* (P19.18-T1 AC-4): who, who registered them, and the day they joined. */
+export interface UnitRecruit {
+  membershipId: string;
+  name: string;
+  photoUrl: string | null;
+  recruitedBy: UnitPerson | null;
+  joinDate: string;
+}
+
+/**
+ * ***Recruitment · {Bulan}*** (P19.18-T1 AC-3, AC-4; ADR-0267 §3): the new hires who joined in the office's current month,
+ * credited to somebody on the roster — never a candidate.
+ */
+export interface RecruitmentTile {
+  month: string;
+  count: number;
+  people: UnitRecruit[];
 }
 
 export interface UnitTotal {
@@ -328,18 +395,11 @@ export interface GroupProductionTile extends UnitTotalGoal {
   period: 'month' | 'year';
 }
 
-export interface RecruitsTile {
-  yourUnit: number;
-  aabs: number;
-  /** The rows outside the head's *Grup langsung*; 0 there. */
-  abs: number;
-}
-
 export interface UnitTiles {
   team: TeamTile;
   directGroupProduction: GroupProductionTile;
-  potentialActive: ActiveAgentTile;
-  potentialRecruits: RecruitsTile;
+  activeAgent: ActiveAgentTile;
+  recruitment: RecruitmentTile;
 }
 
 export interface UnitHead {
@@ -389,6 +449,11 @@ export interface UnitDashboardView {
    * a save that names this unit.
    */
   readOnly: boolean;
+  /**
+   * **A person's card before their profile** (P19.18-T1 AC-9; ADR-0271 §6): the reader runs the whole office — the KPM Owner
+   * or an Admin. Anybody else's tap goes straight to the Personal Summary, as before.
+   */
+  personCard: boolean;
   tiles: UnitTiles;
   yourUnit: YourUnit;
   units: UnitGroup[];
@@ -998,8 +1063,15 @@ export function splitMoney(text: string): { value: string; unit: string | null }
 /** A goal's share as a bar's width, 0–100, from the server's percentage, or `null` with nothing to draw (`goalBar`). */
 export const goalShare = goalBar;
 
-/** Green from 100%, red under it (UI-005: *% colour follows the 100% rule only*), judged on the unrounded value. */
+/** From 100% the goal is met (UI-005: *% colour follows the 100% rule only*), judged on the unrounded value. */
 export const goalMet = (attainmentPct: number) => attainmentPct >= 100;
+
+/**
+ * **A progress's colour** (P19.18-T1 AC-5; ADR-0271 §4; the brief of 19 November 2026: *"no red on progress (too
+ * glaring)"*): the primary navy below 100%, green from 100% — the %, the bar, on rows, unit headers, team lines and the
+ * person card. It was red under 100% (UI-005, ADR-0229 §3).
+ */
+export const progressTone = (attainmentPct: number): 'navy' | 'green' => (goalMet(attainmentPct) ? 'green' : 'navy');
 
 
 /*

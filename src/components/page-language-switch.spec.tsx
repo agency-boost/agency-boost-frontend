@@ -9,6 +9,8 @@ import { PersonIdentity } from './coaching-person';
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
   usePathname: () => '/admin/billing',
+  // P19.23-T5: *Langganan & akses* reads its tab from the query.
+  useSearchParams: () => new URLSearchParams(),
 }));
 
 const SECTIONS: readonly NavSection[] = [{ label: null, items: [{ label: 'Overview', href: '/admin', icon: 'gauge' }] }];
@@ -22,17 +24,23 @@ const SUPER_ADMIN = makeMe({
   user: { ...makeMe().user, platformRole: 'super_admin' }, membership: null, permissions: ['billing:read_prices'],
 });
 const rp = (major: number) => major * 100;
-/** The quote tool's price table, as `GET /admin/billing/prices` serves it. */
+/** *Langganan & akses*' price list, as `GET /admin/billing/prices` serves it (P19.23-T5; ADR-0279 §1). */
 const PRICES = {
   currency: 'IDR',
-  annualDiscountPct: 5,
   tiers: [
-    { code: 'TIER_1_10', minLeaders: 1, maxLeaders: 10, standardMinor: rp(500_000), sixMonthMinor: rp(400_000), annualMinor: rp(380_000), customPricing: false },
-    { code: 'TIER_11_20', minLeaders: 11, maxLeaders: 20, standardMinor: rp(475_000), sixMonthMinor: rp(375_000), annualMinor: rp(356_250), customPricing: false },
-    { code: 'TIER_21_50', minLeaders: 21, maxLeaders: 50, standardMinor: rp(450_000), sixMonthMinor: rp(350_000), annualMinor: rp(332_500), customPricing: false },
-    { code: 'TIER_51_100', minLeaders: 51, maxLeaders: 100, standardMinor: rp(425_000), sixMonthMinor: rp(300_000), annualMinor: rp(285_000), customPricing: false },
-    { code: 'TIER_101_PLUS', minLeaders: 101, maxLeaders: null, standardMinor: rp(375_000), sixMonthMinor: rp(250_000), annualMinor: rp(237_500), customPricing: true },
+    { code: 'TIER_1_10', minLeaders: 1, maxLeaders: 10, standardMinor: rp(500_000), offerMinor: rp(400_000), customPricing: false },
+    { code: 'TIER_11_20', minLeaders: 11, maxLeaders: 20, standardMinor: rp(475_000), offerMinor: rp(375_000), customPricing: false },
+    { code: 'TIER_101_PLUS', minLeaders: 101, maxLeaders: null, standardMinor: null, offerMinor: null, customPricing: true },
   ],
+  annualDiscountPct: 5, trialDays: 30, graceDays: 7, endingSoonDays: 30, daysPerMonth: 30, perDayRoundingMinor: rp(100),
+  bulkPercentMax: 100, noteMax: 500, kpmNameMax: 120, countMax: 10_000, rateMaxMinor: rp(100_000_000),
+  breakEven: { policyApeMinor: rp(20_000_000), commissionPct: 20, overridingPct: 10, bonusPct: 10, incomePerPolicyMinor: rp(8_000_000) },
+};
+/** *Langganan per KPM*, empty. */
+const NO_KPMS = {
+  summary: { monthlyRevenueMinor: 0, payingKpms: 0, leadersBilled: 0, endingSoon: 0, needsAction: 0, kpms: 0 },
+  total: { kpms: 0, leadersUsed: 0, weightedRateMinor: null, perMonthMinor: 0, periodTotalMinor: 0, needsAction: 0 },
+  rows: [],
 };
 const switchIn = (el: HTMLElement) => within(el).queryByRole('group', { name: /^(Language|Bahasa)$/ });
 
@@ -49,7 +57,7 @@ afterEach(() => {
 describe('P19.2-T1 AC-11 no switch on a page that draws its own header (P18.10-T2 AC-3 reversed)', () => {
   it('P19.2-T1 AC-11 Billing & subscription’s title carries no ID | EN, live', async () => {
     atWidth(1280);
-    stubFetch({ '/admin/billing/prices': { body: PRICES }, '/admin/billing/kpms': { body: [] } });
+    stubFetch({ '/admin/billing/prices': { body: PRICES }, '/admin/billing/kpms': { body: NO_KPMS } });
     renderLive(inShell(<BillingPage />), { me: SUPER_ADMIN });
 
     await screen.findByRole('heading', { level: 1 });
@@ -58,7 +66,7 @@ describe('P19.2-T1 AC-11 no switch on a page that draws its own header (P18.10-T
 
   it('P19.2-T1 AC-11 Billing carries none while the switch is not live either', async () => {
     atWidth(1280);
-    stubFetch({ '/admin/billing/prices': { body: PRICES }, '/admin/billing/kpms': { body: [] } });
+    stubFetch({ '/admin/billing/prices': { body: PRICES }, '/admin/billing/kpms': { body: NO_KPMS } });
     renderWithSession(inShell(<BillingPage />), { me: SUPER_ADMIN });
 
     await screen.findByRole('heading', { level: 1 });

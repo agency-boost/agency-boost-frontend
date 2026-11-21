@@ -6,6 +6,7 @@ import { SOURCE_LANGUAGE, type Language } from '@/i18n/language';
 import { coachingMessages, ENGLISH_PRONOUNS } from '@/i18n/messages/coaching';
 import { api } from './api-client';
 import { joinInFlight } from './in-flight';
+import { scopeQuery, type TeamView, type TeamViews } from './team-view-query';
 import type { RatioDisplayUnit } from './ratio-format';
 
 /**
@@ -65,28 +66,82 @@ export interface RosterRow {
   /** `null` until their first finalized session: *No 1:1 yet*. */
   lastOneOnOne: LastOneOnOne | null;
   status: RosterStatus;
+  /** `COACHING_STATUS` (P19.18-T5 AC-2; ADR-0267 §5): the tile, and *oleh {coach}* under it. */
+  coaching: RosterCoachingStatus;
+  /** The WhatsApp number on their account; `null` without one, on the reader's own row and for a leaver. */
+  phone: string | null;
+  /** The reader's own row (*ANDA*): it opens *Catatan coaching saya*. */
+  isReader: boolean;
+  /** The row opens their *Coaching Session*: somebody the reader coaches. The whole office lists some who do not. */
+  opens: boolean;
 }
 
-/** A direct report on a leader rung, and their whole subtree in tree order, beneath them. */
-export interface RosterUnit {
-  head: RosterRow;
-  /** A nested head is followed by its own members, one level deeper. Names A to Z within a level. */
-  members: RosterRow[];
+/** `COACHING_STATUS` as the roster sends it (ADR-0267 §5): never, within 14 days, or longer ago — and who coached. */
+export interface RosterCoachingStatus {
+  status: 'never' | 'recent' | 'lapsed';
+  /** `DAYS_SINCE_LAST_COACHING`; `null` for *Belum pernah coaching*. */
+  days: number | null;
+  coach: RosterPerson | null;
 }
 
-/** `GET /coaching/coachees`: everyone the reader coaches (ADR-0074), grouped as the prototype groups them. */
+/** A unit line's or a team line's leader: their name and photo. */
+export interface RosterLeader {
+  membershipId: string;
+  name: string;
+  photoUrl: string | null;
+}
+
+/** A team inside a unit (P19.18-T5 AC-2): an AAB with people, drawn as a team line — never a nested folder. */
+export interface RosterTeam {
+  key: string;
+  leader: RosterLeader;
+  /** *n orang*: the team's leader and their people. */
+  count: number;
+  /** The team's leader first, then AB → AAB → agents. */
+  rows: RosterRow[];
+}
+
+/**
+ * **One unit of the roster** (P19.18-T5 AC-2; ADR-0271 §9): *Unit Anda* (`own`: the reader and their direct reports who
+ * lead nobody and are no AB), an AB's unit — never called AAB — or *Belum punya leader* (`unled`).
+ */
+export interface RosterSection {
+  key: string;
+  kind: 'own' | 'unit' | 'unled';
+  /** The orange line's photo and name; `null` for *Belum punya leader*. */
+  leader: RosterLeader | null;
+  /** *n orang*: everybody in it, its teams included. */
+  count: number;
+  rows: RosterRow[];
+  teams: RosterTeam[];
+}
+
+/**
+ * `GET /coaching/coachees` (P19.18-T5; ADR-0271 §9): everyone the reader coaches — for the KPM Owner or an Admin the whole
+ * office — in the Unit Dashboard's views, grouped as its roster: *Unit Anda*, then each unit with its team lines.
+ */
 export interface Roster {
   /** The office's today, `YYYY-MM-DD`. */
   today: string;
   /** The office's `coachingOverdueDays`. */
   overdueAfterDays: number;
-  /** The reader's direct reports on the agent rung. */
-  directAgents: RosterRow[];
-  units: RosterUnit[];
+  /** The view answered: *Semua downline* unless narrowed. */
+  scope: TeamView;
+  scopes: TeamViews;
+  /** *Semua orang · n*: everybody on the roster, the reader included. */
+  total: number;
+  sections: RosterSection[];
 }
 
-/** The reader's roster. A reader who coaches nobody gets an empty one, not an error. Not paginated. */
-export const readRoster = () => api<Roster>('/coaching/coachees');
+/**
+ * The reader's roster, in `scope` when one is chosen (*Semua downline ⌄*; the server's default otherwise). A reader who
+ * coaches nobody gets an empty one, not an error. Not paginated. Appended with `+`: the API-consumer gate reads literals.
+ */
+export const readRoster = (scope: TeamView | null = null) => api<Roster>('/coaching/coachees' + scopeQuery(scope));
+
+/** Everybody on a roster, in the order drawn: each section's rows, then its teams'. */
+export const rosterRows = (roster: Pick<Roster, 'sections'>): RosterRow[] =>
+  roster.sections.flatMap((s) => [...s.rows, ...s.teams.flatMap((t) => t.rows)]);
 
 /** The pill's words, verbatim (`Overall.html:10624`), and ADR-0080's *No goal set*: the catalogue's English. */
 export const ROSTER_STATUS_LABEL: Record<RosterStatus, string> = wordsIn(SOURCE_LANGUAGE).status;

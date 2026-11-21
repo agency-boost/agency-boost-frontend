@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { makeMe, renderWithSession } from '@test/harness';
 import { Page } from './page';
 import { RequireSession } from './require-session';
+import { enterKpm, leaveKpm } from '@/lib/super-admin-kpm';
 
 const replace = vi.fn();
 vi.mock('next/navigation', () => ({
@@ -39,7 +40,7 @@ describe('RequireSession', () => {
    * out themselves (`signedOut`) goes to plain sign-in; any other end of the session still carries the page.
    */
   describe('when the session ends (2026-10-11)', () => {
-    const COMPLIANCE = '/kpm/analytics/compliance?category=training';
+    const COMPLIANCE = '/kpm/data-upload?month=2026-10';
     const at = (path: string, run: () => void) => {
       window.history.pushState({}, '', path);
       replace.mockClear();
@@ -52,7 +53,7 @@ describe('RequireSession', () => {
 
     it('a reader who signed out themselves goes to plain sign-in, carrying no page', () => {
       at(COMPLIANCE, () => {
-        renderWithSession(<RequireSession permission="kpm_analytics:read">secret</RequireSession>, {
+        renderWithSession(<RequireSession permission="data_upload:read">secret</RequireSession>, {
           me: null, loading: false, signedOut: true,
         });
         expect(replace.mock.calls).toEqual([['/login']]);
@@ -61,21 +62,21 @@ describe('RequireSession', () => {
 
     it('ADR-0168 §1 a session that ended under the reader carries the page and says so: reason=expired', () => {
       at(COMPLIANCE, () => {
-        renderWithSession(<RequireSession permission="kpm_analytics:read">secret</RequireSession>, {
+        renderWithSession(<RequireSession permission="data_upload:read">secret</RequireSession>, {
           me: null, loading: false, expired: true,
         });
         expect(replace.mock.calls).toEqual([
-          ['/login?next=%2Fkpm%2Fanalytics%2Fcompliance%3Fcategory%3Dtraining&reason=expired'],
+          ['/login?next=%2Fkpm%2Fdata-upload%3Fmonth%3D2026-10&reason=expired'],
         ]);
       });
     });
 
     it('an involuntary end — an expired session, a link opened signed out — still carries the page', () => {
       at(COMPLIANCE, () => {
-        renderWithSession(<RequireSession permission="kpm_analytics:read">secret</RequireSession>, {
+        renderWithSession(<RequireSession permission="data_upload:read">secret</RequireSession>, {
           me: null, loading: false, signedOut: false,
         });
-        expect(replace.mock.calls).toEqual([['/login?next=%2Fkpm%2Fanalytics%2Fcompliance%3Fcategory%3Dtraining']]);
+        expect(replace.mock.calls).toEqual([['/login?next=%2Fkpm%2Fdata-upload%3Fmonth%3D2026-10']]);
       });
     });
   });
@@ -115,9 +116,34 @@ describe('RequireSession', () => {
     it('asks it before the permission: a reader of another family is not refused here, but sent on', () => {
       replace.mockClear();
       renderWithSession(<RequireSession family="admin" permission="kpm:list_all">secret</RequireSession>, { me: OWNER });
-      // Their own landing: Home, where an Owner signs in since P19.2-T1 (UI-169 item 1).
-      expect(replace.mock.calls).toEqual([['/home']]);
+      // Their own landing: the KPM Overview, where an Owner signs in since P19.17-T3 (AC-8; ADR-0269 §6).
+      expect(replace.mock.calls).toEqual([['/kpm/overview']]);
       expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    });
+
+    /*
+     * Found 2026-11-20: a Super Admin inside a KPM who opened *Buka profil* (`/coaching/:id/summary`, a member's page) or
+     * the Unit Dashboard was refused here and sent to `/admin`, whose page leaves the KPM — out of it, never asked.
+     */
+    it('keeps a Super Admin inside a KPM in it: a member’s page sends them to the KPM’s own page, never the Dashboard', () => {
+      const kpmId = '66f0000000000000000002a1';
+      const superAdmin = makeMe({
+        user: {
+          id: 'u-root', email: 'root@agencyboost.test', fullName: 'Root', preferredName: null,
+          pronoun: 'they', initials: 'R', platformRole: 'super_admin',
+        },
+        membership: null,
+        permissions: ['kpm:list_all', 'member:read_profile'],
+      });
+      replace.mockClear();
+      enterKpm(kpmId);
+      try {
+        renderWithSession(<RequireSession family="agent">secret</RequireSession>, { me: superAdmin });
+        expect(replace.mock.calls).toEqual([[`/admin/tenants/${kpmId}`]]);
+        expect(screen.queryByText('secret')).not.toBeInTheDocument();
+      } finally {
+        leaveKpm();
+      }
     });
 
     it('leaves a password that must be replaced to its own redirect', () => {

@@ -1,6 +1,7 @@
 import { screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { surveyMessages } from '@/i18n/messages/surveys';
+import { surveyAnalyticsMessages } from '@/i18n/messages/surveys-analytics';
 import type { Me } from '@/lib/session';
 import { resetPending } from '@/lib/surveys';
 import { englishOnly, englishShown } from '@test/english-left';
@@ -33,11 +34,16 @@ const RUN = {
   answeredCount: 1, totalCount: 6, minutes: 3, anonymous: true, notice: 'anonymous',
 };
 const RESULTS = {
-  kind: 'nps', today: '2026-11-05', visible: true, sectionOn: true, canWrite: true, audience: 'office',
+  kind: 'nps', today: '2026-11-05', visible: true, sectionOn: true, canWrite: true, audience: 'office', who: 'all',
   template: { cadence: 'quarter', qualMonths: [6, 12], defaults: { anonymous: true, perPerson: false, remindHalfway: true } },
-  runs: [{ ...RUN, state: 'open', invitedRoleClasses: ['agent'], perPerson: false, remindHalfway: true, responses: { sent: 0, invited: 4, pct: 0 } }],
+  runs: [{
+    ...RUN, state: 'open', invitedRoleClasses: ['agent'], perPerson: false, remindHalfway: true,
+    responses: { sent: 0, invited: 4, pct: 0, leaders: 0, agents: 0 }, headlineScore: null,
+  }],
   selected: null,
+  send: { periodKey: '2026-Q4', opensOn: '2026-11-05', closesOnMax: '2026-12-31', invitable: 4, run: null, notAnswered: null, preview: [], minutes: 1 },
 };
+const ANALYTICS_ENGLISH = englishOnly(surveyAnalyticsMessages);
 
 /**
  * **The surveys in Indonesian** (P19.5-T4; ADR-0179 §7): the *Survei* page, the form, the coaching *Survei* tab and the
@@ -90,8 +96,11 @@ describe('P19.5-T4 the surveys in Indonesian', () => {
   ] as const)('%s', async (_route, Page, kind) => {
     stubFetch({ [`/kpm/advanced-analytics/${kind}`]: { body: { ...RESULTS, kind } } });
     renderInIndonesian(<Page />, { me: OWNER });
-    expect(await screen.findByText('Periode survei')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Mulai survei' })).toBeInTheDocument();
+    // P19.22-T6, T7 (ADR-0276): *Hasil | Survei baru*, and no survey sent in a period yet.
+    expect(await screen.findByRole('button', { name: 'Hasil' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Survei baru' })).toBeInTheDocument();
+    expect(screen.getByText('Belum ada survei yang dikirim. Buka Survei baru untuk mengirim yang pertama.')).toBeInTheDocument();
     expect(englishShown(document.body, ENGLISH)).toEqual([]);
+    expect(englishShown(document.body, ANALYTICS_ENGLISH)).toEqual([]);
   });
 });

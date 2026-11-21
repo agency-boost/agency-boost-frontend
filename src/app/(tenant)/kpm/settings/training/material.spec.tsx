@@ -1,4 +1,4 @@
-import { screen, within } from '@testing-library/react';
+import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { axe } from 'vitest-axe';
@@ -62,11 +62,10 @@ describe('P19.4-T1 the office’s Training settings: its material', () => {
     },
   );
 
-  it('P19.4-T1 AC-5 the count stays on Modules, after its filters', async () => {
+  it('P19.4-T1 AC-5, P19.25-T4 AC-1 the count stays beside the tree’s path, Category › Skill › Module', async () => {
     render();
     await screen.findByText('3 / 4 modules have material');
-    await userEvent.click(within(screen.getByRole('navigation', { name: 'Training sections' })).getByRole('link', { name: 'Modules' }));
-    expect(screen.getByText('3 / 4 modules have material')).toBeInTheDocument();
+    expect(screen.getByText('3 / 4 modules have material').parentElement).toHaveTextContent('Category › Skill › Module · 3 / 4 modules have material');
   });
 
   it('P19.4-T1 AC-5 in Indonesian', async () => {

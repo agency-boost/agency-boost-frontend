@@ -86,11 +86,12 @@ describe('P18.10-T4 the Campaign List in Indonesian', () => {
     noEnglishLeft();
   });
 
-  it('P18.10-T4 AC-1 the structural view: Kriteria promosi, Klub produksi, a held chase’s reason', async () => {
+  it('P18.10-T4 AC-1, P19.25-T5 AC-1 the structural view: one Struktural section, no Klub produksi, a held chase’s reason', async () => {
     list();
     await screen.findByRole('region', { name: 'Berjalan' });
     await userEvent.click(screen.getByRole('tab', { name: 'Struktural' }));
-    for (const name of ['Kriteria promosi', 'Klub produksi']) expect(screen.getByRole('region', { name })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Struktural' })).toBeInTheDocument();
+    expect(screen.queryByText(/Klub produksi|Kriteria promosi/)).toBeNull();
     const promo = cardOf('Promotion: Agent → AAB');
     // *Jalur promosi* and the status tag are the detail's since P19.1-T5 (UI-108's compact card).
     expect(promo).toHaveTextContent(/Rp 1,2 M APE.* \+ 3 agen aktif baru/);
@@ -173,7 +174,7 @@ describe('P18.10-T4 lib/campaigns.ts in each language', () => {
     expect(progressWords(row, undefined, 'id')?.text).toBe('Rp 620 Jt dari Rp 500 Jt');
     expect(progressWords({ ...row, state: 'nothing_logged' }, undefined, 'id')?.text).toBe('Belum ada yang tercatat');
     expect(seasonalSections(LIST.campaigns, 'all', 'id').map((s) => s.heading)).toEqual(['Berjalan', 'Akan datang', 'Berakhir']);
-    expect(structuralSections(LIST.campaigns, 'id').map((s) => s.heading)).toEqual(['Kriteria promosi', 'Klub produksi']);
+    expect(structuralSections(LIST.campaigns, 'id').map((s) => s.heading)).toEqual(['Struktural']);
     expect([statusWords(CHALLENGE, 'id'), kindLabel({ kind: 'structural', subtype: 'promotion', phase: 'running' }, 'id')])
       .toEqual(['Akan datang', 'Jalur promosi']);
     expect([chasedToast('X', 'id'), unchasedToast('X', 'id')]).toEqual(['Sekarang mengejar "X"', '"X" dihapus dari daftar kejaran Anda']);

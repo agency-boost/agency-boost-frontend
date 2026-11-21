@@ -134,6 +134,10 @@ export const pairIn = (pair: LabelPair | null | undefined, language: 'id' | 'en'
 
 // --------------------------------------------------------------------------------------- the KPM's tabs
 
+/** *Semua · Leader · Agent* (P19.22-T6 AC-1, T7 AC-1; ADR-0276 §3): the leaders are the ABs and the AABs. */
+export type SurveyWho = 'all' | 'leader' | 'agent';
+export const SURVEY_WHO: readonly SurveyWho[] = ['all', 'leader', 'agent'];
+
 export interface RunView {
   runId: string;
   kind: SurveyKind;
@@ -145,34 +149,119 @@ export interface RunView {
   anonymous: boolean;
   perPerson: boolean;
   remindHalfway: boolean;
-  responses: { sent: number; invited: number; pct: number | null };
+  /** *x dari y menjawab · n leader · n agent*. */
+  responses: { sent: number; invited: number; pct: number | null; leaders: number; agents: number };
+  /** *Survei sebelumnya*'s *NPS x%*; `null` for a qualitative run or under the floor. */
+  headlineScore: number | null;
+}
+
+/** A quote with its writer's class, or `null` where that would name them (ADR-0276 §3). */
+export interface SurveyQuote {
+  text: string;
+  who: 'leader' | 'agent' | null;
+}
+
+export interface NpsShares {
+  promoterPct: number;
+  passivePct: number;
+  detractorPct: number;
+}
+
+/** The *Keseluruhan KPM* card, or one question's row. */
+export interface NpsLine {
+  kode: string;
+  text: LabelPair;
+  aspect: string;
+  score: number | null;
+  n: number;
+  /** In *poin*. */
+  change: number | null;
+  textChanged: boolean;
+  shares: NpsShares | null;
+  /** Oldest first, this run last; a hidden run `null`. */
+  trend: (number | null)[];
+  reasons: SurveyQuote[] | null;
 }
 
 export interface NpsResults {
-  cutoffs: { promoterMin: number; passiveMin: number; ageBandUpper: [number, number]; tenureBands: [number, number, number] };
+  cutoffs: { promoterMin: number; passiveMin: number };
+  who: SurveyWho;
+  whoShown: boolean;
   respondents: number;
-  /** `null` for an anonymous run under three respondents, as are every score, change and the open answers (ADR-0216 §3). */
-  overall: { score: number | null; promoters: number; passives: number; detractors: number; n: number } | null;
-  change: number | null;
-  aspects: { aspect: string; score: number | null; n: number; change: number | null }[];
-  questions: { kode: string; text: LabelPair; aspect: string; score: number | null; n: number; change: number | null; textChanged: boolean }[];
-  openAnswers: string[] | null;
-  breakdowns: Record<'roleClass' | 'tenureBand' | 'ageBand', { key: string; respondents: number; score: number | null }[]>;
+  headline: NpsLine | null;
+  /** Lowest score first. */
+  questions: NpsLine[];
+  trendPeriods: string[];
+  /** The open question's answers: what the respondents would improve. */
+  improve: SurveyQuote[] | null;
+}
+
+export interface QualRow {
+  questionKode: string;
+  itemKode: string;
+  label: LabelPair;
+  kind: 'rating' | 'state';
+  answers: number;
+  issuePct: number | null;
+  severity: 'big' | 'watch' | null;
+  previousPct: number | null;
+  trend: 'worse' | 'better' | 'same' | null;
+  /** *D*: *tidak nyaman x%*. */
+  comfortPct: number | null;
+}
+
+export interface QualBlockResult {
+  kode: string;
+  title: LabelPair;
+  audience: 'all' | 'leader';
+  questionKodes: string[];
+  asked: boolean;
+  respondents: number;
+  rows: QualRow[];
 }
 
 export interface QualResults {
+  who: SurveyWho;
+  whoShown: boolean;
   respondents: number;
-  cutoffs: { qualIssueMaxRating: number };
-  blocks: {
-    kode: string; title: LabelPair; audience: 'all' | 'leader'; questionKodes: string[];
-    items: {
-      questionKode: string; itemKode: string; label: LabelPair; kind: 'rating' | 'state' | 'comfort'; answers: number;
-      issues: number | null; issuePct: number | null; severity: 'big' | 'watch' | null;
-    }[];
+  cutoffs: { qualIssueMaxRating: number; supportPromMin: number; supportPasMin: number };
+  profile: {
+    workStatus: { fullTime: number; partTime: number; unknown: number } | null;
+    tenure: { counts: number[]; unknown: number; bands: [number, number, number] } | null;
+  };
+  aspiration: { kode: string; label: LabelPair; pct: number | null; leaderPct: number | null; agentPct: number | null }[];
+  aspirationNotes: SurveyQuote[] | null;
+  blocks: QualBlockResult[];
+  support: {
+    rater: 'agent' | 'leader'; n: number; average: number | null; satisfiedPct: number | null; fairPct: number | null;
+    poorPct: number | null;
   }[];
-  aspiration: { kode: string; label: LabelPair; count: number | null; pct: number | null }[];
-  support: { n: number; satisfiedPct: number | null; fairPct: number | null; poorPct: number | null } | null;
-  coachingDownline: { n: number; pct: number | null; good: boolean | null };
+  coachingDownline: {
+    asked: boolean; n: number; yes: number | null; pct: number | null; good: boolean | null;
+    rows: { leaderId: string; uplineId: string; leaderName: string; uplineName: string; areas: string[]; independent: boolean }[] | null;
+  };
+  voices: SurveyQuote[] | null;
+}
+
+/** One line of *Pratinjau survei*. */
+export interface PreviewLine {
+  kodes: string[];
+  text: LabelPair;
+  type: string;
+  audience: 'all' | 'leader';
+  items: number;
+}
+
+/** ***Survei baru*** (ADR-0276 §2). */
+export interface SendView {
+  periodKey: string;
+  opensOn: string;
+  closesOnMax: string;
+  invitable: number;
+  run: RunView | null;
+  notAnswered: { membershipId: string; name: string; roleClass: RoleClass }[] | null;
+  preview: PreviewLine[];
+  minutes: number;
 }
 
 export interface SurveyResults {
@@ -182,9 +271,11 @@ export interface SurveyResults {
   sectionOn: boolean;
   canWrite: boolean;
   audience: 'office' | 'core_leader' | 'summary';
+  who: SurveyWho;
   template: { cadence: 'quarter' | 'half'; qualMonths: number[]; defaults: { anonymous: boolean; perPerson: boolean; remindHalfway: boolean } };
   runs: RunView[];
   selected: (RunView & { previousRunId: string | null; nps: NpsResults | null; qual: QualResults | null }) | null;
+  send: SendView;
 }
 
 export interface RunInput {
@@ -196,18 +287,77 @@ export interface RunInput {
   remindHalfway: boolean;
 }
 
-export function readResults(kind: SurveyKind, runId?: string, platformKpmId?: string) {
-  const run = encodeURIComponent(runId ?? '');
-  // P19.5-T3 AC-12 (ADR-0215 §9; A-R9): the Super Admin's *Lihat sebagai KPM* reads the same tab as a summary.
+/**
+ * The NPS or *Kualitatif* tab: `runId` (else the newest opened) in one view. P19.5-T3 AC-12: the Super Admin's *Lihat
+ * sebagai KPM* reads the same tab as a summary through the platform's route.
+ */
+export function readResults(kind: SurveyKind, runId?: string, platformKpmId?: string, who: SurveyWho = 'all') {
+  const query = [runId ? `runId=${encodeURIComponent(runId)}` : '', who !== 'all' ? `who=${who}` : ''].filter(Boolean).join('&');
   if (platformKpmId !== undefined) {
     const kpm = encodeURIComponent(platformKpmId);
-    return api<SurveyResults>(`/admin/tenants/${kpm}/advanced-analytics/${kind}?${runId ? `runId=${run}` : ''}`);
+    return api<SurveyResults>(`/admin/tenants/${kpm}/advanced-analytics/${kind}?${query}`);
   }
-  if (kind === 'nps') {
-    return runId ? api<SurveyResults>(`/kpm/advanced-analytics/nps?runId=${run}`) : api<SurveyResults>('/kpm/advanced-analytics/nps');
-  }
-  return runId ? api<SurveyResults>(`/kpm/advanced-analytics/qual?runId=${run}`) : api<SurveyResults>('/kpm/advanced-analytics/qual');
+  return kind === 'nps'
+    ? api<SurveyResults>(`/kpm/advanced-analytics/nps${query ? `?${query}` : ''}`)
+    : api<SurveyResults>(`/kpm/advanced-analytics/qual${query ? `?${query}` : ''}`);
 }
+
+/** One row of *Per orang* (P19.22-T7 AC-3). */
+export interface SurveyPersonRow {
+  membershipId: string;
+  name: string;
+  photoUrl: string | null;
+  roleClass: RoleClass;
+  upline: string | null;
+  groupId: string | null;
+  workStatus: 'full_time' | 'part_time' | null;
+  tenureYears: number | null;
+  age: number | null;
+  generation: number | null;
+  answered: boolean;
+  issues: number | null;
+  canOpen: boolean;
+  phone: string | null;
+}
+
+export interface SurveyPeople {
+  today: string;
+  audience: 'office' | 'core_leader' | 'summary';
+  runs: { runId: string; periodKey: string; state: 'scheduled' | 'open' | 'closed' }[];
+  run: { runId: string; periodKey: string; state: 'scheduled' | 'open' | 'closed'; anonymous: boolean; perPerson: boolean } | null;
+  answersShown: boolean;
+  groups: { groupId: string; name: string }[];
+  issueMaxRating: number | null;
+  people: SurveyPersonRow[] | null;
+}
+
+/** One person's answers, opened under their row. */
+export interface SurveyPersonAnswers {
+  membershipId: string;
+  runId: string;
+  roleClass: RoleClass;
+  person: { workStatus: 'full_time' | 'part_time' | null; tenureYears: number | null; age: number | null; generation: number | null };
+  issueMaxRating: number;
+  tiles: { kode: string; title: LabelPair; count: number; of: number }[];
+  aspiration: { kode: string; options: { kode: string; label: LabelPair; chosen: boolean }[]; note: string | null } | null;
+  sections: CoachingSection[];
+  /** Q12's score: the office's alone. */
+  support: { kode: string; score: number | null } | null;
+}
+
+export const readPeople = (runId?: string) =>
+  (runId
+    ? api<SurveyPeople>(`/kpm/advanced-analytics/qual/people?runId=${encodeURIComponent(runId)}`)
+    : api<SurveyPeople>('/kpm/advanced-analytics/qual/people'));
+
+export const readPersonAnswers = (membershipId: string, runId: string) =>
+  api<SurveyPersonAnswers>(
+    `/kpm/advanced-analytics/qual/people/${encodeURIComponent(membershipId)}?runId=${encodeURIComponent(runId)}`,
+  );
+
+/** *Leader* for an AB and an AAB, *Agent* for the rest: the class a quote or a row is tagged with. */
+export const isLeaderRole = (roleClass: RoleClass) => roleClass !== 'agent';
+
 export const startRun = (kind: SurveyKind, input: RunInput) =>
   api<RunView>('/kpm/advanced-analytics/surveys/runs', { method: 'POST', body: { kind, ...input } });
 export const changeRun = (runId: string, input: Partial<RunInput>) =>

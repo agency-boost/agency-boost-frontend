@@ -1,5 +1,6 @@
 import { api } from './api-client';
 import type { CalendarEntry, CalendarJoinedEvent, CalendarTask } from './calendar';
+import { scopeQuery, type TeamView, type TeamViews } from './team-view-query';
 
 /**
  * **Home** (UI V1, 2026-10-30, Phase 18.11 T11; UI-100, UI-101; `functional/home.md`): `GET /home`, every block of the
@@ -86,6 +87,19 @@ export interface HomeSplit {
   aab: HomeCountOf;
 }
 
+/**
+ * ***Active Agent*** (P19.18-T4 AC-1; ADR-0267 §2): the Unit Dashboard's number — **from the uploaded production** (APE or a
+ * policy this month), out of everybody in scope. `held` false while the month is not uploaded: the tile reads ***–***,
+ * never a 0 the upload has not said.
+ */
+export interface HomeActiveAgent {
+  count: number;
+  of: number;
+  unit: HomeCountOf;
+  aab: HomeCountOf;
+  held: boolean;
+}
+
 /** One person on *Laporan tim*. */
 export interface HomeTeamPerson {
   membershipId: string;
@@ -102,6 +116,40 @@ export interface HomeTeamPerson {
   /** The day's saved total, `null` for no saved day. */
   yesterday: number | null;
   today: number | null;
+  /**
+   * **The unit line they are listed under** (P19.18-T4 AC-2): on the whole office's list — the KPM Owner's or an Admin's —
+   * the key of their unit in `leader.office.units`; `null` on a leader's own list, which is not grouped.
+   */
+  unitKey: string | null;
+}
+
+/** A unit line's leader: their name and photo (a signed link; `null` draws initials). */
+export interface HomeTeamUnitLeader {
+  membershipId: string;
+  name: string;
+  photoUrl: string | null;
+}
+
+/**
+ * **One unit line of the whole office's *Laporan aktivitas tim*** (P19.18-T4 AC-2): an AB's unit — *Unit AGUS PRASETYO* —
+ * the reader's own (*Unit Anda*), or *Belum punya leader* (`leader: null`), in the roster's order.
+ */
+export interface HomeTeamUnit {
+  key: string;
+  leader: HomeTeamUnitLeader | null;
+  isReader: boolean;
+  /** Its people on the list, the reader left out. */
+  count: number;
+}
+
+/**
+ * **The whole office, for the KPM Owner or an Admin** (P19.18-T4; ADR-0271 §7; the brief's part B, gap 1): the view the team
+ * parts are over — *Semua downline* unless narrowed with *Semua downline ⌄* — the views offered, and the unit lines.
+ */
+export interface HomeOfficeTeam {
+  scope: TeamView;
+  scopes: TeamViews;
+  units: HomeTeamUnit[];
 }
 
 /** A rung as `GET /home` names it: its code on the company's ladder, and the company's label for it. */
@@ -116,10 +164,15 @@ export interface HomeRung {
  * `newHires` is the view's.*
  */
 export interface HomeLeader {
-  activeAgent: HomeSplit;
+  activeAgent: HomeActiveAgent;
   coached7d: HomeSplit;
-  /** *Laporan aktivitas tim*, in UI-101's order: nobody-reported first. */
+  /**
+   * *Laporan aktivitas tim*, in UI-101's order: nobody-reported first — or, on the whole office's list, in the roster's
+   * order, unit by unit (P19.18-T4 AC-2).
+   */
   team: HomeTeamPerson[];
+  /** The whole office for the KPM Owner or an Admin (P19.18-T4); `null` for every other leader, whose list is *Unit | Group*. */
+  office: HomeOfficeTeam | null;
 }
 
 export interface HomeView {
@@ -138,7 +191,12 @@ export interface HomeView {
   leader: HomeLeader | null;
 }
 
-export const readHome = () => api<HomeView>('/home');
+/**
+ * `GET /home`; with `scope` (P19.18-T4 AC-2), the view the KPM Owner or an Admin narrows the whole office's team parts to —
+ * ignored by the server for every other leader. Appended with `+`, never interpolated: the API-consumer gate reads path
+ * literals.
+ */
+export const readHome = (scope: TeamView | null = null) => api<HomeView>('/home' + scopeQuery(scope));
 
 /**
  * *Laporan aktivitas tim* shows five, then *Semua ›* (UI-101, MOB UI-165), which **opens the rest in place** (P19.9-T2
@@ -179,6 +237,32 @@ export type HomeScope = 'unit' | 'group';
 /** The list for a scope, in the server's order. The reader is never on it. */
 export function teamIn(team: readonly HomeTeamPerson[], scope: HomeScope): HomeTeamPerson[] {
   return scope === 'unit' ? team.filter((p) => p.inUnit) : [...team];
+}
+
+/**
+ * **The whole office's list, unit by unit** (P19.18-T4 AC-2): each unit line — in the server's order — with its people in
+ * the server's order (AB, AAB, then agents). `limit` keeps the first so many people, their unit lines with them, for the
+ * five shown before *Semua ›*; `null` keeps everybody. A line with nobody on it is left out, and somebody under no line
+ * the server named is listed last, under none.
+ */
+export function teamByUnit(
+  team: readonly HomeTeamPerson[], units: readonly HomeTeamUnit[], limit: number | null = null,
+): { unit: HomeTeamUnit | null; people: HomeTeamPerson[] }[] {
+  const known = new Set(units.map((u) => u.key));
+  const groups: { unit: HomeTeamUnit | null; people: HomeTeamPerson[] }[] = [
+    ...units.map((unit) => ({ unit, people: team.filter((p) => p.unitKey === unit.key) })),
+    { unit: null, people: team.filter((p) => p.unitKey === null || !known.has(p.unitKey)) },
+  ];
+  let left = limit ?? Number.POSITIVE_INFINITY;
+  const out: { unit: HomeTeamUnit | null; people: HomeTeamPerson[] }[] = [];
+  for (const group of groups) {
+    if (left <= 0) break;
+    const people = group.people.slice(0, left);
+    if (people.length === 0) continue;
+    out.push({ unit: group.unit, people });
+    left -= people.length;
+  }
+  return out;
 }
 
 /** Reported, as the pill draws it: above zero (the server's `reported`, `home-figures.ts`). */

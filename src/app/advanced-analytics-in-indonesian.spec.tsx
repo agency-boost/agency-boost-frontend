@@ -26,7 +26,7 @@ const OWNER: Me = makeMe({
 const ENGLISH = englishOnly(advancedAnalyticsPageMessages);
 const SHELL: Shell = {
   templateName: 'Prudential standar', version: 1, canWrite: true, canUpload: true,
-  sections: [{ kode: 'DEMOGRAPHICS', slug: 'demographics' }, { kode: 'QUANT', slug: 'quant' }, { kode: 'EVENTS', slug: 'events' }],
+  sections: [{ kode: 'DEMOGRAPHICS', slug: 'demographics' }, { kode: 'QUANT', slug: 'quant' }, { kode: 'SUBGROUP', slug: 'subgroup' }, { kode: 'EVENTS', slug: 'events' }],
 };
 const DEMOGRAPHICS = {
   month: '2026-11', ab: null, abs: [], manpower: 2,
@@ -35,6 +35,18 @@ const DEMOGRAPHICS = {
   gender: [{ key: 'male', count: 1 }, { key: 'female', count: 0 }, { key: 'unset', count: 1 }],
   ageBand: [{ key: 'gen_z', count: 1, from: 17, to: 29 }, { key: 'gen_y', count: 0, from: 30, to: 45 }, { key: 'gen_x', count: 0, from: 46, to: null }, { key: 'unset', count: 1 }],
   tenureBand: [{ key: '0', count: 2, from: null, to: 3 }, { key: 'unset', count: 0 }],
+  asOf: '2026-11-19',
+  summary: { manpower: 2, complete: 1, incomplete: 1, completePct: 50, incompletePct: 50 },
+  completeness: [
+    { field: 'workStatus', filled: 1, of: 2, pct: 50, leaderPct: null, agentPct: 50 },
+    { field: 'dateOfBirth', filled: 1, of: 2, pct: 50, leaderPct: null, agentPct: 50 },
+    { field: 'joinDate', filled: 2, of: 2, pct: 100, leaderPct: null, agentPct: 100 },
+  ],
+  members: [
+    { membershipId: 'm-1', name: 'Dewi Lestari', photoUrl: null, role: 'agent', agentCode: '1', uplineName: null, workStatus: null, ageBand: null, joinDate: '2024-01-01', missing: ['workStatus', 'dateOfBirth'], phone: null },
+  ],
+  left: 0,
+  canUpload: true,
 };
 
 /**
@@ -45,10 +57,12 @@ const DEMOGRAPHICS = {
 describe('P19.5-T3 Advanced analytics in Indonesian', () => {
   afterEach(() => { vi.unstubAllGlobals(); replace.mockClear(); });
 
-  it('/kpm/advanced-analytics opens the template’s first section', async () => {
+  it('/kpm/advanced-analytics opens the first tab; the tabs’ short labels (P19.22-T1)', async () => {
     stubFetch({ 'GET /kpm/advanced-analytics': { body: SHELL } });
     renderInIndonesian(<AdvancedAnalyticsLayout><AdvancedAnalyticsIndexPage /></AdvancedAnalyticsLayout>, { me: OWNER });
-    expect(await screen.findByText('Bagian mengikuti Prudential standar v1.')).toBeInTheDocument();
+    expect(await screen.findByRole('link', { name: 'Kuantitatif' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Informal group' })).toBeInTheDocument();
+    expect(screen.queryByText(/Analitik/)).toBeNull();
     await vi.waitFor(() => expect(replace).toHaveBeenCalledWith('/kpm/advanced-analytics/demographics'));
     expect(englishShown(document.body, ENGLISH)).toEqual([]);
   });
@@ -62,8 +76,8 @@ describe('P19.5-T3 Advanced analytics in Indonesian', () => {
       <AdvancedAnalyticsLayout><AdvancedAnalyticsSectionPage params={routeParams({ section: 'demographics' })} /></AdvancedAnalyticsLayout>,
       { me: OWNER },
     );
-    expect(await screen.findByText('Paruh waktu')).toBeInTheDocument();
-    expect(screen.getAllByText('Belum diisi').length).toBeGreaterThan(0);
+    expect(await screen.findByText('Perlu melengkapi')).toBeInTheDocument();
+    expect(screen.getAllByText(/Belum diisi/).length).toBeGreaterThan(0);
     expect(englishShown(document.body, ENGLISH)).toEqual([]);
   });
 

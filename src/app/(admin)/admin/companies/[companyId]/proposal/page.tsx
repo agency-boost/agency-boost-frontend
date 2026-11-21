@@ -16,7 +16,7 @@ export default function CompanyProposalPage({ params }: { params: Promise<{ comp
   const company = useCompany(companyId);
   const canManage = useCan('product_data:manage');
   return (
-    <CompanyFrame companyId={companyId} company={company} permission="product_data:read">
+    <CompanyFrame companyId={companyId} company={company} permission="product_data:read" active="products">
       <ProposalDataScreen companyId={companyId} canManage={canManage} />
     </CompanyFrame>
   );

@@ -420,6 +420,10 @@ describe('/events, KPM Events (P18.2-T5, T6)', () => {
       const box = await dialog('Product refresh briefing');
       expect(within(box).getByText("You're going")).toBeInTheDocument();
       await userEvent.click(within(box).getByRole('button', { name: 'Cancel RSVP' }));
+      // P19.25-T1 AC-3 (ADR-0281 §2): Tidak ikut asks why first — optional — and sends what was typed.
+      const ask = await screen.findByRole('dialog', { name: 'Not coming to Product refresh briefing?' });
+      await userEvent.type(within(ask).getByLabelText('Reason'), '  A client meeting ');
+      await userEvent.click(within(ask).getByRole('button', { name: 'Send' }));
       expect(await screen.findByText('RSVP cancelled for Product refresh briefing')).toBeInTheDocument();
       expect(within(box).getByRole('button', { name: 'Join event' })).toBeInTheDocument();
     });
@@ -796,6 +800,8 @@ describe('UI-108 /events on a phone', () => {
     expect(pressed('Product refresh briefing')).toEqual(['Join']);
     expect(pressed('Kickoff 2026')).toEqual([]);
     await userEvent.click(within(answers('Kickoff 2026')).getByRole('button', { name: 'Not going' }));
+    // P19.25-T1 AC-3 (ADR-0281 §2): the reason is asked first; Send with the field empty declines without one.
+    await userEvent.click(within(await screen.findByRole('dialog', { name: 'Not coming to Kickoff 2026?' })).getByRole('button', { name: 'Send' }));
     await waitFor(() => expect(pressed('Kickoff 2026')).toEqual(['Not going']));
     expect(await screen.findByText('You’re not going to Kickoff 2026'.replace('’', "'"))).toBeInTheDocument();
     await userEvent.click(within(answers('Kickoff 2026')).getByRole('button', { name: 'Not going' }));
@@ -805,6 +811,24 @@ describe('UI-108 /events on a phone', () => {
     expect(calls.filter((c) => c.init.method === 'POST').map((c) => c.url.replace('http://api.test/api/v1', ''))).toEqual([
       '/events/ev-kickoff/rsvp/cancel', '/events/ev-kickoff/rsvp/withdraw', '/events/ev-refresh/rsvp/withdraw',
     ]);
+    expect(JSON.parse(String(calls.find((c) => c.url.endsWith('/rsvp/cancel'))!.init.body))).toEqual({});
+  });
+
+  it('P19.25-T1 AC-3 Not going asks why: the reason typed is sent trimmed; Cancel leaves the answer as it was', async () => {
+    const { calls } = list({
+      'POST /events/ev-kickoff/rsvp/cancel': { body: { ...KICKOFF, me: { rsvp: 'cancelled', declineReason: 'Out of town', claimed: false, feedback: null } } },
+    });
+    await waitFor(() => expect(answers('Kickoff 2026')).toBeInTheDocument());
+    await userEvent.click(within(answers('Kickoff 2026')).getByRole('button', { name: 'Not going' }));
+    let ask = await screen.findByRole('dialog', { name: 'Not coming to Kickoff 2026?' });
+    await userEvent.click(within(ask).getByRole('button', { name: 'Cancel' }));
+    expect(calls.filter((c) => c.init.method === 'POST')).toEqual([]);
+    await userEvent.click(within(answers('Kickoff 2026')).getByRole('button', { name: 'Not going' }));
+    ask = await screen.findByRole('dialog', { name: 'Not coming to Kickoff 2026?' });
+    await userEvent.type(within(ask).getByLabelText('Reason'), ' Out of town ');
+    await userEvent.click(within(ask).getByRole('button', { name: 'Send' }));
+    await waitFor(() => expect(calls.some((c) => c.url.endsWith('/rsvp/cancel'))).toBe(true));
+    expect(JSON.parse(String(calls.find((c) => c.url.endsWith('/rsvp/cancel'))!.init.body))).toEqual({ reason: 'Out of town' });
   });
 
   it('UI-108 a past card says where the reader stands as a tinted pill; the card opens the event', async () => {

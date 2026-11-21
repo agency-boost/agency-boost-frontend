@@ -40,6 +40,11 @@ const AGENT: Me = makeMe({
   },
 });
 const SUPER: Me = makeMe({ user: { ...makeMe().user, platformRole: 'super_admin' }, membership: null, permissions: ['kpm:list_all'] });
+const OWNER: Me = makeMe({
+  user: AB.user,
+  membership: { ...AB.membership!, isKpmOwner: true },
+  permissions: AB.permissions,
+});
 
 function field(me: Me = AB, px = 1280) {
   window.localStorage.clear();
@@ -140,38 +145,53 @@ describe('P19.13-T2 the floating sidebar (UI-196)', () => {
     expect(screen.queryByRole('button', { name: 'Search agent' })).toBeNull();
   });
 
-  it('P19.13-T2 AC-4 the current page is a white pill, its words navy and bold, its glyph orange', () => {
+  it('P19.17-T3 AC-5 the current page is a white pill, its words and its icon navy (it was an orange glyph)', () => {
     route.path = '/home';
     field(AB, 1280);
     const home = within(screen.getByRole('navigation', { name: 'Main' })).getByRole('link', { name: 'Home' });
     expect(home).toHaveAttribute('aria-current', 'page');
-    expect(home).toHaveClass('bg-card', 'font-bold', 'text-secondary-ink', 'h-10', 'rounded-xl');
-    expect(home.querySelector('svg')!.parentElement).toHaveClass('text-primary');
+    expect(home).toHaveClass('bg-card', 'font-bold', 'text-secondary-ink', 'h-9', 'rounded-xl');
+    expect(home.querySelector('svg')!.parentElement).toHaveClass('text-secondary-ink');
     const calendar = within(screen.getByRole('navigation', { name: 'Main' })).getByRole('link', { name: 'Calendar' });
     expect(calendar).not.toHaveClass('bg-card');
   });
 
-  it('P19.13-T2 AC-4 a group’s current page is the same pill, its words alone, indented under the heading', () => {
+  it('P19.17-T3 AC-5 a group’s current page is the same pill, with its own icon, in the top section’s column', () => {
     field(AB, 1280);
     const goals = within(screen.getByRole('navigation', { name: 'Main' })).getByRole('link', { name: 'Goal Setting' });
-    expect(goals).toHaveClass('bg-card', 'font-bold', 'text-secondary-ink', 'h-9', 'pl-[2.6875rem]');
-    expect(goals.querySelector('svg')).toBeNull();
+    expect(goals).toHaveClass('bg-card', 'font-bold', 'text-secondary-ink', 'h-9', 'px-3');
+    expect(goals.className).not.toContain('pl-[2.6875rem]');
+    expect(goals.querySelector('svg')).toHaveAttribute('data-icon', 'ti-target');
   });
 
-  it('P19.13-T2 AC-6 Panduan, then the account card — avatar, name, role · KPM code, bell — at the bottom', () => {
+  it('P19.17-T3 AC-5 no Panduan: the nav, then the account card — avatar, name, role · KPM code, bell — at the bottom', () => {
     field(AB, 1280);
     const nav = screen.getByRole('navigation', { name: 'Main' });
-    const guide = aside().querySelector('[data-panduan]')!;
     const card = aside().querySelector<HTMLElement>('[data-account-card]')!;
-    expect(nav.compareDocumentPosition(guide) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(guide.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(aside().querySelector('[data-panduan]')).toBeNull();
+    expect(aside().textContent).not.toMatch(/Guide|Panduan|📘/);
+    expect(nav.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(card).toHaveClass('rounded-[14px]', 'bg-secondary-contrast/[0.06]');
     expect(within(card).getByText('WT')).toBeInTheDocument();
     expect(within(card).getByText(/^AB · 0417/)).toBeInTheDocument();
     expect(within(card).getByRole('button', { name: /Notifications/ })).toBeInTheDocument();
+    // An AB has no extras, so nothing is pinned.
+    expect(aside().querySelector('[data-sidebar-pinned]')).toBeNull();
   });
 
-  it('P19.13-T2 AC-8 at 1024px the 64px rail in the same floating style: app icon, search glyph, page glyphs, avatar', () => {
+  it('P19.17-T3 AC-5 the Owner: Pengaturan pinned under its line, tagged Owner, between the menu that scrolls and the card', () => {
+    field(OWNER, 1280);
+    const nav = screen.getByRole('navigation', { name: 'Main' });
+    const pinned = nav.querySelector<HTMLElement>('[data-sidebar-pinned]')!;
+    expect(within(pinned).getByRole('link', { name: /Settings/ })).toHaveAttribute('href', '/kpm/settings');
+    expect(within(pinned).getByText('Owner')).toHaveAttribute('data-owner-tag');
+    expect(nav.querySelector('[data-sidebar-scroll]')!.contains(pinned)).toBe(false);
+    // The extras' groups, tagged, after Program; their names in grey capitals.
+    const names = Array.from(nav.querySelectorAll('[data-group-label]')).map((b) => b.textContent);
+    expect(names).toEqual(['Me', 'Activities', 'My team', 'Programs', 'KPMOwner', 'PeopleOwner']);
+  });
+
+  it('P19.13-T2 AC-8, P19.17-T3 AC-6 at 1024px the 64px rail in the same floating style: app icon, search glyph, the four, a glyph per group, avatar', () => {
     field(AB, 1024);
     const worn = wears(aside(), 1024).split(' ');
     expect(worn).toEqual(expect.arrayContaining(['w-[var(--sidebar-rail-width)]', 'rounded-sidebar', 'ml-[var(--sidebar-inset)]']));
@@ -179,18 +199,32 @@ describe('P19.13-T2 the floating sidebar (UI-196)', () => {
     const search = screen.getByRole('button', { name: 'Search agent' });
     expect(search).toHaveClass('w-11');
     expect(search.textContent).toBe('');
-    for (const link of Array.from(screen.getByRole('navigation', { name: 'Main' }).querySelectorAll('a'))) {
-      expect(link).toHaveClass('h-11', 'w-11');
-    }
+    const nav = screen.getByRole('navigation', { name: 'Main' });
+    expect(Array.from(nav.querySelectorAll('a')).map((a) => a.getAttribute('href')))
+      .toEqual(['/home', '/activity/log', '/calendar', '/unit/dashboard']);
+    for (const link of Array.from(nav.querySelectorAll('a'))) expect(link).toHaveClass('h-11', 'w-11');
+    expect(Array.from(nav.querySelectorAll('[data-rail-group] > button')).map((b) => b.getAttribute('aria-label')))
+      .toEqual(['Me', 'Activities', 'My team', 'Programs']);
     expect(aside().querySelector('[data-account-card]')).not.toHaveClass('bg-secondary-contrast/[0.06]');
   });
 
-  it('P19.13-T2 AC-1 the Super Admin keeps the labelled panel from 1024px, floating as everybody’s', () => {
+  /*
+   * *Changed 2026-11-20 (P19.23-T1 AC-1; ADR-0277 §1, superseding ADR-0197 §4's exception for /admin):* the console takes
+   * the rail at a tablet and the labelled panel from 1280px, as every other reader's shell. It read *"keeps the labelled
+   * panel from 1024px"* until then.
+   */
+  it('P19.13-T2 AC-1, P19.23-T1 AC-1 the Super Admin takes the rail at 1024px and the labelled panel from 1280px, floating as everybody’s', () => {
     route.path = '/admin';
     window.localStorage.clear();
     atWidth(1024);
+    const tablet = renderWithSession(<Shell family="admin" title="Overview">x</Shell>, { me: SUPER });
+    expect(wears(aside(), 1024).split(' ')).toEqual(expect.arrayContaining(['w-[var(--sidebar-rail-width)]', 'rounded-sidebar']));
+    expect(screen.queryByRole('button', { name: 'Search agent' })).toBeNull();
+    tablet.unmount();
+    window.localStorage.clear();
+    atWidth(1280);
     renderWithSession(<Shell family="admin" title="Overview">x</Shell>, { me: SUPER });
-    expect(wears(aside(), 1024).split(' ')).toEqual(expect.arrayContaining(['w-sidebar', 'rounded-sidebar']));
+    expect(wears(aside(), 1280).split(' ')).toEqual(expect.arrayContaining(['w-sidebar', 'rounded-sidebar']));
     expect(screen.queryByRole('button', { name: 'Search agent' })).toBeNull();
   });
 

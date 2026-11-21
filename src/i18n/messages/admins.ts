@@ -2,64 +2,79 @@ import { defineMessages, type MessagesOf } from '@/i18n/catalogue';
 import { kept } from '@/i18n/kept';
 
 /**
- * **Manage KPM Admins** — `/people/admins`, the Owner's (P18.10-T4, people and forum; `functional/org-hierarchy.md`,
- * *Who decides*): who administers the office, granting it, and taking it away, as a table and as a phone's cards.
+ * **KPM admins** — `/people/admins` (P19.20-T4; ADR-0273 §5; `functional/org-hierarchy.md`, *Who decides*): the three
+ * tiles that say who can do what, the *Admin KPM* list with *Cabut*, and *Tambah admin*'s people picker.
  *
- * **English is the source**: the prototype draws two static rows and two `alert()`s (`KPM_Owner.html:1987-1997`), so
- * almost all of it is ours. The Indonesian is the approved glossary's — *Beri akses · Cabut* (§B.1), *office* is *KPM*
- * (§B.9) — and *admin* in a sentence is the Indonesian word for it. **Kept** (§A): the page's title, *KPM Admin* and the
- * roles, a role counted in its English plural (*3 KPM Admins*, §B.0 rule 8). **Typed content stays as typed**: names,
- * agent codes.
+ * **The Indonesian is the source**: the approved People mockups of 19 November word for word — *KPM Owner* (*Semua di KPM
+ * ini, termasuk tambah / cabut admin*), *Admin* (*Sama seperti owner: lihat dan ubah semua, buka semua anggota. Hanya
+ * tidak bisa tambah / cabut admin*), *Core leader* (*KPM + Pengaturan seperti owner; People hanya bisa membuka timnya*,
+ * *n orang · atur di All members*), *Admin KPM*, *"kode · admin sejak … · diberikan oleh …"*, *Cabut*, *Tambah admin*,
+ * *Jadikan admin*, *"Cabut akses admin …? … tetap anggota KPM sebagai …, hanya akses admin yang dicabut."*, *Admin bisa
+ * melihat halaman ini; hanya KPM Owner yang bisa tambah / cabut admin*, *Admin = sama seperti owner, kecuali tambah / cabut
+ * admin. Akun tes tidak ditampilkan.* The English is ours. **Kept** (§A): the page's title, *KPM*, *KPM Owner*, *Admin*,
+ * *Core leader*, *All members*, the roles. Typed content stays as typed.
  *
  * @moved app/(tenant)/people/admins/page.tsx
  */
 const en = {
-  subtitle: 'Who has delegated admin access to this KPM',
-  /** The client's one line for the paragraph it replaces (P18.9-T4 AC-5). */
-  line: 'Admins can do everything except manage admins.',
-  columns: { name: 'Name', role: 'Role', since: 'Admin since', grantedBy: 'Granted by', actions: 'Actions' },
-  grantTo: 'Grant admin access to',
-  chooseSomebody: 'Choose somebody',
-  grant: 'Grant access',
-  granting: 'Granting…',
-  revokeQuestion: ({ name }: { name: string }) => `Take ${name}'s admin access away?`,
-  revokeLine:
-    'They keep their place in the office and their unit — this only takes away what they can configure and report on. You can grant it again at any time.',
-  revokeAccess: 'Revoke access',
-  revoking: 'Revoking…',
-  cancel: 'Cancel',
-  loading: 'Loading KPM Admins…',
-  caption: kept('KPM Admins'),
-  empty: 'Nobody administers this office but you. Grant access above to delegate it.',
-  count: ({ n }: { n: number }) => `${n} ${n === 1 ? 'KPM Admin' : 'KPM Admins'}, delegated by you`,
+  tiles: {
+    owner: kept('KPM Owner'),
+    ownerLine: 'Everything in this KPM, adding and revoking admins included',
+    admin: kept('Admin'),
+    adminLine: 'The same as the owner: sees and changes everything, opens every member. Only cannot add or revoke admins',
+    core: kept('Core leader'),
+    coreLine: 'KPM + Settings like the owner; in People opens only their team',
+    people: ({ n }: { n: number }) => `${n} ${n === 1 ? 'person' : 'people'}`,
+    coreWhere: `set in ${kept('All members')}`,
+  },
+  listTitle: 'The KPM’s admins',
+  add: 'Add admin',
+  line: ({ code, since, by }: { code: string; since: string | null; by: string | null }) =>
+    [code, since ? `admin since ${since}` : null, by ? `granted by ${by}` : null].filter(Boolean).join(' · '),
   revoke: 'Revoke',
-  /** After *Revoke* on a phone's card, for a screen reader: whose access it takes. */
-  revokeWhose: ({ name }: { name: string }) => ` ${name}'s admin access`,
-  /** The Owner's own access comes from being the Owner, not a grant. */
-  yours: 'Yours',
+  revokeWhose: ({ name }: { name: string }) => `Revoke ${name}’s admin access`,
+  revokeQuestion: ({ name }: { name: string }) => `Revoke ${name}’s admin access?`,
+  revokeLine: ({ first, role }: { first: string; role: string }) =>
+    `${first} stays a member of the KPM as ${role}; only the admin access is revoked.`,
+  readOnly: 'Admins can see this page; only the KPM Owner can add or revoke admins',
+  coreNote: 'Core leaders are set in All members (⋯)',
+  pickTitle: 'Add admin',
+  pickNote: 'Admin = the same as the owner, except adding or revoking admins. Test accounts are not shown.',
+  pickAction: 'Make admin',
+  picking: 'Saving…',
+  empty: 'No admin yet: only the KPM Owner looks after this KPM.',
+  loading: 'Loading the KPM admins…',
+  caption: 'The KPM’s admins',
 };
 
 const id: MessagesOf<typeof en> = {
-  subtitle: `Siapa yang memegang akses admin yang didelegasikan di ${kept('KPM')} ini`,
-  line: `Para ${kept('Admin')} dapat melakukan semuanya, kecuali mengelola admin.`,
-  columns: { name: 'Nama', role: 'Peran', since: `${kept('Admin')} sejak`, grantedBy: 'Diberikan oleh', actions: 'Aksi' },
-  grantTo: 'Beri akses admin kepada',
-  chooseSomebody: 'Pilih seseorang',
-  grant: 'Beri akses',
-  granting: 'Memberi akses…',
-  revokeQuestion: ({ name }) => `Cabut akses admin ${name}?`,
-  revokeLine:
-    `Dia tetap di tempatnya di ${kept('KPM')} dan di ${kept('unit')}-nya — ini hanya mencabut apa yang dapat dia atur dan laporkan. Anda dapat memberikannya lagi kapan saja.`,
-  revokeAccess: 'Cabut akses',
-  revoking: 'Mencabut…',
-  cancel: 'Batal',
-  loading: `Memuat ${kept('KPM Admins')}…`,
-  caption: kept('KPM Admins'),
-  empty: `Tidak ada yang mengelola ${kept('KPM')} ini selain Anda. Beri akses di atas untuk mendelegasikannya.`,
-  count: ({ n }) => `${n} ${n === 1 ? kept('KPM Admin') : kept('KPM Admins')}, didelegasikan oleh Anda`,
+  tiles: {
+    owner: kept('KPM Owner'),
+    ownerLine: `Semua di ${kept('KPM')} ini, termasuk tambah / cabut admin`,
+    admin: kept('Admin'),
+    adminLine: 'Sama seperti owner: lihat dan ubah semua, buka semua anggota. Hanya tidak bisa tambah / cabut admin',
+    core: kept('Core leader'),
+    coreLine: `${kept('KPM')} + Pengaturan seperti owner; People hanya bisa membuka timnya`,
+    people: ({ n }) => `${n} orang`,
+    coreWhere: `atur di ${kept('All members')}`,
+  },
+  listTitle: `Admin ${kept('KPM')}`,
+  add: 'Tambah admin',
+  line: ({ code, since, by }) =>
+    [code, since ? `admin sejak ${since}` : null, by ? `diberikan oleh ${by}` : null].filter(Boolean).join(' · '),
   revoke: 'Cabut',
-  revokeWhose: ({ name }) => ` akses admin ${name}`,
-  yours: 'Milik Anda',
+  revokeWhose: ({ name }) => `Cabut akses admin ${name}`,
+  revokeQuestion: ({ name }) => `Cabut akses admin ${name}?`,
+  revokeLine: ({ first, role }) => `${first} tetap anggota ${kept('KPM')} sebagai ${role}, hanya akses admin yang dicabut.`,
+  readOnly: `Admin bisa melihat halaman ini; hanya ${kept('KPM Owner')} yang bisa tambah / cabut admin`,
+  coreNote: `Core leader diatur di ${kept('All members')} (⋯)`,
+  pickTitle: 'Tambah admin',
+  pickNote: 'Admin = sama seperti owner, kecuali tambah / cabut admin. Akun tes tidak ditampilkan.',
+  pickAction: 'Jadikan admin',
+  picking: 'Menyimpan…',
+  empty: `Belum ada admin: hanya ${kept('KPM Owner')} yang mengelola ${kept('KPM')} ini.`,
+  loading: 'Memuat admin KPM…',
+  caption: `Admin ${kept('KPM')}`,
 };
 
 export const adminsMessages = defineMessages({ en, id });

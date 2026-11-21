@@ -79,6 +79,10 @@ export function rowOf(
     metrics?: Record<string, unknown>;
     unitPersistency?: unknown;
     leader?: boolean;
+    /** P19.21-T1 AC-3: the class, rung and photo the row draws. */
+    role?: string | null;
+    orgLevelCode?: string | null;
+    photoUrl?: string | null;
     monthlyActiveAgent?: boolean | null;
     values?: Record<string, MetricCell>;
     ytd?: Record<string, YtdCell>;
@@ -89,6 +93,7 @@ export function rowOf(
     return {
       membershipId: legacy.membershipId, agentCode: legacy.agentCode, name: legacy.name, values: legacy.values,
       ytd: legacy.ytd ?? {}, leader: legacy.leader ?? false, monthlyActiveAgent: legacy.monthlyActiveAgent ?? null,
+      role: legacy.role ?? null, orgLevelCode: legacy.orgLevelCode ?? null, photoUrl: legacy.photoUrl ?? null,
     };
   }
   const values: Record<string, MetricCell> = {};
@@ -103,14 +108,15 @@ export function rowOf(
   return {
     membershipId: legacy.membershipId, agentCode: legacy.agentCode, name: legacy.name, values, ytd,
     leader: legacy.leader ?? false, monthlyActiveAgent: legacy.monthlyActiveAgent ?? null,
+    role: legacy.role ?? null, orgLevelCode: legacy.orgLevelCode ?? null, photoUrl: legacy.photoUrl ?? null,
   };
 }
 
-/** The template a month follows: version 1 of the Prudential template, its history from Sep 2025. */
+/** The template a month follows: version 1 of the Prudential template, its history from January 2024 (ADR-0274 §3). */
 export function configOf(over: Partial<MonthConfig> = {}): MonthConfig {
   return {
     templateId: 'tpl-pru', templateName: 'Prudential template', version: 1, columns: [...V1_COLUMNS],
-    historyFrom: '2025-09', firstMonth: '2026-09', completePct: 90, ...over,
+    historyFrom: '2024-01', firstMonth: '2026-09', completePct: 90, ...over,
   };
 }
 

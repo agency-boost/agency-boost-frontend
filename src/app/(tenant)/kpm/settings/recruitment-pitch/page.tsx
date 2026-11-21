@@ -1,32 +1,27 @@
 'use client';
 
-import { PitchMaterials } from '@/components/recruitment/pitch-materials';
 import { SettingsScreen } from '@/components/settings-screen';
 import { kept } from '@/i18n/kept';
 import { useCan } from '@/lib/session';
+import { PitchList } from './pitch-list';
 
 /**
- * **Settings › Recruitment pitch** (`/kpm/settings/recruitment-pitch`; the prototype's *Viewing as KPM*
- * view, `Recruitment_Section.html:693-753`, `:797-820`; P17-T5, D-settings): the office's pitch documents —
- * the four, then *Company Profile* and *Agency Profile*, optional (ADR-0177) — uploaded, replaced and confirmed
- * for every agent who shows them.
+ * **Pengaturan › Recruitment pitch** (`/kpm/settings/recruitment-pitch`; P17-T5, D-settings; **redrawn by P19.21-T3
+ * AC-6, ADR-0274** after `data-upload-pengaturan-*` frame 22): the six materials agents see in *Recruitment › Pitch
+ * Materials*, in one list with no required/optional split, *"n/6 materi siap"*, each with its state and one button —
+ * any file format or a link. Saved live: nothing here waits on *Terbitkan*.
  *
- * The title and no sub-line, as drawn; **no toggle** — the prototype's *Viewing as Agent* / *Viewing as
- * KPM* switch is two routes, and the permissions decide which one a reader reaches (H-22).
- *
- * **Who reaches it**: the Owner and the Admin. The gate is `kpm:read_profile`, the office's own read
- * Branch info uses — the Owner's, the Admin's and nobody else's in an office, and a read by its verb,
- * so a read-only support session as either keeps it and draws the page with nothing to change. A field
- * member is refused. **Who writes** is `tenant_config:write`, which a read-only session never holds:
- * without it there is no *Upload PDF*, no *Replace*, and every box is disabled. The API refuses every
- * write the same way whatever this decides.
+ * **Who reaches it**: the Owner, an Admin, a core leader and the Super Admin inside the KPM — `kpm:read_profile`, the
+ * office's own read Branch info uses; a read-only support session keeps it and draws the list with nothing to change.
+ * **Who writes** is `tenant_config:write`: without it there is no *Unggah file*, *Ganti* or link, only *Lihat*. The API
+ * refuses every write the same way whatever this decides.
  */
 export default function RecruitmentPitchPage() {
   const canWrite = useCan('tenant_config:write');
 
   return (
     <SettingsScreen title={kept('Recruitment pitch')} permission="kpm:read_profile">
-      <PitchMaterials audience="office" canWrite={canWrite} />
+      <PitchList canWrite={canWrite} />
     </SettingsScreen>
   );
 }

@@ -114,6 +114,53 @@ describe('RatioCard (UI V1, UI-053; O-3 rows)', () => {
   });
 });
 
+/**
+ * **P19.18-T2 AC-3 — the Unit Dashboard's ratio card on a tablet and a laptop** (ADR-0271 §10; `unit-aktivitas-{tablet,
+ * laptop}`): the *Selling vs Recruitment* bar across the card, then the four ratios as four equal tiles — value on top,
+ * name, *Target x* — and never the formula. One list laid out by the width: a phone keeps its rows.
+ */
+describe('P19.18-T2 AC-3 RatioCard tiles', () => {
+  it('P19.18-T2 AC-3 from 768px the four ratios are four equal tiles in one row, the split bar above them across the card', () => {
+    render(<RatioCard ratios={FIVE} tiles />);
+    const list = document.querySelector('[data-ratio-tiles]') as HTMLElement;
+    expect(list).toHaveClass('md:grid', 'md:gap-2');
+    expect(list.style.gridTemplateColumns).toBe('repeat(4, minmax(0, 1fr))');
+    // The bar is its own block before the tiles, as wide as the card.
+    const bar = document.querySelector('[data-split-bar]')!;
+    expect(bar.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(bar).not.toHaveClass('md:max-w-xl');
+    for (const code of ['SELLING_SUCCESS_RATE', 'RECRUITMENT_SUCCESS_RATE', 'LEADS_PER_ACTIVITY', 'MEETING_PER_APPROACH']) {
+      // The value above the words from 768px (the DOM's order reversed on screen), on its own lighter navy.
+      expect(row(code)).toHaveClass('md:flex-col-reverse', 'md:items-start', 'md:rounded-[12px]', 'md:bg-white/[0.06]');
+      // A phone's row as before.
+      expect(row(code)).toHaveClass('flex', 'items-center', 'border-t');
+    }
+    // Value, name, *Target x*: the tile's three things, the value larger and left-aligned.
+    const selling = row('SELLING_SUCCESS_RATE');
+    expect(within(selling).getByText('30%')).toHaveClass('md:text-[1.625rem]', 'md:text-left', 'text-on-navy-red');
+    expect(within(selling).getByText('Selling success rate')).toHaveClass('md:font-semibold');
+    expect(within(selling).getByText('Target 30%')).toBeInTheDocument();
+  });
+
+  it('P19.18-T2 AC-3 never the formula: no activity name the ratio divides appears on a tile', () => {
+    render(<RatioCard ratios={FIVE} tiles />);
+    const card = document.querySelector('[data-ratio-card]') as HTMLElement;
+    expect(card).not.toHaveTextContent('Submission polis');
+    expect(card).not.toHaveTextContent('Sales meeting');
+    expect(card).not.toHaveTextContent('÷');
+  });
+
+  it('P19.18-T2 AC-3 a card without tiles, or one whose rows explain themselves, keeps its rows at every width', () => {
+    const { unmount } = render(<RatioCard ratios={FIVE} />);
+    expect(document.querySelector('[data-ratio-tiles]')).toBeNull();
+    expect(row('SELLING_SUCCESS_RATE').className).not.toMatch(/md:flex-col-reverse/);
+    unmount();
+    render(<RatioCard ratios={FIVE} tiles explain={() => 'what it is'} />);
+    expect(document.querySelector('[data-ratio-tiles]')).toBeNull();
+    expect(row('SELLING_SUCCESS_RATE').querySelector('button')).not.toBeNull();
+  });
+});
+
 describe('PersonalRatioCard (UI-053: the Ratio page’s own data)', () => {
   afterEach(() => vi.unstubAllGlobals());
 

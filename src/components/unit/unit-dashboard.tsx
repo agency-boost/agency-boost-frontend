@@ -32,12 +32,12 @@ import { useOpenedOnce } from '@/lib/use-opened-once';
 import { leadsByRole } from '@/lib/field-nav';
 import { sampleUnitView } from '@/lib/sample-data';
 import {
-  keepView, lockedWords, productionToast, readUnitDashboard, storedView, unitPeriods, unitViews,
-  type GroupMembersAdded, type UnitDashboardView, type UnitInformal, type UnitPeriod, type UnitTab, type UnitView,
-  type UnitViews,
+  DEFAULT_PERIOD, keepView, lockedWords, productionToast, readUnitDashboard, storedView, unitPeriods, unitViews,
+  type GroupMembersAdded, type UnitDashboardView, type UnitInformal, type UnitPeriod, type UnitRow, type UnitTab,
+  type UnitView, type UnitViews,
 } from '@/lib/unit-dashboard';
 import { UnitRoster } from './unit-roster';
-import { UnitTiles } from './unit-tiles';
+import { UnitTiles, type UnitTileSheetKind } from './unit-tiles';
 import { UpdateProductionDialog } from './update-production-dialog';
 
 /** The Activities tab, downloaded when it is first opened (the bundle's budget). */
@@ -56,6 +56,10 @@ const UnitSearchSheet = dynamic(() => import('./unit-search-sheet'), { ssr: fals
 const AddAgentDialog = dynamic(() => import('@/components/add-agent-form').then((m) => m.AddAgentDialog), { ssr: false });
 /** *+ Tambah ke grup*'s sheet (ADR-0249 §4), downloaded when it is first opened. */
 const InformalGroupSheet = dynamic(() => import('./informal-group-sheet'), { ssr: false });
+/** The people behind a navy tile (P19.18-T1 AC-4), downloaded when a tile is first tapped. */
+const UnitTileSheet = dynamic(() => import('./unit-tile-sheet'), { ssr: false });
+/** The KPM Owner's person card (P19.18-T1 AC-9), downloaded when a person is first tapped. */
+const UnitPersonCard = dynamic(() => import('./unit-person-card'), { ssr: false });
 
 /** What a read of either tab says about the views: the one answered, those offered, and *Grup informal*'s line. */
 interface ViewAnswer {
@@ -80,8 +84,11 @@ interface ViewAnswer {
  *   address (`?period=`) — and draws the tiles (UI-003) and the roster (UI-002, UI-005, UI-007, UI-009, UI-011, UI-028).
  *   *Activities* and *Potensi* read their own (`unit-activities.tsx`, `unit-potensi.tsx`).
  * - **A row opens the person** (UI-011): the scroll is kept, so the person page's ‹ comes back to the same place.
- * - ***+ Tambah agent*** and ***Perbarui produksi*** on a tablet and a desktop, in the roster's header; **not on a
- *   phone** (the owner, 30 Oct: adding people lives in User Management).
+ * - ***+ Tambah agent*** and ***Perbarui produksi*** on a tablet and a desktop, on the roster's title row; **on a phone
+ *   the floating +** (P19.18-T1 AC-8; the brief of 19 November 2026: *"phone: floating + only"*), `/leads`' own.
+ * - **The orange panel** (P19.18-T1 AC-3, `UnitTiles`): its navy tiles open the people behind their numbers (AC-4,
+ *   `UnitTileSheet`); **a tap on a person** opens the KPM Owner's card first where the server says so (AC-9,
+ *   `UnitPersonCard`), else the person's Personal Summary.
  *
  * - **The view picker** (the client's message of 11 November 2026, item 7; ADR-0249): *Grup langsung · Grup informal ·
  *   Semua downline*, beside the period on *Overview* and beside the month on *Potensi* — **never on *Aktivitas***, whose
@@ -142,6 +149,10 @@ export function UnitDashboard({
   const [adding, setAdding] = useState(false);
   const addOpened = useOpenedOnce(adding);
   const [searching, setSearching] = useState(false);
+  /** The navy tile tapped (AC-4) and the person whose card is open (AC-9). */
+  const [sheet, setSheet] = useState<UnitTileSheetKind | null>(null);
+  const [person, setPerson] = useState<{ row: UnitRow; unit: string } | null>(null);
+  const openPerson = useCallback((row: UnitRow, unit: string) => setPerson({ row, unit }), []);
   /** The head's name, from whichever tab read it: the title of a unit below the reader. */
   const [headName, setHeadName] = useState<string | null>(null);
   const mayInvite = useCan('member:invite');
@@ -230,7 +241,8 @@ export function UnitDashboard({
    * **+ Tambah agent** (P18.8-T3 AC-1, ADR-0170 §1): into the unit on screen — the reader's own, or for the Owner and an
    * Admin any leader's. A leader opening a unit below their own is not offered it. Not on a phone (UI-002, the owner).
    */
-  const canAdd = !!view && mayInvite && !me?.impersonationReadOnly && !readOnly && (view.head.isReader || office) && size !== 'phone';
+  const mayAdd = !!view && mayInvite && !me?.impersonationReadOnly && !readOnly && (view.head.isReader || office);
+  const canAdd = mayAdd && size !== 'phone';
   const addLeader = view && !view.head.isReader ? { membershipId: view.head.membershipId, name: view.head.name } : null;
   const addButton = canAdd ? (
     <Button variant="secondary" className="h-auto rounded-pill px-3.5 py-1.5 text-sm" onClick={() => setAdding(true)}>
@@ -263,6 +275,24 @@ export function UnitDashboard({
   )) : null;
 
   const nobody = <NobodyYet action={canAdd ? addButton : null} />;
+  /*
+   * **The phone's floating +** (P19.18-T1 AC-8): *+ Tambah agent* where the title row has no room, the same form — over a
+   * unit with people, as the title row's button is drawn over the roster.
+   */
+  const fab = mayAdd && size === 'phone' && view && !view.empty && activeTab === 'overview' ? (
+    <button
+      type="button"
+      data-unit-fab=""
+      onClick={() => setAdding(true)}
+      aria-label={t.overview.addAgent}
+      className={cn(
+        'fixed bottom-[calc(var(--tab-bar-space)+1rem)] right-4 z-30 flex h-14 w-14 items-center justify-center rounded-full',
+        'bg-primary text-primary-contrast shadow-modal hover:bg-primary-hover',
+      )}
+    >
+      <LineIcon name="plus" className="h-7 w-7" />
+    </button>
+  ) : null;
 
   /*
    * **The view picker** (ADR-0249): the views offered, hidden with one or none — beside the period on *Overview*, beside
@@ -367,15 +397,26 @@ export function UnitDashboard({
             {view?.empty && (leadsByRole(me?.membership) ? <EmptyUnit view={view} size={size} action={addButton} /> : nobody)}
             {view && !view.empty && (
               <>
-                <UnitTiles view={view} period={shown} />
+                <UnitTiles view={view} period={shown} onOpen={setSheet} />
                 <UnitRoster
                   view={view}
                   period={shown}
                   from={here}
                   size={size}
                   onLeave={keepScroll}
+                  onPerson={view.personCard ? openPerson : undefined}
                   actions={(addButton || updateButton) && <>{addButton}{updateButton}</>}
                 />
+                {sheet && <UnitTileSheet kind={sheet} view={view} onClose={() => setSheet(null)} />}
+                {person && (
+                  <UnitPersonCard
+                    row={person.row}
+                    unit={person.unit}
+                    from={here}
+                    onClose={() => setPerson(null)}
+                    onLeave={keepScroll}
+                  />
+                )}
                 {updating && (
                   <UpdateProductionDialog
                     view={view}
@@ -393,7 +434,8 @@ export function UnitDashboard({
           </>
         )}
       </div>
-      {canAdd && view && addOpened && (
+      {fab}
+      {mayAdd && view && addOpened && (
         <AddAgentDialog open={adding} today={view.today} leader={addLeader} onClose={() => setAdding(false)} onAdded={added} />
       )}
       {searching && <UnitSearchSheet onClose={() => setSearching(false)} />}
@@ -418,7 +460,8 @@ const periodOf = (key: string) => key.split('|')[1] as UnitPeriod;
  */
 export function addressOf(pathname: string, period: UnitPeriod, tab: UnitTab, view: UnitView | null = null): string {
   const search = new URLSearchParams();
-  if (period !== 'month') search.set('period', period);
+  // *Tahun ini* is the first selected (P19.18-T1 AC-1): an address names another period only.
+  if (period !== DEFAULT_PERIOD) search.set('period', period);
   if (tab !== 'overview') search.set('tab', tab);
   if (view !== null) search.set('scope', view);
   const query = search.toString();
@@ -451,7 +494,7 @@ function returnToScroll(at: string) {
 }
 
 /**
- * **The period picker** (UI-002; and P19.8-T4 AC-12, MOB UI-171, ADR-0227 §2): *Bulan ini ⌄*, a header button that opens a
+ * **The period picker** (UI-002; and P19.8-T4 AC-12, MOB UI-171, ADR-0227 §2): *Tahun ini ⌄* (P19.18-T1 AC-1), a header button that opens a
  * small menu right under it — *7 hari terakhir · Bulan ini · Tahun ini* — the shared `PickerMenu`, at every size; it
  * was a native select, 16px on a phone. On a phone it sits on the row under the slider (MOB UI-176). Hidden on
  * *Activities* and *Potensi*, whose own controls set their period (UI-001).
@@ -470,27 +513,45 @@ function PeriodPill({ period, onChoose }: { period: UnitPeriod; onChoose: (p: Un
   );
 }
 
-/** The tiles and the roster, in outline, while the dashboard is read. */
+/** The orange panel and the roster's unit cards, in outline, while the dashboard is read (P19.18-T1). */
 function UnitSkeleton() {
   const t = useMessages(unitDashboardMessages).own;
   return (
     <Skeleton label={t.loading}>
-      <div className="grid grid-cols-2 gap-2 lg:grid-cols-4 lg:gap-cards">
-        {[0, 1, 2, 3].map((i) => (
-          <div key={i} className="min-h-[90px] rounded-lg bg-card px-3 py-2.5">
-            <SkeletonBar className="h-2.5 w-1/2" />
-            <SkeletonBar className="mt-3 h-6 w-2/3" />
-            <SkeletonBar className="mt-2 w-4/5" />
-          </div>
-        ))}
+      <div data-skeleton-panel="" className="rounded-[20px] bg-card p-3 lg:grid lg:grid-cols-[minmax(0,1fr)_25rem] lg:items-center lg:gap-4 lg:p-4">
+        <div>
+          <SkeletonBar className="h-3.5 w-1/3" />
+          <SkeletonBar className="mt-3 h-6 w-1/2" />
+          <SkeletonBar className="mb-3 mt-3 h-2 w-full lg:mb-0" />
+        </div>
+        <div className="grid grid-cols-[0.86fr_1.07fr_1.07fr] gap-1.5">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="h-[3.75rem] rounded-[14px] bg-hover-row px-2.5 py-2">
+              <SkeletonBar className="h-5 w-1/2" />
+              <SkeletonBar className="mt-2 w-3/4" />
+            </div>
+          ))}
+        </div>
       </div>
       <div className="mt-3 rounded-lg bg-card lg:mt-4">
         <div className="px-3 py-3"><SkeletonBar className="h-4 w-40" /></div>
-        {[0, 1, 2, 3, 4].map((i) => (
-          <div key={i} className="flex items-center gap-3 border-t border-divider px-3 py-3">
-            <SkeletonBar className="h-9 w-9 rounded-full" />
-            <SkeletonBar className="h-3.5 w-1/3" />
-            <SkeletonBar className="ml-auto h-5 w-20 rounded-pill" />
+        {[0, 1].map((u) => (
+          <div key={u}>
+            <div className="flex min-h-14 items-center gap-2.5 border-t border-divider bg-primary/[0.12] px-3.5">
+              <SkeletonBar className="h-7 w-7 rounded-full" />
+              <SkeletonBar className="h-3.5 w-1/3" />
+            </div>
+            <div className="grid md:grid-cols-2 lg:grid-cols-3">
+              {[0, 1, 2].map((i) => (
+                <div key={i} className="flex min-h-16 items-center gap-2.5 border-t border-divider px-3">
+                  <SkeletonBar className="h-10 w-10 rounded-full" />
+                  <span className="flex-1">
+                    <SkeletonBar className="h-3.5 w-2/3" />
+                    <SkeletonBar className="mt-2 h-[5px] w-1/2" />
+                  </span>
+                </div>
+              ))}
+            </div>
           </div>
         ))}
       </div>
@@ -535,8 +596,8 @@ function NobodyYet({ action }: { action?: React.ReactNode }) {
 
 /**
  * **A leader's unit with nobody in it yet** (P19-T4 AC-3; D-37, UI-159 item 3; ADR-0189 §3; P19.8-T4 AC-11, MOB UI-181,
- * ADR-0229 §9): the page's normal layout — its four tiles at *0*, *Active Agent* *0 dari –* with *–* in its ring and its
- * chips, from the server's empty view — and under it the roster as it will look, greyed and labelled *Contoh*
+ * ADR-0229 §9): the page's normal layout — the orange panel at *0*, *Active Agent* and *Recruitment* *–* (P19.18-T1), from
+ * the server's empty view — and under it the roster as it will look, greyed and labelled *Contoh*
  * (`UnitTiles`' and `UnitRoster`'s own drawing of `sampleUnitView`), its chips on one row, with one next step: *+ Tambah
  * agent* where the screen offers it, else *Tambah agent pertama* in User Management. **No *Belum ada data* line** (OD-280's
  * default, amending ADR-0189 §2 for this page).

@@ -136,10 +136,11 @@ describe('P12-T2 — my calendar, week view', () => {
     // UI V1 (UI-004; D-20): Home · Activity · Calendar · Unit Dashboard · Search agent.
     const items = [...link.closest('ul')!.querySelectorAll('a')].map((a) => a.textContent?.trim());
     expect(items.slice(0, 3)).toEqual(['Home', 'Activity', 'Calendar']);
-    // A group's rows carry their words alone since P19.13-T2 (UI-196): *Event*'s glyph is the rail's, collapsed.
+    // *Changed 2026-11-20 (P19.17-T3 AC-5, AC-6; ADR-0269 §5):* every row carries its own icon, a group's too, and the
+    // rail holds one icon per group — so *Event*'s glyph is read in the panel, its group open, not on the rail.
     const own = link.querySelector('svg')!.innerHTML;
-    await userEvent.click(screen.getByRole('button', { name: 'Collapse the sidebar' }));
-    const eventList = screen.getByRole('link', { name: 'Event' });
+    const eventList = within(screen.getByRole('navigation', { name: 'Main' })).getByRole('link', { name: 'Event' });
+    expect(eventList.querySelector('svg')).not.toBeNull();
     expect(own).not.toBe(eventList.querySelector('svg')!.innerHTML);
   });
 

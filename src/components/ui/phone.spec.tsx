@@ -174,7 +174,9 @@ describe('AC-8 one tab row on a phone', () => {
       const [on] = screen.getAllByRole('tab');
       // UI V1 (UI-010): 44px tall below 1024px in the field shell (`SEGMENT_TOUCH`).
       // *Changed 2026-11-07 (P19.8-T1 AC-1; R6, MOB UI-171):* and 44px at every size, a header control (`HEADER_CONTROL`).
-      expect(wider(on)).toBe(`flex-1 rounded-md px-2.5 py-2 transition-colors ${HEADER_CONTROL} ${SEGMENT_TOUCH} bg-secondary text-secondary-contrast`);
+      // *Changed 2026-11-20:* and from 768px its words never break either (`md:whitespace-nowrap`): in a track sized to its
+      // content the forum's *MAPA driver* broke over two lines at 1280px (`long-words.browser.spec.ts` measures it).
+      expect(wider(on)).toBe(`flex-1 rounded-md px-2.5 py-2 transition-colors ${HEADER_CONTROL} ${SEGMENT_TOUCH} md:whitespace-nowrap bg-secondary text-secondary-contrast`);
       expect(phone(on)).toEqual(tokens(SEGMENT_PHONE));
     });
 

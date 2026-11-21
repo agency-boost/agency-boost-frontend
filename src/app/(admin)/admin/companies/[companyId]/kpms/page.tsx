@@ -55,7 +55,7 @@ export default function CompanyKpmsPage({ params }: { params: Promise<{ companyI
   const n = (value: number | null) => (value === null ? '—' : formatNumber(value, {}, figures));
 
   return (
-    <CompanyFrame companyId={companyId} company={company} permission="platform_kpm_figures:read">
+    <CompanyFrame companyId={companyId} company={company} permission="platform_kpm_figures:read" active="publish">
       {error && (
         <div className="mb-4 flex flex-col gap-2">
           <ErrorBanner {...error} />

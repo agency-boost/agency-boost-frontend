@@ -1435,7 +1435,8 @@ describe('P19.1-T4, P19.11-T4 the goal card when production is not uploaded (UI-
     const owner = makeMe({ permissions: ['personal_summary:read', 'data_upload:upload_and_preview'] });
     showAs(owner, { '/summary': { body: notUploaded() } });
     const link = within(await goalCard()).getByRole('link', { name: 'Upload production →' });
-    expect(link).toHaveAttribute('href', '/kpm/data-upload');
+    // P19.21-T1 AC-9: on the current month, the search filled with the reader's name.
+    expect(link.getAttribute('href')).toMatch(/^\/kpm\/data-upload\?month=\d{4}-\d{2}&q=.+/);
   });
 
   it('P19.1-T4 AC-9 nobody else sees it: an agent, an AB or an AAB holds no data_upload grant', async () => {

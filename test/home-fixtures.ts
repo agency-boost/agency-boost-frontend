@@ -42,7 +42,7 @@ export const RINA_AGENT = makeMe({
 
 const person = (name: string, over: Partial<HomeTeamPerson> = {}): HomeTeamPerson => ({
   membershipId: `m-${name.split(' ')[0].toLowerCase()}`, name, phone: '+6281211002200', photoUrl: null, inUnit: true,
-  rung: AGENT_RUNG, yesterday: null, today: null, ...over,
+  rung: AGENT_RUNG, yesterday: null, today: null, unitKey: null, ...over,
 });
 
 /** The seeded ladder's rungs, as `GET /home` names them (P19.9-T2 AC-2). */
@@ -106,9 +106,10 @@ export const LEADER: HomeView = {
   leads: 16,
   newHires: 3,
   leader: {
-    activeAgent: { count: 4, of: 12, unit: { count: 1, of: 4 }, aab: { count: 3, of: 8 } },
+    activeAgent: { count: 4, of: 12, unit: { count: 1, of: 4 }, aab: { count: 3, of: 8 }, held: true },
     coached7d: { count: 2, of: 12, unit: { count: 1, of: 4 }, aab: { count: 1, of: 8 } },
     team: TEAM,
+    office: null,
   },
 };
 
@@ -124,9 +125,10 @@ export const NEW_LEADER: HomeView = {
   leads: 0,
   newHires: 0,
   leader: {
-    activeAgent: { count: 0, of: 0, unit: { count: 0, of: 0 }, aab: { count: 0, of: 0 } },
+    activeAgent: { count: 0, of: 0, unit: { count: 0, of: 0 }, aab: { count: 0, of: 0 }, held: false },
     coached7d: { count: 0, of: 0, unit: { count: 0, of: 0 }, aab: { count: 0, of: 0 } },
     team: [],
+    office: null,
   },
 };
 
@@ -140,3 +142,43 @@ export const AGENT_VIEW: HomeView = {
   leader: null,
 };
 
+/** The KPM Owner as the 19 November review signed in (P19.18-T4): Wilson, the root AB and the Owner, leading the office. */
+export const WILSON_OWNER = makeMe({
+  user: { ...makeMe().user, fullName: 'Wilson Tanoto' },
+  membership: { ...AGUS.membership!, membershipId: 'm-wilson', hierarchyRole: 'ab', isKpmOwner: true, directCount: 3 },
+  permissions: ['personal_summary:read', 'unit_dashboard:read', 'member:update_phone'],
+});
+
+/** The seeded ladder's AB rung, as `GET /home` names it. */
+export const AB_RUNG = { code: 'AB', label: 'AB' };
+
+const unit = (key: string, name: string, count: number) => ({
+  key, leader: { membershipId: key, name, photoUrl: null }, isReader: false, count,
+});
+
+/**
+ * **The Owner's Home, the whole office** (P19.18-T4; `home-owner-mobile` frame 3): *Active Agent 2 dari 30*, *Coaching 7
+ * hari 5 dari 30*, no split chips; *Laporan aktivitas tim* grouped by AB unit, each in the server's order — the AB, their
+ * AAB, then agents — seven people, so *Semua ›* opens the last two.
+ */
+export const OWNER_VIEW: HomeView = {
+  ...LEADER,
+  leader: {
+    activeAgent: { count: 2, of: 30, unit: { count: 0, of: 1 }, aab: { count: 2, of: 29 }, held: true },
+    coached7d: { count: 5, of: 30, unit: { count: 0, of: 1 }, aab: { count: 5, of: 29 } },
+    team: [
+      person('Agus Prasetyo', { rung: AB_RUNG, inUnit: false, unitKey: 'm-agus', yesterday: 7, today: 2 }),
+      person('Dewi Lestari', { rung: AAB_RUNG, inUnit: false, unitKey: 'm-agus' }),
+      person('Lukman Hakim', { inUnit: false, unitKey: 'm-agus' }),
+      person('Satria Nugraha', { rung: AB_RUNG, inUnit: false, unitKey: 'm-satria', yesterday: 1 }),
+      person('Raka Aditama', { inUnit: false, unitKey: 'm-satria' }),
+      person('Yosef Tambunan', { rung: AB_RUNG, inUnit: false, unitKey: 'm-yosef', yesterday: 3, today: 1 }),
+      person('Cahya Ningrum', { inUnit: false, unitKey: 'm-yosef' }),
+    ],
+    office: {
+      scope: 'downline',
+      scopes: { offered: ['unit', 'direct', 'informal', 'downline'], default: 'downline' },
+      units: [unit('m-agus', 'Agus Prasetyo', 3), unit('m-satria', 'Satria Nugraha', 2), unit('m-yosef', 'Yosef Tambunan', 2)],
+    },
+  },
+};

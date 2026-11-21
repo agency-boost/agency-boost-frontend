@@ -1,14 +1,20 @@
 'use client';
 
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { Page } from '@/components/page';
 import { PublishBar } from '@/components/publish-bar';
 import { SettingsTabs } from '@/components/settings-tabs';
 import { StagedChangesBar } from '@/components/staged-changes-bar';
 import { ErrorBanner } from '@/components/ui/field';
+import { LineIcon } from '@/components/ui/line-icon';
 import { useMessages } from '@/i18n/language-provider';
 import { settingsMessages } from '@/i18n/messages/settings';
 import type { ApiError } from '@/lib/api-client';
+
+/** The *Pengaturan* hub (P19.21-T2), which every settings page's back link returns to. */
+const SETTINGS_HUB_PATH = '/kpm/settings';
 
 /**
  * The block order every settings screen shares.
@@ -24,8 +30,12 @@ import type { ApiError } from '@/lib/api-client';
  * client asked for in as many words — tab, then subtab, then save:
  *
  * ```
- * header → tabs → subtabs → error → bars → toolbar → content
+ * header → back to Pengaturan → tabs → subtabs → error → bars → toolbar → content
  * ```
+ *
+ * *Changed 2026-11-20 (P19.21-T2 AC-3; ADR-0274 §6):* a page under `/kpm/settings/` opens with *‹ Pengaturan*, the way
+ * back to the hub the eleven settings now sit behind, above its tabs; its publish bar is its own setting's
+ * (`publish-bar.tsx`).
  *
  * Owning it here rather than documenting it is the point. A screen cannot put its subtabs
  * below its publish bar, because a screen no longer says where either one goes.
@@ -77,8 +87,28 @@ export function SettingsScreen({
   children: ReactNode;
 }) {
   const t = useMessages(settingsMessages);
+  // P19.21-T2 AC-3: every page under *Pengaturan* opens the same way — the way back to the hub, then the tabs.
+  const underHub = (usePathname() ?? '').startsWith(`${SETTINGS_HUB_PATH}/`);
   return (
     <Page title={title} subtitle={subtitle} permission={permission} actions={actions}>
+      {/*
+        * A row of the frame's width holding the link (P19.13-T5 AC-1): every block of a page has the frame's edges, and a
+        * link standing alone in `main` would end where its words do.
+        */}
+      {underHub && (
+        <div className="mb-3 flex">
+          <Link
+            href={SETTINGS_HUB_PATH}
+            aria-label={t.backToHubLabel}
+            data-settings-back=""
+            className="-ml-1 inline-flex min-h-11 items-center gap-1 rounded-md px-1 text-md font-bold text-navy hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
+          >
+            <LineIcon name="chevronLeft" className="h-4 w-4" />
+            {t.backToHub}
+          </Link>
+        </div>
+      )}
+
       {tabs && (
         <SettingsTabs
           tabs={tabs}

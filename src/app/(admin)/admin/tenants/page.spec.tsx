@@ -1,469 +1,212 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { axe } from 'vitest-axe';
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import AdminLayout from '@/app/(admin)/layout';
-import { atWidth, makeMe, renderInLayout, stubFetch, wears } from '@test/harness';
-import { smallTargets } from '@test/touch-audit';
-import TenantsPage from './page';
+import { atWidth, renderInIndonesian, stubFetch } from '@test/harness';
+import { englishOnly, englishShown } from '@test/english-left';
+import { adminConsoleMessages } from '@/i18n/messages/admin-console';
+import { BSD, CEMPAKA, CONSOLE_SUPER_ADMIN, DASHBOARD, GADING, HOLD, MAGNI, PRU } from '@test/console-fixtures';
+import { enteredKpmId, leaveKpm } from '@/lib/super-admin-kpm';
+import KpmListPage from './page';
 
-const push = vi.fn();
+const query = vi.hoisted(() => ({ value: new URLSearchParams() }));
+const push = vi.hoisted(() => vi.fn());
 vi.mock('next/navigation', () => ({
-  useRouter: () => ({ push, replace: vi.fn() }),
+  useRouter: () => ({ push, replace: vi.fn(), back: vi.fn(), prefetch: vi.fn() }),
   usePathname: () => '/admin/tenants',
+  useSearchParams: () => query.value,
 }));
 
-const SUPER_ADMIN = makeMe({
-  user: {
-    id: 'u-root', email: 'superadmin@agencyboost.test', fullName: 'Root', preferredName: null,
-    pronoun: 'they', initials: 'R', platformRole: 'super_admin',
-  },
-  membership: null,
-  permissions: ['kpm:list_all', 'kpm:create', 'company:crud'],
-});
-
-const KPM = {
-  _id: 'kpm-1', companyId: 'co-1', companyName: 'Prudential', code: '0417',
-  branchName: 'BSD City Branch', address: null, contactPhone: null,
-  ownerUserId: 'u-owner', ownerName: 'Rina Wijaya', ownerEmail: 'rina@kpm0417.test',
-  timezone: 'Asia/Jakarta', locale: 'id-ID', currency: 'IDR', status: 'active',
-  suspendedAt: null, suspendedReason: null, createdAt: '2026-09-01T00:00:00.000Z',
-  settings: {},
-  // P13.2-T3: the Super Admin's rows carry the subscription, Leaders used and the ended state.
-  subscription: null, leadersUsed: 6, subscriptionState: 'none',
-  // P19.4-T3: the Owner's state and the members (ADR-0212), and the data status (AC-8).
-  ownerState: 'active', ownerPhone: null, ownerInvitedAt: null, pendingOwner: null, memberCount: 12, membersBesidesOwner: 11,
-  dataStatus: { latestMonth: '2026-09', missingMonth: null },
-};
-
-const SUBSCRIPTION = {
-  startDate: '2026-01-06', endDate: '2027-01-05', pricePerLeaderMinor: 350_000_00, currency: 'IDR',
-  maxLeaders: 10, keepActiveAfterEnd: false,
-};
-
-describe('tenants list', () => {
-  afterEach(() => vi.unstubAllGlobals());
-
-  it('renders a real table with the company named, from one request', async () => {
-    const { calls } = stubFetch({ '/admin/tenants': { body: [KPM] } });
-    renderInLayout(AdminLayout, <TenantsPage />, { me: SUPER_ADMIN });
-
-    const row = within(await screen.findByRole('table')).getByRole('row', { name: /0417/ });
-    expect(within(row).getByText('BSD City Branch')).toBeInTheDocument();
-    expect(within(row).getByText('Prudential')).toBeInTheDocument();
-    expect(within(row).getByText('Active')).toBeInTheDocument();
-
-    // The company name arrives on the payload. It used to be joined from a second
-    // request, so a KPM whose company was missing from that list showed a raw ObjectId.
-    expect(calls.filter((c) => c.url.includes('/admin/companies'))).toHaveLength(0);
-  });
-
-  it('P3.1-T14 AC-7: names the owner, rather than printing their id', async () => {
-    stubFetch({ '/admin/tenants': { body: [KPM] } });
-    renderInLayout(AdminLayout, <TenantsPage />, { me: SUPER_ADMIN });
-
-    const row = within(await screen.findByRole('table')).getByRole('row', { name: /0417/ });
-    expect(within(row).getByText('Rina Wijaya')).toBeInTheDocument();
-    expect(within(row).getByText('rina@kpm0417.test')).toBeInTheDocument();
-    // The id was a 24-character hex string in a column headed **Owner**.
-    expect(within(row).queryByText('u-owner')).not.toBeInTheDocument();
-  });
-
-  it('P3.1-T14: says an owner is Unknown rather than making the office look unowned', async () => {
-    // An owner whose account has gone is a different problem from no owner at all, and
-    // the two must not collapse into the same red call to act.
-    stubFetch({
-      '/admin/tenants': { body: [{ ...KPM, ownerName: 'Unknown', ownerEmail: null }] },
-    });
-    renderInLayout(AdminLayout, <TenantsPage />, { me: SUPER_ADMIN });
-
-    const row = within(await screen.findByRole('table')).getByRole('row', { name: /0417/ });
-    expect(within(row).getByText('Unknown')).toBeInTheDocument();
-    expect(within(row).queryByRole('link', { name: 'Assign an owner' })).not.toBeInTheDocument();
-  });
-
-  it('flags an office with no owner as an action, not a blank cell', async () => {
-    // Nobody can administer an office until an owner is assigned, so an empty cell
-    // would hide the one thing that still needs doing.
-    stubFetch({
-      '/admin/tenants': { body: [{ ...KPM, ownerUserId: null, ownerName: null, ownerEmail: null }] },
-    });
-    renderInLayout(AdminLayout, <TenantsPage />, { me: SUPER_ADMIN });
-
-    expect(await screen.findByRole('link', { name: 'Assign an owner' })).toHaveAttribute(
-      'href',
-      '/admin/tenants/kpm-1/owner',
-    );
-  });
-
-  it('offers creation from the empty state as well as the header', async () => {
-    stubFetch({ '/admin/tenants': { body: [] }, '/admin/companies': { body: [] } });
-    renderInLayout(AdminLayout, <TenantsPage />, { me: SUPER_ADMIN });
-
-    expect(await screen.findByText('No KPMs yet.')).toBeInTheDocument();
-    const links = screen.getAllByRole('link', { name: /New office|Create the first one/ });
-    expect(links.length).toBeGreaterThanOrEqual(2);
-  });
-
-  it('shows the error envelope when the list cannot be read', async () => {
-    stubFetch({
-      '/admin/tenants': {
-        status: 403,
-        body: { error: { code: 'PERM_DENIED', message: 'Nope.', requestId: 'req-3' } },
-      },
-      '/admin/companies': { body: [] },
-    });
-    renderInLayout(AdminLayout, <TenantsPage />, { me: SUPER_ADMIN });
-
-    const alert = await screen.findByRole('alert');
-    expect(alert).toHaveTextContent('Nope.');
-    expect(alert).toHaveTextContent('req-3');
-  });
-
-  describe('subscriptions (P13.2-T3 AC-7, P13.2-T4 AC-7)', () => {
-    it('shows the end date and "{used} / {max}", or the count alone with no limit', async () => {
-      stubFetch({
-        '/admin/tenants': {
-          body: [
-            { ...KPM, subscription: SUBSCRIPTION, subscriptionState: 'active' },
-            { ...KPM, _id: 'kpm-2', code: '0555', branchName: 'Kelapa Gading Branch', leadersUsed: 2 },
-          ],
-        },
-      });
-      renderInLayout(AdminLayout, <TenantsPage />, { me: SUPER_ADMIN });
-
-      const table = await screen.findByRole('table');
-      expect(within(table).getByRole('columnheader', { name: 'End date' })).toBeInTheDocument();
-      expect(within(table).getByRole('columnheader', { name: 'Leaders' })).toBeInTheDocument();
-      const limited = within(table).getByRole('row', { name: /^0417/ });
-      expect(within(limited).getByText('5 Jan 2027')).toBeInTheDocument();
-      expect(within(limited).getByText('6 / 10')).toBeInTheDocument();
-      const unlimited = within(table).getByRole('row', { name: /^0555/ });
-      expect(within(unlimited).getByText('2')).toBeInTheDocument();
-      expect(within(unlimited).getByText('—')).toBeInTheDocument();
-    });
-
-    it('P18.5-T2 AC-7 reads 13 / 10 and “3 over” past the limit, and says it whole to a screen reader', async () => {
-      stubFetch({
-        '/admin/tenants': {
-          body: [
-            { ...KPM, subscription: SUBSCRIPTION, subscriptionState: 'active', leadersUsed: 13 },
-            { ...KPM, _id: 'kpm-2', code: '0555', branchName: 'Kelapa Gading Branch', subscription: SUBSCRIPTION, subscriptionState: 'active', leadersUsed: 10 },
-          ],
-        },
-      });
-      renderInLayout(AdminLayout, <TenantsPage />, { me: SUPER_ADMIN });
-
-      const table = await screen.findByRole('table');
-      const over = within(table).getByRole('row', { name: /^0417/ });
-      expect(within(over).getByText('13 / 10')).toBeInTheDocument();
-      expect(within(over).getByText('3 over')).toBeInTheDocument();
-      expect(within(over).getByText('13 leaders of a limit of 10, 3 over')).toHaveClass('sr-only');
-      // At the limit, not past it: no overage.
-      const at = within(table).getByRole('row', { name: /^0555/ });
-      expect(within(at).getByText('10 / 10')).toBeInTheDocument();
-      expect(within(at).queryByText(/over/)).not.toBeInTheDocument();
-    });
-
-    it.each([
-      ['ended', 'Ended'],
-      ['ended_kept_active', 'Ended — kept active'],
-    ])('reads %s in the Status column as “%s”, in place of Active', async (state, word) => {
-      stubFetch({ '/admin/tenants': { body: [{ ...KPM, subscription: SUBSCRIPTION, subscriptionState: state }] } });
-      renderInLayout(AdminLayout, <TenantsPage />, { me: SUPER_ADMIN });
-      const row = within(await screen.findByRole('table')).getByRole('row', { name: /0417/ });
-      expect(within(row).getByText(word)).toBeInTheDocument();
-      expect(within(row).queryByText('Active')).not.toBeInTheDocument();
-    });
-
-    it('a suspended office keeps its own word, ended or not', async () => {
-      stubFetch({ '/admin/tenants': { body: [{ ...KPM, status: 'suspended', subscriptionState: 'ended' }] } });
-      renderInLayout(AdminLayout, <TenantsPage />, { me: SUPER_ADMIN });
-      const row = within(await screen.findByRole('table')).getByRole('row', { name: /0417/ });
-      expect(within(row).getByText('Suspended')).toBeInTheDocument();
-    });
-
-    it('opens Edit subscription from a button named for its office, with the five fields and the leaders used now', async () => {
-      stubFetch({ '/admin/tenants': { body: [{ ...KPM, subscription: SUBSCRIPTION, subscriptionState: 'active' }] } });
-      renderInLayout(AdminLayout, <TenantsPage />, { me: SUPER_ADMIN });
-
-      await userEvent.click(await screen.findByRole('button', { name: 'Edit subscription for KPM 0417 · BSD City Branch' }));
-      const dialog = screen.getByRole('dialog', { name: 'Edit subscription' });
-      expect(within(dialog).getByLabelText('Start date')).toHaveValue('2026-01-06');
-      expect(within(dialog).getByLabelText('End date')).toHaveValue('2027-01-05');
-      expect(within(dialog).getByLabelText('Price per leader per month')).toHaveValue('350,000');
-      expect(within(dialog).getByLabelText('Maximum leaders')).toHaveValue('10');
-      expect(within(dialog).getByRole('switch', { name: 'Keep active after the end date' })).not.toBeChecked();
-      expect(dialog).toHaveTextContent('Leaders used now: 6');
-    });
-
-    it('the list and its open dialog have no accessibility violations', async () => {
-      stubFetch({ '/admin/tenants': { body: [{ ...KPM, subscription: SUBSCRIPTION, subscriptionState: 'ended' }] } });
-      const { container } = renderInLayout(AdminLayout, <TenantsPage />, { me: SUPER_ADMIN });
-      await userEvent.click(await screen.findByRole('button', { name: /Edit subscription for KPM 0417/ }));
-      const results = await axe(container.ownerDocument.body, { rules: { 'color-contrast': { enabled: false } } });
-      expect((results.violations ?? []).map((v) => v.id)).toEqual([]);
-    });
-
-    it('warns, before saving, when the limit is below the leaders used — and lowering it demotes nobody', async () => {
-      stubFetch({ '/admin/tenants': { body: [{ ...KPM, subscription: SUBSCRIPTION, subscriptionState: 'active' }] } });
-      renderInLayout(AdminLayout, <TenantsPage />, { me: SUPER_ADMIN });
-      await userEvent.click(await screen.findByRole('button', { name: /Edit subscription for KPM 0417/ }));
-      const dialog = screen.getByRole('dialog');
-      const max = within(dialog).getByLabelText('Maximum leaders');
-      await userEvent.clear(max);
-      await userEvent.type(max, '4');
-      expect(dialog).toHaveTextContent('This office has 6 leaders now, more than 4. Nobody is demoted');
-    });
-
-    it('warns when the end date has already passed in the office’s day', async () => {
-      stubFetch({ '/admin/tenants': { body: [{ ...KPM, subscription: SUBSCRIPTION, subscriptionState: 'active' }] } });
-      renderInLayout(AdminLayout, <TenantsPage />, { me: SUPER_ADMIN });
-      await userEvent.click(await screen.findByRole('button', { name: /Edit subscription for KPM 0417/ }));
-      const dialog = screen.getByRole('dialog');
-      const end = within(dialog).getByLabelText('End date');
-      await userEvent.clear(end);
-      await userEvent.type(end, '2020-01-31');
-      expect(dialog).toHaveTextContent('This end date, 31 Jan 2020, has passed. Once you save, nobody in this office');
-      await userEvent.click(within(dialog).getByRole('switch', { name: 'Keep active after the end date' }));
-      expect(dialog).toHaveTextContent('The office stays open because it is kept active.');
-    });
-
-    it('saves all five fields, in sen, and redraws the row from the answer', async () => {
-      const saved = { ...KPM, subscription: { ...SUBSCRIPTION, maxLeaders: 12 }, subscriptionState: 'active' };
-      const { calls } = stubFetch({
-        'GET /admin/tenants': { body: [{ ...KPM, subscription: SUBSCRIPTION, subscriptionState: 'active' }] },
-        'PATCH /admin/tenants/kpm-1/subscription': { body: saved },
-      });
-      renderInLayout(AdminLayout, <TenantsPage />, { me: SUPER_ADMIN });
-      await userEvent.click(await screen.findByRole('button', { name: /Edit subscription for KPM 0417/ }));
-      const dialog = screen.getByRole('dialog');
-      const max = within(dialog).getByLabelText('Maximum leaders');
-      await userEvent.clear(max);
-      await userEvent.type(max, '12');
-      await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
-
-      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
-      const patch = calls.find((c) => c.init.method === 'PATCH')!;
-      expect(JSON.parse(patch.init.body as string)).toEqual({
-        startDate: '2026-01-06', endDate: '2027-01-05', pricePerLeaderMinor: 350_000_00, maxLeaders: 12,
-        // P19.4-T3 (ADR-0211 §1): *Paket*, none on this office.
-        keepActiveAfterEnd: false, plan: null,
-      });
-      const row = within(screen.getByRole('table')).getByRole('row', { name: /0417/ });
-      expect(within(row).getByText('6 / 12')).toBeInTheDocument();
-      expect(screen.getByRole('status')).toHaveTextContent('Subscription saved for KPM 0417.');
-    });
-
-    it('refuses an end before the start, under the field, without asking the API', async () => {
-      const { calls } = stubFetch({ 'GET /admin/tenants': { body: [{ ...KPM, subscription: SUBSCRIPTION, subscriptionState: 'active' }] } });
-      renderInLayout(AdminLayout, <TenantsPage />, { me: SUPER_ADMIN });
-      await userEvent.click(await screen.findByRole('button', { name: /Edit subscription for KPM 0417/ }));
-      const dialog = screen.getByRole('dialog');
-      const end = within(dialog).getByLabelText('End date');
-      await userEvent.clear(end);
-      await userEvent.type(end, '2025-12-31');
-      await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
-      expect(within(dialog).getByLabelText('End date')).toHaveAttribute('aria-invalid', 'true');
-      expect(dialog).toHaveTextContent('The end date is on or after the start date.');
-      expect(calls.filter((c) => c.init.method === 'PATCH')).toHaveLength(0);
-    });
-
-    it('names the field the API refused, and shows any other refusal in the dialog', async () => {
-      stubFetch({
-        'GET /admin/tenants': { body: [{ ...KPM, subscription: SUBSCRIPTION, subscriptionState: 'active' }] },
-        'PATCH /admin/tenants/kpm-1/subscription': [
-          { status: 400, body: { error: { code: 'VALIDATION_FAILED', message: 'maxLeaders must be a whole number from 1 to 10000, or none.', details: { field: 'maxLeaders' }, requestId: 'r' } } },
-          { status: 403, body: { error: { code: 'PERM_DENIED', message: 'You do not have permission to perform this action.', requestId: 'r-2' } } },
-        ],
-      });
-      renderInLayout(AdminLayout, <TenantsPage />, { me: SUPER_ADMIN });
-      await userEvent.click(await screen.findByRole('button', { name: /Edit subscription for KPM 0417/ }));
-      const dialog = screen.getByRole('dialog');
-      await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
-      await waitFor(() => expect(within(dialog).getByLabelText('Maximum leaders')).toHaveAttribute('aria-invalid', 'true'));
-
-      await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
-      expect(await within(dialog).findByRole('alert')).toHaveTextContent('You do not have permission');
-    });
-  });
-
-  it('never renders for a session without the platform permission', () => {
-    // A Super Admin without the grant: anybody else is sent to their own landing first (2026-10-11).
-    renderInLayout(AdminLayout, <TenantsPage />, { me: makeMe({ ...SUPER_ADMIN, permissions: [] }) });
-    expect(screen.getByRole('alert')).toHaveTextContent('Not available to you');
-    // The gate's code is on the refusal as data, and never in its words (P11-T6).
-    expect(screen.getByRole('alert')).toHaveAttribute('data-permission', 'kpm:list_all');
-    expect(screen.queryByRole('table')).not.toBeInTheDocument();
-  });
-
-  describe('P19.4-T3 AC-8 — KPM · Pemilik · Anggota · Data terakhir · Perlu tindakan', () => {
-    const NEEDS = {
-      ...KPM, _id: 'kpm-2', code: '0602', branchName: 'Bandung Dago', ownerName: 'Wulan Kartika', ownerEmail: 'wulan@kpm.test',
-      ownerState: 'invited', memberCount: 1, membersBesidesOwner: 0,
-      dataStatus: { latestMonth: null, missingMonth: '2026-10' },
-    };
-
-    // Moved 2026-11-06 (P19.2-T2 AC-1; UI-126): below 1024px the list is rows, so the 375px case reads the row (below);
-    // the table's case is the laptop's.
-    it.each([1024, 1280])('P19.4-T3 AC-8 at %ipx: the Owner’s chip, the members, the latest data and what needs doing', async (px) => {
-      atWidth(px);
-      stubFetch({ '/admin/tenants': { body: [KPM, NEEDS] } });
-      renderInLayout(AdminLayout, <TenantsPage />, { me: SUPER_ADMIN });
-      const table = await screen.findByRole('table');
-      const done = within(table).getByRole('row', { name: /0417/ });
-      expect(within(done).getByText('Signed in')).toBeInTheDocument();
-      expect(within(done).getByText('12')).toBeInTheDocument();
-      expect(within(done).getByText('Sep 2026')).toBeInTheDocument();
-      expect(within(done).getByText('Nothing')).toBeInTheDocument();
-      const open = within(table).getByRole('row', { name: /0602/ });
-      expect(within(open).getByText('Invited')).toBeInTheDocument();
-      expect(within(open).getByText('No data yet')).toBeInTheDocument();
-      expect(within(open).getByText('The owner has not accepted the invitation')).toBeInTheDocument();
-      expect(within(open).getByText('No members yet')).toBeInTheDocument();
-      expect(within(open).getByText('Oct 2026 data not uploaded')).toBeInTheDocument();
-    });
-
-    it.each([375, 768])('P19.4-T3 AC-8 at %ipx a row says the Owner’s chip, the members, the latest data and what needs doing', async (px) => {
-      atWidth(px);
-      stubFetch({ '/admin/tenants': { body: [KPM, NEEDS] } });
-      renderInLayout(AdminLayout, <TenantsPage />, { me: SUPER_ADMIN });
-      const list = await screen.findByRole('list', { name: 'Offices on the platform' });
-      const [done, open] = within(list).getAllByRole('listitem');
-      expect(done).toHaveTextContent('Prudential · 12 members · Sep 2026');
-      expect(done).toHaveTextContent('Owner: Rina Wijaya');
-      expect(within(done).getByText('Signed in')).toBeInTheDocument();
-      // Nothing to do is the row's silence: no alert line, where the table's cell says *Nothing*.
-      expect(done.querySelector('.text-alert')).toBeNull();
-      expect(open).toHaveTextContent('Prudential · 1 member · No data yet');
-      expect(within(open).getByText('Invited')).toBeInTheDocument();
-      expect(within(open).getByText('The owner has not accepted the invitation')).toBeInTheDocument();
-      expect(within(open).getByText('No members yet')).toBeInTheDocument();
-      expect(within(open).getByText('Oct 2026 data not uploaded')).toBeInTheDocument();
-    });
-
-    it('P19.4-T3 AC-8 an office with nobody named reads “No owner yet”, and a pending Owner is named, not invited', async () => {
-      stubFetch({
-        '/admin/tenants': {
-          body: [
-            { ...KPM, ownerUserId: null, ownerName: null, ownerEmail: null, ownerState: 'none', memberCount: 0, membersBesidesOwner: 0 },
-            {
-              ...KPM, _id: 'kpm-3', code: '0603', ownerUserId: null, ownerName: null, ownerEmail: null, ownerState: 'not_invited',
-              pendingOwner: { fullName: 'Dewi Anggraini', phone: '+6281200000000', agentCode: null },
-            },
-          ],
-        },
-      });
-      renderInLayout(AdminLayout, <TenantsPage />, { me: SUPER_ADMIN });
-      const table = await screen.findByRole('table');
-      expect(within(within(table).getByRole('row', { name: /0417/ })).getByText('No owner yet')).toBeInTheDocument();
-      const pending = within(table).getByRole('row', { name: /0603/ });
-      expect(within(pending).getByText('Dewi Anggraini')).toBeInTheDocument();
-      expect(within(pending).getByText('Not invited')).toBeInTheDocument();
-    });
-  });
-});
+const RULES = { rules: { 'color-contrast': { enabled: false } } };
+const card = (id: string) => within(document.querySelector(`[data-kpm-card="${id}"]`) as HTMLElement);
 
 /**
- * **P19.2-T2 — the KPMs list's layout** (UI-126, UI-135): rows below 1024px, the table from it; the row's actions in ⋯
- * opening what the table's controls open; 44px targets.
+ * ***KPM*** (P19.23-T2 AC-1 to AC-3; ADR-0277 §2, §3): the navy tiles, the search and the filter, one card per KPM with its
+ * one warning line, ⋯ with its five actions, and *KPM baru* — four fields, the code made by the server, then the Owner's
+ * invitation by WhatsApp.
  */
-describe('P19.2-T2 the KPMs list (UI-126, UI-135)', () => {
-  afterEach(() => vi.unstubAllGlobals());
-
-  const OVER = {
-    ...KPM, _id: 'kpm-2', code: '0602', branchName: 'Bandung Dago', ownerUserId: null, ownerName: null, ownerEmail: null,
-    ownerState: 'none', subscription: SUBSCRIPTION, subscriptionState: 'active', leadersUsed: 13,
-  };
-  const show = (rows: unknown[] = [KPM, OVER]) => {
-    const stub = stubFetch({ 'GET /admin/tenants': { body: rows } });
-    renderInLayout(AdminLayout, <TenantsPage />, { me: SUPER_ADMIN });
-    return stub;
-  };
-
-  it.each([375, 768])('P19.2-T2 AC-1 at %ipx draws no table: one row per KPM — code · branch opening it, its state, ⋯', async (px) => {
-    atWidth(px);
-    show();
-    const list = await screen.findByRole('list', { name: 'Offices on the platform' });
-    expect(screen.queryByRole('table')).toBeNull();
-    const [first, second] = within(list).getAllByRole('listitem');
-    expect(wears(first, px)).toContain('min-h-14');
-    expect(within(first).getByRole('link', { name: '0417 · BSD City Branch' })).toHaveAttribute('href', '/admin/tenants/kpm-1');
-    expect(within(first).getByText('Active')).toBeInTheDocument();
-    expect(within(first).getByRole('button', { name: 'Actions for 0417 · BSD City Branch' })).toHaveTextContent('⋯');
-    // Past the limit (ADR-0157 §4): the count, *3 over*, and the sentence a screen reader hears whole.
-    expect(second).toHaveTextContent('Leaders 13 / 10');
-    expect(within(second).getByText('3 over')).toBeInTheDocument();
-    expect(within(second).getByText('13 leaders of a limit of 10, 3 over')).toHaveClass('sr-only');
-    // Within the limit the row does not repeat the count: it is the laptop's column, and the dialog's line.
-    expect(first).not.toHaveTextContent('Leaders');
-    expect(within(second).getByText('No owner yet')).toBeInTheDocument();
+describe('/admin/tenants — the KPM list (P19.23-T2)', () => {
+  beforeEach(() => {
+    atWidth(1024);
+    query.value = new URLSearchParams();
+    stubFetch({ '/admin/dashboard': { body: DASHBOARD } });
+  });
+  afterEach(() => {
+    leaveKpm();
+    vi.unstubAllGlobals();
   });
 
-  it.each([1024, 1280])('P19.2-T2 AC-1 at %ipx keeps the table, its columns as before', async (px) => {
-    atWidth(px);
-    show();
-    const table = await screen.findByRole('table', { name: 'Offices on the platform' });
-    expect(within(table).getAllByRole('columnheader').map((h) => h.textContent)).toEqual([
-      'KPM', 'Company', 'Owner', 'Members', 'Latest data', 'Needs action', 'Status', 'End date', 'Leaders', 'Subscription',
-    ]);
-    expect(screen.queryByRole('list', { name: 'Offices on the platform' })).toBeNull();
-  });
-
-  it.each([375, 768])('P19.2-T2 AC-1 at %ipx ⋯ opens Edit subscription, the dialog the table’s button opens, and saves the same', async (px) => {
-    atWidth(px);
-    const { calls } = stubFetch({
-      'GET /admin/tenants': { body: [{ ...KPM, subscription: SUBSCRIPTION, subscriptionState: 'active' }] },
-      'PATCH /admin/tenants/kpm-1/subscription': { body: { ...KPM, subscription: { ...SUBSCRIPTION, maxLeaders: 12 }, subscriptionState: 'active' } },
+  it('P19.23-T2 AC-1 the tiles: KPM · Perusahaan · Anggota · Perlu tindakan', async () => {
+    renderInIndonesian(<KpmListPage />, { me: CONSOLE_SUPER_ADMIN });
+    const tiles = await waitFor(() => {
+      const el = document.querySelector('[data-kpm-tiles]');
+      if (!el) throw new Error('no tiles yet');
+      return el as HTMLElement;
     });
-    renderInLayout(AdminLayout, <TenantsPage />, { me: SUPER_ADMIN });
-    await userEvent.click(await screen.findByRole('button', { name: 'Actions for 0417 · BSD City Branch' }));
-    expect(screen.getAllByRole('menuitem').map((m) => m.textContent)).toEqual(['Edit subscription']);
-    await userEvent.click(screen.getByRole('menuitem', { name: 'Edit subscription' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Edit subscription' });
-    expect(dialog).toHaveTextContent('Leaders used now: 6');
-    const max = within(dialog).getByLabelText('Maximum leaders');
-    await userEvent.clear(max);
-    await userEvent.type(max, '12');
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
-    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
-    expect(JSON.parse(calls.find((c) => c.init.method === 'PATCH')!.init.body as string)).toMatchObject({ maxLeaders: 12 });
-    expect(screen.getByRole('status')).toHaveTextContent('Subscription saved for KPM 0417.');
+    expect(Array.from(tiles.querySelectorAll('dd')).map((d) => d.textContent)).toEqual(['5', '3', '33', '3']);
   });
 
-  it('P19.2-T2 AC-1 at 375px an office with no owner offers Assign an owner in ⋯, to the owner page', async () => {
+  /*
+   * Found 2026-11-20: the list summed every card's members — a suspended KPM's and an ended subscription's too — and said
+   * 57 under *Anggota* while the Dashboard said 54. Both read the one answer, so both count §B.45's set: the active KPMs.
+   */
+  it('counts Anggota as the Dashboard does — the active KPMs’ members, never a suspended or ended one’s', async () => {
+    const people = { leader: { members: 2, everUsed: 0, used14: 0, powerUsers: 0 }, agent: { members: 1, everUsed: 0, used14: 0, powerUsers: 0 } };
+    const kpms = DASHBOARD.kpms.map((k) => (k.kpmId === GADING || k.kpmId === HOLD ? { ...k, usage: people } : k));
+    stubFetch({ '/admin/dashboard': { body: { ...DASHBOARD, kpms } } });
+    renderInIndonesian(<KpmListPage />, { me: CONSOLE_SUPER_ADMIN });
+    await screen.findByText('BSD City Branch');
+    const tiles = document.querySelector('[data-kpm-tiles]') as HTMLElement;
+    // The two hold three members each on their cards; the tile is still the Dashboard's 11 leaders + 22 agents.
+    expect(card(GADING).getByText('3 anggota')).toBeInTheDocument();
+    expect(Array.from(tiles.querySelectorAll('dd')).map((d) => d.textContent)[2]).toBe('33');
+  });
+
+  it('P19.23-T2 AC-1 a card: initials, name, company, owner, members, Pakai 14 hari terakhir, one line — no Aktif pill', async () => {
+    renderInIndonesian(<KpmListPage />, { me: CONSOLE_SUPER_ADMIN });
+    await screen.findByText('BSD City Branch');
+    const bsd = card(BSD);
+    expect(bsd.getByText('BC')).toBeInTheDocument();
+    expect(bsd.getByText('Prudential')).toBeInTheDocument();
+    expect(bsd.getByText('WILSON TANOTO')).toBeInTheDocument();
+    expect(bsd.getByText('30 anggota')).toBeInTheDocument();
+    // 17 of 30 used in the last 14 days: 57%, yellow.
+    expect(bsd.getByText('57%')).toHaveClass('bg-pill-amber');
+    expect(bsd.getByText('Tidak ada yang perlu')).toBeInTheDocument();
+    expect(bsd.queryByText('Aktif')).not.toBeInTheDocument();
+    expect(card(MAGNI).getByText('Belum ada anggota')).toBeInTheDocument();
+    expect(card(CEMPAKA).getByText('Owner belum diundang')).toBeInTheDocument();
+    expect(card(GADING).getByText('Langganan berakhir')).toBeInTheDocument();
+    expect(card(HOLD).getByText('Ditangguhkan · anggota tidak bisa masuk')).toBeInTheDocument();
+    // A suspended KPM has no share to give.
+    expect(card(HOLD).getByText('–')).toBeInTheDocument();
+  });
+
+  it('P19.23-T2 AC-1 search by KPM or owner name, and the filter: Perlu tindakan, a company', async () => {
+    renderInIndonesian(<KpmListPage />, { me: CONSOLE_SUPER_ADMIN });
+    await screen.findByText('BSD City Branch');
+    const shown = () => Array.from(document.querySelectorAll('[data-kpm-card]')).map((c) => c.getAttribute('data-kpm-card'));
+    await userEvent.type(screen.getByRole('searchbox', { name: 'Cari nama KPM atau owner' }), 'hadi');
+    expect(shown()).toEqual([CEMPAKA]);
+    await userEvent.clear(screen.getByRole('searchbox', { name: 'Cari nama KPM atau owner' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Perlu tindakan 3' }));
+    expect(shown()).toEqual([GADING, MAGNI, CEMPAKA]);
+    await userEvent.click(screen.getByRole('button', { name: 'Sejahtera Baru Life' }));
+    expect(shown()).toEqual([CEMPAKA]);
+    await userEvent.type(screen.getByRole('searchbox', { name: 'Cari nama KPM atau owner' }), 'zzz');
+    expect(screen.getByText('Tidak ada KPM yang cocok.')).toBeInTheDocument();
+  });
+
+  it('P19.23-T2 AC-1 Masuk ke KPM enters it and opens its page', async () => {
+    renderInIndonesian(<KpmListPage />, { me: CONSOLE_SUPER_ADMIN });
+    await screen.findByText('BSD City Branch');
+    const link = card(BSD).getByRole('link', { name: /Masuk ke KPM/ });
+    expect(link).toHaveAttribute('href', `/admin/tenants/${BSD}`);
+    await userEvent.click(link);
+    expect(enteredKpmId()).toBe(BSD);
+  });
+
+  it('P19.23-T2 AC-2 ⋯: Ganti owner · Pindah perusahaan · Tangguhkan · Arsipkan · Hapus KPM, the last red', async () => {
+    renderInIndonesian(<KpmListPage />, { me: CONSOLE_SUPER_ADMIN });
+    await screen.findByText('BSD City Branch');
+    await userEvent.click(card(BSD).getByRole('button', { name: 'Tindakan untuk BSD City Branch' }));
+    const items = screen.getAllByRole('menuitem').map((i) => i.textContent?.trim());
+    expect(items).toEqual(['Ganti owner', 'Pindah perusahaan', 'Tangguhkan', 'Arsipkan', 'Hapus KPM']);
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Ganti owner' }));
+    expect(push).toHaveBeenCalledWith(`/admin/tenants/${BSD}/owner`);
+  });
+
+  it('P19.23-T2 AC-2 a suspended KPM offers Aktifkan lagi where Tangguhkan stood', async () => {
+    renderInIndonesian(<KpmListPage />, { me: CONSOLE_SUPER_ADMIN });
+    await screen.findByText('Suspended Branch');
+    await userEvent.click(card(HOLD).getByRole('button', { name: 'Tindakan untuk Suspended Branch' }));
+    expect(screen.getAllByRole('menuitem').map((i) => i.textContent?.trim()))
+      .toEqual(['Ganti owner', 'Pindah perusahaan', 'Aktifkan lagi', 'Arsipkan', 'Hapus KPM']);
+  });
+
+  it('P19.23-T2 AC-2 Tangguhkan asks a reason, saves it, and the list reads again', async () => {
+    const { calls } = stubFetch({
+      '/admin/dashboard': { body: DASHBOARD },
+      [`PATCH /admin/tenants/${BSD}/status`]: { body: { _id: BSD } },
+    });
+    renderInIndonesian(<KpmListPage />, { me: CONSOLE_SUPER_ADMIN });
+    await screen.findByText('BSD City Branch');
+    await userEvent.click(card(BSD).getByRole('button', { name: 'Tindakan untuk BSD City Branch' }));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Tangguhkan' }));
+    const sheet = within(await screen.findByRole('dialog', { name: 'Tangguhkan BSD City Branch?' }));
+    await userEvent.type(sheet.getByLabelText('Alasan'), 'Belum bayar');
+    await userEvent.click(sheet.getByRole('button', { name: 'Tangguhkan' }));
+    await waitFor(() => expect(calls.find((c) => c.url.includes('/status'))?.init.body).toBe(JSON.stringify({ status: 'suspended', reason: 'Belum bayar' })));
+    await waitFor(() => expect(calls.filter((c) => c.url.includes('/admin/dashboard'))).toHaveLength(2));
+  });
+
+  it('P19.23-T2 AC-2 Hapus KPM on a KPM that holds people: why not, and Arsipkan instead (ADR-0191 §5, OD-419)', async () => {
+    stubFetch({
+      '/admin/dashboard': { body: DASHBOARD },
+      [`/admin/tenants/${BSD}/contents`]: { body: { members: 30, records: 412, deletable: false } },
+    });
+    renderInIndonesian(<KpmListPage />, { me: CONSOLE_SUPER_ADMIN });
+    await screen.findByText('BSD City Branch');
+    await userEvent.click(card(BSD).getByRole('button', { name: 'Tindakan untuk BSD City Branch' }));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Hapus KPM' }));
+    const sheet = within(await screen.findByRole('dialog', { name: 'Hapus BSD City Branch?' }));
+    expect(await sheet.findByText('KPM ini masih punya 30 anggota dan 412 data, jadi tidak bisa dihapus. Arsipkan saja.')).toBeInTheDocument();
+    expect(sheet.queryByRole('button', { name: 'Hapus KPM' })).not.toBeInTheDocument();
+    expect(sheet.getByRole('button', { name: 'Arsipkan' })).toBeInTheDocument();
+  });
+
+  it('P19.23-T2 AC-3 KPM baru: four fields, checked; the KPM made with no code and its Owner named by WhatsApp', async () => {
+    const { calls } = stubFetch({
+      '/admin/dashboard': { body: DASHBOARD },
+      'POST /admin/tenants': { status: 201, body: { _id: '66f00000000000000000aaaa', branchName: 'Serpong Branch', code: '0420', invitationSent: false } },
+    });
+    renderInIndonesian(<KpmListPage />, { me: CONSOLE_SUPER_ADMIN });
+    await screen.findByText('BSD City Branch');
+    await userEvent.click(screen.getByRole('button', { name: 'KPM baru' }));
+    const sheet = within(await screen.findByRole('dialog', { name: 'KPM baru' }));
+    expect(sheet.getByText('Kode KPM dibuat otomatis. Owner menerima undangan lewat WhatsApp.')).toBeInTheDocument();
+    await userEvent.click(sheet.getByRole('button', { name: 'Buat KPM & undang owner' }));
+    expect(sheet.getByText('Beri nama KPM minimal 2 karakter.')).toBeInTheDocument();
+    expect(sheet.getByText('Pilih perusahaannya.')).toBeInTheDocument();
+    expect(calls.some((c) => c.init.method === 'POST')).toBe(false);
+
+    await userEvent.type(sheet.getByLabelText('Nama KPM'), 'Serpong Branch');
+    await userEvent.click(sheet.getByRole('button', { name: /Perusahaan/ }));
+    await userEvent.click(await screen.findByRole('option', { name: 'Prudential' }));
+    await userEvent.type(sheet.getByLabelText('Nama owner'), 'Budi Hartono');
+    await userEvent.type(sheet.getByLabelText('WhatsApp owner'), '0812 3456 7890');
+    await userEvent.click(sheet.getByRole('button', { name: 'Buat KPM & undang owner' }));
+
+    await waitFor(() => expect(calls.find((c) => c.init.method === 'POST')?.init.body).toBe(JSON.stringify({
+      companyId: PRU, branchName: 'Serpong Branch', owner: { fullName: 'Budi Hartono', phone: '+6281234567890' }, sendInvitation: false,
+    })));
+    expect(await screen.findByText('Serpong Branch sudah dibuat · kode 0420')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Kirim undangan/ })).toBeInTheDocument();
+  });
+
+  it('P19.23-T2 AC-3 ?baru=1 — the old three-step address — opens KPM baru', async () => {
+    query.value = new URLSearchParams('baru=1');
+    renderInIndonesian(<KpmListPage />, { me: CONSOLE_SUPER_ADMIN });
+    expect(await screen.findByRole('dialog', { name: 'KPM baru' })).toBeInTheDocument();
+  });
+
+  it('P19.23-T7 AC-1 on a phone the filter is a dropdown beside the search, and KPM baru full width', async () => {
     atWidth(375);
-    push.mockClear();
-    show();
-    await userEvent.click(await screen.findByRole('button', { name: 'Actions for 0602 · Bandung Dago' }));
-    expect(screen.getAllByRole('menuitem').map((m) => m.textContent)).toEqual(['Edit subscription', 'Assign an owner']);
-    await userEvent.click(screen.getByRole('menuitem', { name: 'Assign an owner' }));
-    expect(push).toHaveBeenCalledWith('/admin/tenants/kpm-2/owner');
+    renderInIndonesian(<KpmListPage />, { me: CONSOLE_SUPER_ADMIN });
+    await screen.findByText('BSD City Branch');
+    expect(screen.getByRole('button', { name: 'KPM baru' })).toHaveClass('max-md:w-full');
+    expect(document.querySelector('[role="group"][aria-label="Tampilkan"]')).toHaveClass('max-md:hidden');
   });
 
-  it.each([375, 768])('P19.2-T2 AC-5 at %ipx finds no target under 44px in main', async (px) => {
-    atWidth(px);
-    show();
-    await screen.findByRole('list', { name: 'Offices on the platform' });
-    expect(smallTargets(document.querySelector('main')!, px)).toEqual([]);
+  it('P19.23-T2 axe on the populated list', async () => {
+    const { container } = renderInIndonesian(<KpmListPage />, { me: CONSOLE_SUPER_ADMIN });
+    await screen.findByText('BSD City Branch');
+    expect((await axe(container, RULES)).violations).toEqual([]);
   });
 
-  it.each([375, 768])('P19.2-T2 AC-4 AC-5 at %ipx the subscription dialog draws no select and no target under 44px', async (px) => {
-    atWidth(px);
-    show();
-    await userEvent.click(await screen.findByRole('button', { name: 'Actions for 0417 · BSD City Branch' }));
-    await userEvent.click(screen.getByRole('menuitem', { name: 'Edit subscription' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Edit subscription' });
-    expect(within(dialog).getByRole('radiogroup', { name: 'Plan' })).toBeInTheDocument();
-    expect(document.querySelector('select')).toBeNull();
-    expect(smallTargets(dialog, px)).toEqual([]);
-  });
-
-  it.each([375, 1280])('P19.2-T2 AC-1 at %ipx has no axe violations', async (px) => {
-    atWidth(px);
-    show();
-    await screen.findByText(/BSD City Branch/);
-    const results = await axe(document.body, { rules: { 'color-contrast': { enabled: false }, region: { enabled: false } } });
-    expect(results.violations).toEqual([]);
+  it('P18.10-T7 AC-1 in Indonesian, no English of the console’s own is left', async () => {
+    renderInIndonesian(<KpmListPage />, { me: CONSOLE_SUPER_ADMIN });
+    await screen.findByText('BSD City Branch');
+    expect(englishShown(document.body, englishOnly(adminConsoleMessages))).toEqual([]);
   });
 });
