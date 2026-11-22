@@ -45,6 +45,18 @@ const en = {
   codeHint: 'Permanent. Every lead holds it.',
   addStage: ({ pipeline }: { pipeline: 'sales' | 'recruitment' }): string =>
     (pipeline === 'sales' ? 'Add a sales stage' : 'Add a recruitment stage'),
+  /** The *+ Tambah status* line at the card's foot (P19.21-T3 AC-2; mockup f15); its name, the ladder's. */
+  addStatus: 'Add status',
+  addStatusTo: ({ pipeline }: { pipeline: 'sales' | 'recruitment' }): string =>
+    `Add status to ${pipeline === 'sales' ? 'Sales' : 'Recruitment'}`,
+  /** The tag on the stage that closes the pipeline (mockup f15's *Penutup*). */
+  closer: 'Closes',
+  /** The ⋯'s *Expected to close* item, by what it will do (ADR-0043): count the stage, or stop counting it. */
+  expectedOn: ({ expected }: { expected: string }) => `Count as ${expected}`,
+  expectedOff: ({ expected }: { expected: string }) => `Stop counting as ${expected}`,
+  /** The legend under the card (mockup f15): what the order is, and where *Expected to close* counts. */
+  legendOrder: 'Order = the pipeline’s flow',
+  legendExpected: ({ expected }: { expected: string }) => `${expected} is counted on the KPM Overview`,
 };
 
 const id: MessagesOf<typeof en> = {
@@ -69,6 +81,13 @@ const id: MessagesOf<typeof en> = {
   expectedFor: ({ name }) => `${kept('Expected to close')}, ${name}`,
   codeHint: `Permanen. Setiap ${kept('lead')} menyimpannya.`,
   addStage: ({ pipeline }) => `Tambah tahap ${pipeline === 'sales' ? kept('Sales') : kept('Recruitment')}`,
+  addStatus: 'Tambah status',
+  addStatusTo: ({ pipeline }) => `Tambah status ke ${pipeline === 'sales' ? kept('Sales') : kept('Recruitment')}`,
+  closer: 'Penutup',
+  expectedOn: ({ expected }) => `Hitung sebagai ${expected}`,
+  expectedOff: ({ expected }) => `Jangan hitung sebagai ${expected}`,
+  legendOrder: `Urutan = alur ${kept('pipeline')}`,
+  legendExpected: ({ expected }) => `${expected} dihitung di ${kept('KPM')} ${kept('Overview')}`,
 };
 
 export const leadStatusesMessages = defineMessages({ en, id });

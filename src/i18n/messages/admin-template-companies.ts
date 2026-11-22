@@ -41,7 +41,7 @@ const en = {
     timeZone: 'Time zone',
     status: 'Status',
     /** A laptop's columns since P19.2-T2 AC-1 (UI-126): the default template, and the company's KPMs and members. */
-    templateDefault: 'Default template',
+    templateDefault: kept('Default template'),
     kpm: kept('KPM'),
     members: 'Members',
     actions: 'Actions',
@@ -103,7 +103,8 @@ const id: MessagesOf<typeof en> = {
     timeZone: 'Zona waktu',
     status: 'Status',
     // The mockup's words (`admin-desktop-2026-11-02` screen 1).
-    templateDefault: 'Template default',
+    // A kept term since P19.23-T4 (the 20 Nov mockups' first card).
+    templateDefault: kept('Default template'),
     kpm: kept('KPM'),
     members: 'Anggota',
     actions: 'Aksi',

@@ -72,12 +72,13 @@ describe('the person shell (P11-T7)', () => {
     // P18.7-T7 AC-2 (UI-021): the person's name is the page's one title; *Coaching Session* is the tab and the way back.
     const heading = await screen.findByRole('heading', { level: 1, name: 'Rina Wijaya' });
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
-    expect(screen.queryByRole('heading', { name: 'Coaching Session' })).not.toBeInTheDocument();
-    const back = screen.getByRole('link', { name: '← Back to Coaching Session' });
+    expect(screen.queryByRole('heading', { name: 'Coaching' })).not.toBeInTheDocument();
+    // The way back names the roster by its title, the menu's *Coaching* since P19.13-T4 (UI-197).
+    const back = screen.getByRole('link', { name: '← Back to Coaching' });
     expect(back).toHaveAttribute('href', '/coaching');
     // UI-031: below 1024px a 44px ‹ with its words for a screen reader; from 1024px the words on their own line.
     expect(back).toHaveClass('h-11', 'w-11', 'lg:basis-full');
-    expect(within(back).getByText('← Back to Coaching Session')).toHaveClass('max-lg:sr-only');
+    expect(within(back).getByText('← Back to Coaching')).toHaveClass('max-lg:sr-only');
     // UI-031: the line on its own line directly under the name, never beside it — 12px below 1024px.
     expect(heading.nextElementSibling).toHaveTextContent(/^Agent · Direct unit$/);
     expect(heading.nextElementSibling?.tagName).toBe('P');
@@ -267,11 +268,11 @@ describe('the person shell (P11-T7)', () => {
       /^They may have moved to another leader, or the address may be mistyped\. Everyone you coach is on Coaching Session\.$/,
     );
     // P18.7-T7 AC-2: with nobody to name, the page keeps the prototype's title, and the card is a section under it.
-    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^Coaching Session$/);
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^Coaching$/);
     expect(heading.tagName).toBe('H2');
     // Inside the agent shell: its nav is there, and the way back.
     expect(screen.getByRole('navigation', { name: 'Main' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: '← Back to Coaching Session' })).toHaveAttribute('href', '/coaching');
+    expect(screen.getByRole('link', { name: '← Back to Coaching' })).toHaveAttribute('href', '/coaching');
     // Not a disabled shell: no tabs, no toggle, no tab content, and nothing about who it was.
     expect(screen.queryByRole('navigation', { name: 'Coaching' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Agent view' })).not.toBeInTheDocument();
@@ -291,7 +292,7 @@ describe('the person shell (P11-T7)', () => {
     const heading = await screen.findByRole('heading', { name: 'This person isn’t someone you coach.' });
     expect(heading.nextElementSibling).toHaveTextContent(/^They may have moved to another leader, or the address may be mistyped\.$/);
     expect(screen.getByRole('link', { name: '← Back to My Coaching Notes' })).toHaveAttribute('href', '/coaching/me');
-    expect(screen.queryByRole('link', { name: '← Back to Coaching Session' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: '← Back to Coaching' })).not.toBeInTheDocument();
     expect(screen.getByRole('main').textContent).not.toMatch(SIX_WORDS);
   });
 

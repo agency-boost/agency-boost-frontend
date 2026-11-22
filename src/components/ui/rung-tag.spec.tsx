@@ -46,10 +46,13 @@ describe('P19.11-T6 AC-4 isLeaderRung', () => {
 });
 
 describe('P19.11-T6 RungTag', () => {
-  it('P19.11-T6 AC-4 prints the company’s short name on navy, by its code', () => {
+  it('P19.18-T1 AC-7 prints the company’s short name as small bold orange text, by its code — no pill (ADR-0266 §3)', () => {
     render(<RungTag rung={{ code: 'SBP', label: 'Senior BP' }} className="mr-1.5" />);
     const tag = screen.getByText('SBP');
     expect(tag).toHaveAttribute('data-rung-tag', 'SBP');
-    expect(tag).toHaveClass('bg-secondary', 'text-secondary-contrast', 'normal-case', 'mr-1.5');
+    // The accent's ink, the orange small text may use (4.9:1 on a card); never the navy pill it was (ADR-0235 §2).
+    expect(tag).toHaveClass('text-primary-ink', 'font-extrabold', 'normal-case', 'mr-1.5');
+    expect(tag).not.toHaveClass('bg-secondary');
+    expect(tag.className).not.toMatch(/\bbg-|rounded/);
   });
 });

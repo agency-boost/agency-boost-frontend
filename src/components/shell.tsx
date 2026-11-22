@@ -1,43 +1,32 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { usePathname, useRouter } from 'next/navigation';
-import { Fragment, useCallback, useEffect, useState } from 'react';
+import { usePathname } from 'next/navigation';
+import { useEffect, useState } from 'react';
 import { AppShell, type NavItem, type NavSection } from '@/components/app-shell';
-import type { ViewEntry, ViewMenuAction, ViewSwitcher } from '@/components/field-chrome';
 import { RequireSession } from '@/components/require-session';
-import { ToastHost, useToast } from '@/components/ui/toast';
+import { ToastHost } from '@/components/ui/toast';
 import { shortOfRung, useLadder } from '@/components/ui/role-badge';
-import type { MessagesOf } from '@/i18n/catalogue';
 import { kept } from '@/i18n/kept';
 import { useMessages } from '@/i18n/language-provider';
 import { shellMessages } from '@/i18n/messages/shell';
 import { displayName } from '@/lib/display-name';
-import { adminNav, fieldNav, isUnder, type FieldDestination } from '@/lib/field-nav';
+import { adminNav, fieldNav, insideKpmNav, isUnder, runsTheOffice, type FieldDestination, type FieldGroup } from '@/lib/field-nav';
 import { needsKpmHere } from '@/lib/no-kpm';
-import { panduanHref } from '@/lib/panduan';
+import { APP_NAME } from '@/lib/pwa';
 import { profileLine } from '@/lib/profile-line';
 import { FAMILY_GATES, type ShellFamily } from '@/lib/route-access';
-import { LINK_SIGN_IN_REQUIRED, switchLogin } from '@/lib/account-links';
-import { toDisplayError } from '@/lib/api-client';
-import { useSession, type Me } from '@/lib/session';
-import { useLeaderLimitPending } from '@/lib/use-leader-limit-pending';
+import { useSession } from '@/lib/session';
+import { useApprovalsPending } from '@/lib/approvals';
+import { enteredKpmId, insideKpm } from '@/lib/super-admin-kpm';
 import { useSignOut } from '@/lib/use-sign-out';
 import { useUnreadCount } from '@/lib/use-unread-count';
-import {
-  clearCachedReads, isOfficePage, isOfficeView, rememberView, rememberedView, useActiveView, useViewGeneration,
-  VIEW_LANDING, type ViewKind,
-} from '@/lib/views';
-
-/** *Tambah akun* and the other login's password (P19.2-T1 AC-8), loaded the first time either is opened. */
-const AddAccountSheet = dynamic(() => import('@/components/linked-login-sheets').then((m) => m.AddAccountSheet), { ssr: false });
-const LinkedSignInSheet = dynamic(
-  () => import('@/components/linked-login-sheets').then((m) => m.LinkedSignInSheet),
-  { ssr: false },
-);
 
 /** The no-office card (UI-166), loaded only for somebody in no office. */
 const NoKpmYet = dynamic(() => import('@/components/no-kpm-yet').then((m) => m.NoKpmYet), { ssr: false });
+
+/** The Super Admin's floating bar on the owner pages inside a KPM (P19.23-T2 AC-5), loaded only there. */
+const KpmFloatingBar = dynamic(() => import('@/components/admin/kpm-floating-bar').then((m) => m.KpmFloatingBar), { ssr: false });
 
 /** The picker's dialog, loaded the first time *Search agent* is pressed (common.md: a dialog costs nothing until then). */
 const AgentSearchDialog = dynamic(
@@ -51,7 +40,8 @@ const AgentSearchDialog = dynamic(
  * `TenantShell` and `AdminShell` are gone, and `RoleShell` no longer chooses between shells.
  *
  * - **What the role decides is which items appear** (D-20), never the chrome: the field menu by rung (ADR-0189), the
- *   office view's groups for an Owner or an Admin (ADR-0198 §2), the Super Admin's bar and groups (UI-127).
+ *   extras — KPM · People · Pengaturan — for the Owner, the Admins and the core leaders (ADR-0269 §4), the Super Admin's
+ *   bar and groups (UI-127).
  * - **What the family decides is who is let in**, unchanged: a group layout passes `family`, `RequireSession` sends a
  *   reader of no family of it to their own landing (`familyAllows`), and the family's gate is its default permission
  *   (`FAMILY_GATES`: the office's `member:read_profile`, the platform's `kpm:list_all`). A shared page passes none.
@@ -93,11 +83,6 @@ export function Shell({
   );
 }
 
-/** The office's name as the view's entry gives it, *KPM Owner · <nama KPM>* — as the office typed it (ADR-0179 §5). */
-function officeNameOf(membership: Me['membership']): string {
-  return membership?.office?.branch?.trim() || membership?.office?.code || '';
-}
-
 function Chrome({
   title,
   subtitle,
@@ -109,36 +94,34 @@ function Chrome({
   actions?: React.ReactNode;
   children: React.ReactNode;
 }) {
-  const { me, reload } = useSession();
+  const { me } = useSession();
   const unread = useUnreadCount();
-  const leaderLimitPending = useLeaderLimitPending();
+  const approvalsPending = useApprovalsPending();
   const { signOut, busy } = useSignOut();
   const pathname = usePathname() ?? '';
-  const router = useRouter();
-  // The nav's words are kept English (`kept`, the glossary's §A.1); the groups' headings and the pill are the reader's.
+  // The nav's words are kept English (`kept`, the glossary's §A.1); the groups' headings and the tags are the reader's.
   const t = useMessages(shellMessages);
   const [searching, setSearching] = useState(false);
   const membership = me?.membership;
 
   /*
-   * **The view this page is in** (ADR-0198 §4, §5): the tab's, or the page's own — an office page is the office view's.
-   * A page that belongs to the office view also sets it, so the field and shared pages opened after it keep it.
+   * **One login, one menu, decided by the role** (P19.17-T3 AC-1, AC-4; ADR-0269 §1, §4): a Super Admin login has the
+   * platform's menu (`adminNav`, until Phase 19.23's console); everybody else the field menu their rung gives, with the
+   * extras — KPM · People · Pengaturan — for the Owner, the Admins and the core leaders. No view, no switcher, no second
+   * login (ADR-0198, ADR-0199 superseded). Inside a support session `me` is the member's, so the member's menu is drawn.
    */
-  const { kinds, active, switchTo } = useActiveView(me, pathname);
-  const officeKind = kinds.find(isOfficeView);
-  useEffect(() => {
-    if (officeKind && isOfficePage(pathname) && rememberedView() !== officeKind) rememberView(officeKind);
-  }, [officeKind, pathname]);
-  /** A switch clears the client's cached reads (AC-7): the page under the shell mounts afresh, keyed by it. */
-  const generation = useViewGeneration();
-  const superAdmin = active === 'super_admin';
-
+  const superAdmin = me?.user.platformRole === 'super_admin';
   /*
-   * **One model for the three menus** (UI V1, UI-004; D-20, ADR-0180): the tab bar, the *Lainnya* sheet and the sidebar
-   * are one model's, so the sheet and the sidebar have the same groups, order and members. Who sees what is the role and
-   * the view, never the data (ADR-0189 §1) — and the nav decides what is offered, never what is allowed.
+   * *Changed 2026-11-20 (P19.23-T1 AC-1, T2 AC-5; ADR-0277 §1, §3):* the Super Admin's console menu on `/admin`; **inside
+   * a KPM, on its owner pages, the Owner's menu** (KPM · People · Pengaturan, `insideKpmNav`) and the floating bar below.
    */
-  const nav = superAdmin ? adminNav(pathname, t.admin, { leaderLimitPending }) : fieldNav(me, pathname, active, { surveys: t.surveys, branding: t.branding });
+  const ownerPagesInside = superAdmin && me !== null && insideKpm(me) && !isUnder(pathname, '/admin');
+  const fieldWords = { surveys: t.surveys, settings: t.settings, settingsTile: t.settingsTile };
+  const nav = ownerPagesInside
+    ? insideKpmNav(pathname, fieldWords)
+    : superAdmin
+      ? adminNav(pathname, t.admin, { approvalsPending })
+      : fieldNav(me, pathname, fieldWords);
 
   /**
    * A destination as the sidebar draws it: its full name (D-20, *desktop has room*), *Segera hadir* for one with no
@@ -156,17 +139,40 @@ function Chrome({
   });
 
   /*
-   * **The sidebar, grouped as the sheet** (UI-004; D-20): a first section with no heading, then the groups, their headings
-   * 12px grey in sentence case. A line between every two groups, as before (parity I-144).
+   * **The sidebar, grouped as the sheet** (UI-004; D-20; part E): a first section with no heading, then the groups —
+   * their names grey capitals with a chevron, the extras' with the orange *Owner* tag, each with its one icon for the
+   * rail — and **Pengaturan pinned** at the foot (`pinned`), outside the part that scrolls (P19.17-T3 AC-5, AC-6).
+   *
+   * The first section is **Home · Activity · Calendar · Unit Dashboard** (`nav.top`, P19.13-T2 AC-4), so a destination
+   * there is not listed again in its group — *Unit Dashboard* leaves *Tim saya* in the sidebar alone; the sheet keeps it.
    */
+  const onTop = new Set(nav.top.map((d) => d.id));
+  const tagOf = (group: FieldGroup) => (group.tag ? t.ownerTag : undefined);
+  const pinnedGroup = nav.groups.find((group) => group.pinned);
   const sections: readonly NavSection[] = [
-    { label: null, divider: true, items: nav.top.map(item) },
-    ...nav.groups.map((group, i): NavSection => ({
+    // Inside a KPM the Super Admin's menu has no first section (`insideKpmNav`): none is drawn rather than an empty one.
+    ...(nav.top.length > 0 ? [{ label: null, divider: true, items: nav.top.map(item) }] : []),
+    ...nav.groups.filter((group) => !group.pinned).map((group): NavSection => ({
       label: t.fieldGroups[group.id],
-      items: group.items.map(item),
-      ...(i < nav.groups.length - 1 ? { divider: true } : {}),
+      items: group.items.filter((d) => !onTop.has(d.id)).map(item),
+      ...(group.tag ? { tag: tagOf(group) } : {}),
+      ...(group.railIcon ? { railIcon: group.railIcon } : {}),
     })),
   ];
+  // The pinned group's last item: *Pengaturan*, alone in its group; the console's *Platform*, after the sheet's other two.
+  const pinnedItem = pinnedGroup?.items[pinnedGroup.items.length - 1];
+  const pinned = pinnedItem ? { item: item(pinnedItem), tag: tagOf(pinnedGroup) } : undefined;
+
+  /*
+   * **The browser's tab says the page's menu name** (P19.13-T4 AC-1; UI-197: *browser tab titles follow the same names*):
+   * the name of the menu item the reader is on — the label the sidebar, the tab bar or the sheet gives it, which a page's
+   * title now equals — then *AgencyBoost*. A page no menu item holds (*Profil saya*, a notification) keeps the app's
+   * name alone. The root layout's metadata is the first paint's; the shell's pages are client pages and carry none.
+   */
+  const menuTitle = [...nav.top, ...nav.tabs, ...nav.groups.flatMap((g) => g.items)].find((d) => d.active)?.label;
+  useEffect(() => {
+    document.title = tabTitle(menuTitle);
+  }, [menuTitle]);
 
   /*
    * The rung's short form, from the company's ladder (P4-T9).
@@ -181,64 +187,27 @@ function Chrome({
     : (membership?.hierarchyRole ?? '').toUpperCase();
 
   /*
-   * **Who is signed in, and as what** — the profile line (ADR-0159 §5, P18.5-T6 AC-2) under the name: the rung · Core
-   * Leader · the groups · the office in *Akun saya*; *KPM Owner* or *KPM Admin* in its place in the office view, as the
-   * console's chip said it; *Superadmin* for the platform. The office's roles kept English (§A.5).
+   * **Who is signed in, and as what** — the profile line (ADR-0159 §5, P18.5-T6 AC-2) under the name: *KPM Owner* or *KPM
+   * Admin* for whoever runs the office, as the approved sidebar and *Lainnya* write it (`sidebar-icons-laptop`,
+   * `lainnya-owner-mobile`: *KPM Owner · BSD City Branch*), the rung for everybody else — then Core Leader · the groups ·
+   * the office; *Superadmin* for the platform. The roles kept English (§A.5). One line for every page: there is no view.
    */
   const name = (me && displayName(me.user)) || (superAdmin ? kept('Super Admin') : t.signedIn);
   const role = superAdmin
     ? kept('Superadmin')
     : !membership
       ? t.noOfficeYet
-      : active === 'kpm_owner'
-        ? profileLine(kept('KPM Owner'), membership)
-        : active === 'kpm_admin'
-          ? profileLine(kept('KPM Admin'), membership)
-          : profileLine(shortRung, membership);
+      : runsTheOffice(membership)
+        ? profileLine(membership.isKpmOwner ? kept('KPM Owner') : kept('KPM Admin'), membership)
+        : profileLine(shortRung, membership);
   const initials = me?.user.initials ?? (superAdmin ? 'SA' : '??');
   const notifications = { href: '/notifications', unread };
-  /*
-   * ***📘 Panduan*** (P19.6-T5 AC-1, AC-2; ADR-0219 §5): the guide of the view this page is in and the reader's rung,
-   * never their data — the sidebar's last item, the account menu's, and *Lainnya*'s. In a view-as session `me` is the
-   * member's, so the viewed role's guide opens; after a linked login's switch, that login's.
-   */
-  const guideHref = panduanHref(me, active);
-
-  /*
-   * **A view of the linked login** (P19.2-T1 AC-8; ADR-0199 §4; ADR-0198 §6): the switch changes the session — the API
-   * swaps the two cookies and answers the other login's access token — then the new login's `me` is read, every cached
-   * read is let go, the view is remembered and the view's landing opened. On a browser that holds no session of the
-   * other login the API answers `409`, and its password is asked once (`LinkedSignInSheet`).
-   */
-  const { show } = useToast();
-  const [adding, setAdding] = useState(false);
-  const [signingIn, setSigningIn] = useState<ViewKind | null>(null);
-  const linked = me?.linkedLogin ?? null;
-  const switchToLinked = useCallback(async (kind: ViewKind, password?: string) => {
-    if (!linked) return;
-    await switchLogin(linked.userId, password);
-    await reload();
-    clearCachedReads();
-    rememberView(kind);
-    router.push(VIEW_LANDING[kind]);
-  }, [linked, reload, router]);
-  const onLinked = useCallback((kind: ViewKind) => {
-    switchToLinked(kind).catch((err: unknown) => {
-      const shown = toDisplayError(err);
-      if (shown.code === LINK_SIGN_IN_REQUIRED) setSigningIn(kind);
-      else show(shown.message);
-    });
-  }, [switchToLinked, show]);
-
-  const views = switcherFor(me, kinds, active, (kind) => router.push(switchTo(kind)), t, {
-    onLinked,
-    onAddAccount: () => setAdding(true),
-  });
   const signOutNow = () => void signOut();
 
   return (
     <AppShell
       sections={sections}
+      pinned={pinned}
       user={{
         name,
         role,
@@ -248,18 +217,18 @@ function Chrome({
         fullName: me?.user.fullName,
       }}
       // *SUPERADMIN* under the wordmark, as `admin-desktop` draws it in every frame; nobody else's sidebar names an app.
-      brandTag={superAdmin ? kept('SUPERADMIN') : undefined}
-      // *Advanced analytics* is the one item with no screen yet: *Soon*, as the client wrote it (*Segera hadir*).
+      brandTag={superAdmin && !ownerPagesInside ? kept('SUPERADMIN') : undefined}
       upcomingLabel={t.soon}
-      account={{ href: '/profile', onSignOut: signOutNow, signingOut: busy, views }}
+      // P19.17-T3 AC-1 (ADR-0269 §2): the account menu is *Akun Anda · Keluar* for everybody — no views, no *Tambah akun*.
+      account={{ href: '/profile', onSignOut: signOutNow, signingOut: busy }}
       notifications={notifications}
       field={{
         nav,
         notifications,
-        // The Super Admin's Overview is their Home: the bell keeps its place on its title row below 1024px (AC-13).
+        // The Super Admin's Dashboard is their Home: the bell keeps its place on its title row below 1024px (AC-13).
         bellHere: superAdmin && pathname === '/admin',
         // Who read the shared office pages in the console until now keeps its content there (`useFieldContent`).
-        consoleContent: superAdmin || Boolean(membership && (membership.isKpmOwner || membership.isKpmAdmin)),
+        consoleContent: superAdmin || runsTheOffice(membership),
         account: {
           name,
           role,
@@ -268,107 +237,38 @@ function Chrome({
           profileHref: '/profile',
           onSignOut: signOutNow,
           signingOut: busy,
-          views,
-          guideHref,
         },
       }}
       // 22px on a tablet on the Owner's, the Admin's and the Super Admin's pages (ADR-0197 §2); 20px elsewhere.
-      officeTitle={isUnder(pathname, '/admin') || isOfficePage(pathname)}
-      // `/admin` keeps its labelled sidebar from 1024px (UI-127, UI-128); every other view takes the rail to 1279px.
-      labelledFrom1024={superAdmin}
-      guideHref={guideHref}
+      officeTitle={isUnder(pathname, '/admin') || isUnder(pathname, '/kpm') || isUnder(pathname, '/people')}
+      // *Changed 2026-11-20 (P19.23-T1 AC-1; ADR-0277 §1):* the console opens on the rail at a tablet, as every reader's
+      // does to 1279px (the spec §2 *"Tablet / laptop: left rail"*); from 1280px the labelled sidebar.
+      labelledFrom1024={false}
+      // P19.13-T2 AC-3 (UI-196): the field under the logo, for a reader with the agent picker (a leader by role).
+      search={nav.search ? { label: nav.search.label, onSelect: () => setSearching(true) } : undefined}
       title={title}
       subtitle={subtitle}
       actions={actions}
     >
-      <Fragment key={generation}>
-        {/*
-          * **A page that needs a KPM, for somebody in none** (P19-T4 AC-4; UI-166; ADR-0189 §5): every Agent item is in
-          * the menu, and its page is the no-office card — its title, a greyed *Contoh*, *Cari / Daftar KPM* and *Cari
-          * leader* — with the page itself never mounted, so nothing asks the API for an office's data it would refuse.
-          */}
-        {needsKpmHere(me, pathname)
-          ? <NoKpmYet title={[...nav.tabs, ...nav.groups.flatMap((g) => g.items)].find((d) => d.active)?.label} pathname={pathname} />
-          : children}
-      </Fragment>
+      {/*
+        * **A page that needs a KPM, for somebody in none** (P19-T4 AC-4; UI-166; ADR-0189 §5): every Agent item is in
+        * the menu, and its page is the no-office card — its title, a greyed *Contoh*, *Cari / Daftar KPM* and *Cari
+        * leader* — with the page itself never mounted, so nothing asks the API for an office's data it would refuse.
+        */}
+      {needsKpmHere(me, pathname)
+        ? <NoKpmYet title={[...nav.tabs, ...nav.groups.flatMap((g) => g.items)].find((d) => d.active)?.label} pathname={pathname} />
+        : children}
       {searching && <AgentSearchDialog onClose={() => setSearching(false)} />}
-      {adding && <AddAccountSheet open onClose={() => setAdding(false)} />}
-      {signingIn && linked && (
-        <LinkedSignInSheet
-          open
-          email={linked.email}
-          onClose={() => setSigningIn(null)}
-          onSubmit={async (password) => {
-            await switchToLinked(signingIn, password);
-            setSigningIn(null);
-          }}
-        />
-      )}
+      {/* P19.23-T2 AC-5 (ADR-0277 §3): the owner pages inside a KPM carry the Super Admin's floating bar, and only it. */}
+      {ownerPagesInside && enteredKpmId() && <KpmFloatingBar kpmId={enteredKpmId()!} />}
     </AppShell>
   );
 }
 
-/** The switcher's order, whichever login is active (ADR-0198 §3): *Akun saya* · the office entry · *Superadmin*. */
-const VIEW_ORDER: readonly ViewKind[] = ['self', 'kpm_owner', 'kpm_admin', 'super_admin'];
-
 /**
- * **The view switcher's entries** (P19.2-T1 AC-5, AC-8; UI-169 items 2, 5; ADR-0198 §3, ADR-0199 §3), or nothing for a
- * person with one view and nothing to do after it — who sees no switcher and nothing added to the header.
- *
- * - **Both logins' views, in one order** whichever login is active: *Akun saya* · *KPM Owner · <nama KPM>* (or *KPM Admin
- *   · …*) · *Superadmin* — the reader's own and their linked login's (`GET /auth/me`'s `linkedLogin`), the reader's first
- *   where both have the same kind. Where both logins have a view of the same name (two field logins), each such entry
- *   adds its login's address. A linked login's entry is keyed by its kind and login (`${kind}:${userId}`).
- * - **One tap switches.** One of the reader's own views: the shell remembers it for the tab, clears the cached reads and
- *   goes to the view's landing (`onSwitch`). One of the linked login's: the session changes first (`onLinked`).
- * - ***Tambah akun*** after the views, for whoever is offered it (`account_link:create`: an Owner, an Admin, a Super
- *   Admin), has no link yet and is not in a support session — whose `me` carries neither the grant nor a link.
- *
- * A switcher with an action is drawn even for one view (`hasViewMenu`); the header names a view only for more than one
- * (`namedView`).
+ * **A browser tab's title** (P19.13-T4 AC-1; UI-197): *<menu name> · AgencyBoost* on a page a menu item holds, the app's
+ * name alone elsewhere — the root layout's own title.
  */
-function switcherFor(
-  me: Me | null,
-  kinds: readonly ViewKind[],
-  active: ViewKind,
-  onSwitch: (kind: ViewKind) => void,
-  t: MessagesOf<typeof shellMessages.en>,
-  linkedLogin: { onLinked: (kind: ViewKind) => void; onAddAccount: () => void },
-): ViewSwitcher | undefined {
-  const office = officeNameOf(me?.membership ?? null);
-  const withOffice = (role: string, name: string | null) => (name ? `${role} · ${name}` : role);
-  const wordsFor = (kind: ViewKind, officeName: string | null): { label: string; short: string } => {
-    switch (kind) {
-      case 'self': return { label: t.viewSelf, short: t.viewSelf };
-      case 'kpm_owner': return { label: withOffice(t.viewKpmOwner, officeName), short: t.viewKpmOwner };
-      case 'kpm_admin': return { label: withOffice(t.viewKpmAdmin, officeName), short: t.viewKpmAdmin };
-      default: return { label: t.viewSuperAdmin, short: t.viewSuperAdmin };
-    }
-  };
-  // Inside a support session `me` is the member's and carries no link (ADR-0199 §7): their own views alone.
-  const linked = me && !me.isImpersonating ? (me.linkedLogin ?? null) : null;
-
-  const own = kinds.map((kind) => ({ kind, officeName: isOfficeView(kind) ? office : null, login: null as null | string }));
-  const theirs = (linked?.views ?? []).map((view) => ({ kind: view.kind, officeName: view.officeName, login: linked!.userId }));
-  const both = [...own, ...theirs].sort((a, b) => VIEW_ORDER.indexOf(a.kind) - VIEW_ORDER.indexOf(b.kind));
-  const twice = (kind: ViewKind) => both.filter((v) => v.kind === kind).length > 1;
-
-  const entries: ViewEntry[] = both.map((view) => {
-    const words = wordsFor(view.kind, view.officeName);
-    const address = view.login ? linked!.email : me?.user.email;
-    return {
-      key: view.login ? `${view.kind}:${view.login}` : view.kind,
-      kind: view.kind,
-      label: twice(view.kind) && address ? `${words.label} · ${address}` : words.label,
-      short: words.short,
-      active: view.login === null && view.kind === active,
-      onSelect: view.login ? () => linkedLogin.onLinked(view.kind) : () => onSwitch(view.kind),
-    };
-  });
-
-  const actions: ViewMenuAction[] = me && !me.isImpersonating && !linked && me.permissions.includes('account_link:create')
-    ? [{ key: 'add-account', label: t.addAccount, onSelect: linkedLogin.onAddAccount }]
-    : [];
-  if (entries.length < 2 && actions.length === 0) return undefined;
-  return { entries, actions };
+export function tabTitle(menuName: string | undefined): string {
+  return menuName ? `${menuName} · ${APP_NAME}` : APP_NAME;
 }

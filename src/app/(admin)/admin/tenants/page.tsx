@@ -1,282 +1,254 @@
 'use client';
 
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { Suspense, useCallback, useEffect, useId, useMemo, useState } from 'react';
+import { KpmActions } from '@/components/admin/kpm-actions';
+import { NewKpmSheet } from '@/components/admin/new-kpm-sheet';
 import { Page } from '@/components/page';
-import { SubscriptionDialog } from '@/components/subscription-dialog';
-import { Cell, DataTable, Row, type Column } from '@/components/ui/data-table';
 import { EmptyState } from '@/components/ui/empty-state';
-import { Button, ButtonLink, ErrorBanner } from '@/components/ui/field';
-import { ListCard, ListRow } from '@/components/ui/list-rows';
-import { RowMenu } from '@/components/ui/rows-and-sheets';
-import { SkeletonTable } from '@/components/ui/skeleton';
-import { StatusPill } from '@/components/ui/status-pill';
-import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
-import { adminOfficesMessages } from '@/i18n/messages/admin-offices';
-import { adminPlatformReadsMessages } from '@/i18n/messages/admin-platform-reads';
+import { Button, ErrorBanner } from '@/components/ui/field';
+import { NavIcon } from '@/components/ui/nav-icon';
+import { PickerMenu } from '@/components/ui/picker-menu';
+import { SkeletonCards } from '@/components/ui/skeleton';
+import { useFigureLanguage, useMessages } from '@/i18n/language-provider';
+import { adminConsoleMessages, type AdminConsoleWords } from '@/i18n/messages/admin-console';
 import {
-  leadersOver, leadersSaid, leadersWord, listTenants, tenantStatusTone, tenantStatusWord, type OwnerState,
-  type TenantListRow,
-} from '@/lib/admin';
-import type { Language } from '@/i18n/language';
-import type { MessagesOf } from '@/i18n/catalogue';
-import { toDisplayError } from '@/lib/api-client';
-import { formatMonth, formatNumber, formatShortDay } from '@/lib/format';
-import { useMediaQuery } from '@/lib/use-media-query';
+  countsFor, kpmInitials, needsAction, readConsoleDashboard, toneOf, TONE_PILL, wholePct,
+  type ConsoleDashboard, type ConsoleKpm, type KpmIssue,
+} from '@/lib/admin-console';
+import { toDisplayError, type ApiError } from '@/lib/api-client';
+import { cn } from '@/lib/cn';
+import { formatMonthName, formatNumber } from '@/lib/format';
+import { enterKpm, leaveKpm } from '@/lib/super-admin-kpm';
+import { useQuery } from '@/lib/use-query';
+
+type Words = AdminConsoleWords['kpms'];
+type Filter = 'all' | 'action' | string;
 
 /**
- * The skeleton and the table read the same array, so a column added to one cannot
- * be missing from the other — which is what keeps the placeholder the same width as
- * the thing it stands in for.
+ * **KPM** (`/admin/tenants`; P19.23-T2 AC-1 to AC-3; ADR-0277 §2; the Super Admin spec §5; `superadmin-tablet` f05–f10,
+ * `superadmin-mobile` f05–f10): the navy tiles *KPM · Perusahaan · Anggota · Perlu tindakan*; the search (*nama KPM atau
+ * owner*) and *Semua · Perlu tindakan · <perusahaan>* — chips from 768px, a dropdown on a phone; *+ KPM baru*; then one
+ * card per KPM: its initials, name and company, ⋯, the Owner and its members, *Pakai 14 hari terakhir* on the scale, one
+ * line saying what it needs (or *Tidak ada yang perlu*) and *Masuk ke KPM*. No *Aktif* pill.
+ *
+ * The figures are the Dashboard's (`GET /admin/dashboard`): one read, the same numbers on both pages. Arriving here
+ * leaves the KPM a tab had entered; *Masuk ke KPM* enters one. `?baru=1` opens *KPM baru* (the old `/admin/tenants/new`
+ * sends people here).
  */
-/*
- * *End date* and *Leaders*, and a last column of one action, are the client's (ADR-0112 §2, P13.2-T3
- * AC-7): the subscription is entered *"directly from here"*. The action column has a name nobody sees,
- * so a screen reader moving by column is told what is in it.
- */
-function useColumns(): readonly Column[] {
-  const c = useMessages(adminOfficesMessages).list.columns;
-  const p = useMessages(adminPlatformReadsMessages).list.columns;
-  // P19.4-T3 AC-8 (the setup spec's A2): *KPM · Pemilik · Anggota · Data terakhir · Perlu tindakan*; the client's earlier
-  // columns kept beside them — the company, the status, *End date*, *Leaders* and *Edit subscription* (P13.2-T3 AC-7).
-  return [
-    p.kpm, c.company, p.owner, p.members, p.lastData, p.action, c.status, c.endDate, c.leaders,
-    { label: c.subscription, visuallyHidden: true },
-  ];
+export default function KpmListPage() {
+  return (
+    <Suspense fallback={null}>
+      <KpmList />
+    </Suspense>
+  );
 }
 
-/**
- * **All KPMs** (P3.1-T14; P13.2-T3 AC-7; P19.4-T3 AC-8; P19.2-T2 AC-1, AC-5 — UI-126, UI-135).
- *
- * - **Below 1024px no table** (UI-126: *no sideways scroll inside any /admin table or list*): one row per KPM, in the
- *   companies list's idiom — *code · branch* opening the KPM, *company · n members · latest data* under it, then its
- *   Owner and what needs doing; its state on the right, and ⋯ holding *Ubah langganan* (and *Tetapkan pemilik* where
- *   there is none), so nothing a finger aims at is under 44px (UI-135). Past the limit, its leaders and *n over* (ADR-0157
- *   §4). **From 1024px the table** as before.
- * - The subscription dialog is the same from either.
- */
-export default function TenantsPage() {
-  const t = useMessages(adminOfficesMessages);
-  const p = useMessages(adminPlatformReadsMessages).list;
-  const language = useLanguage();
-  const figures = useFigureLanguage();
-  const COLUMNS = useColumns();
-  const rows = useMediaQuery(['phone', 'tablet']);
-  const router = useRouter();
-  const [tenants, setTenants] = useState<TenantListRow[] | null>(null);
-  const [error, setError] = useState<{ code: string; message: string; requestId: string } | null>(null);
-  /** The office whose subscription is open in the dialog. */
-  const [editing, setEditing] = useState<TenantListRow | null>(null);
-  /** What the dialog said it saved, for the row's own live region. */
-  const [saved, setSaved] = useState<string>('');
+function KpmList() {
+  const t = useMessages(adminConsoleMessages).kpms;
+  const query = useQuery();
+  const [data, setData] = useState<ConsoleDashboard | null>(null);
+  const [error, setError] = useState<ApiError | null>(null);
+  const [creating, setCreating] = useState(query.baru === '1');
 
-  // One request. The company name used to be joined here from a second call, which meant
-  // a KPM whose company was missing from that list rendered a raw ObjectId in the column
-  // — and cost a round trip to do it. The payload carries the name now.
-  useEffect(() => {
-    void listTenants()
-      .then(setTenants)
-      .catch((err) => {
-        setError(toDisplayError(err));
-        setTenants([]);
-      });
+  const load = useCallback(async () => {
+    try {
+      setData(await readConsoleDashboard());
+      setError(null);
+    } catch (err) {
+      setError(toDisplayError(err));
+    }
   }, []);
 
+  useEffect(() => {
+    leaveKpm();
+    void load();
+  }, [load]);
+
+  const add = (
+    <Button onClick={() => setCreating(true)} disabled={!data} className="gap-1.5 max-md:w-full" data-new-kpm-button="">
+      <NavIcon name="ti-plus" className="h-[18px] w-[18px]" />
+      {t.newKpm}
+    </Button>
+  );
+
   return (
-    <Page
-      title={t.list.title}
-      actions={
-        <ButtonLink href="/admin/tenants/new">{t.list.newOffice}</ButtonLink>
-      }
-    >
+    <Page title={t.title}>
       {error && <ErrorBanner {...error} />}
-
-      {tenants === null && (
-        <SkeletonTable caption={t.list.caption} columns={COLUMNS} rows={5} />
-      )}
-
-      {tenants?.length === 0 && !error && (
-        <div className="rounded-lg border border-card-edge bg-card">
-          <EmptyState
-            title={t.list.empty}
-            action={
-              <Link href="/admin/tenants/new" className="text-md text-navy underline">
-                {t.list.createFirst}
-              </Link>
-            }
-          />
-        </div>
-      )}
-
-      {tenants && tenants.length > 0 && rows && (
-        <ListCard label={t.list.caption}>
-          {tenants.map((row) => {
-            const owner = row.ownerName ?? row.pendingOwner?.fullName ?? null;
-            const needs = needsAction(row, p, figures);
-            const over = leadersOver(row);
-            return (
-              <ListRow
-                key={row._id}
-                data-row={row._id}
-                href={`/admin/tenants/${row._id}`}
-                title={`${row.code} · ${row.branchName}`}
-                meta={t.list.rowMeta({
-                  company: row.companyName,
-                  n: row.memberCount,
-                  members: formatNumber(row.memberCount, {}, figures),
-                  data: row.dataStatus?.latestMonth ? formatMonth(row.dataStatus.latestMonth, figures) : null,
-                })}
-                note={(owner || needs.length > 0 || over > 0) && (
-                  <span className="flex flex-col gap-1">
-                    {owner && (
-                      <span className="flex flex-wrap items-center gap-1.5 text-navy">
-                        {t.list.ownerIs({ name: owner })}
-                        <StatusPill status={OWNER_TONE[row.ownerState]} label={p.ownerState[row.ownerState]} />
-                      </span>
-                    )}
-                    {over > 0 && (
-                      <span className="flex flex-wrap items-center gap-1.5 text-navy">
-                        <span aria-hidden="true">{t.list.leadersAre({ count: leadersWord(row) })}</span>
-                        <StatusPill status="watch" label={t.list.over({ n: over })} />
-                        <span className="sr-only">{leadersSaid(row, language)}</span>
-                      </span>
-                    )}
-                    {needs.length > 0 && (
-                      <span className="flex flex-col text-alert">
-                        {needs.map((line) => <span key={line}>{line}</span>)}
-                      </span>
-                    )}
-                  </span>
-                )}
-                trailing={(
-                  <>
-                    <StatusPill status={tenantStatusTone(row)} label={tenantStatusWord(row, language)} />
-                    <RowMenu
-                      name={`${row.code} · ${row.branchName}`}
-                      items={[
-                        { label: t.list.editSubscription, onSelect: () => setEditing(row) },
-                        ...(!owner ? [{ label: t.list.assignOwner, onSelect: () => router.push(`/admin/tenants/${row._id}/owner`) }] : []),
-                      ]}
-                    />
-                  </>
-                )}
-              />
-            );
-          })}
-        </ListCard>
-      )}
-
-      {tenants && tenants.length > 0 && !rows && (
-        <DataTable
-          caption={t.list.caption}
-          columns={COLUMNS}
-        >
-          {tenants.map((row) => (
-            <Row key={row._id}>
-              <Cell className="font-semibold">
-                <Link href={`/admin/tenants/${row._id}`} className="underline">
-                  {row.code}
-                </Link>
-                <span className="block text-sm font-normal text-muted">{row.branchName}</span>
-              </Cell>
-              <Cell>{row.companyName}</Cell>
-              <Cell>
-                {row.ownerName || row.pendingOwner ? (
-                  <span className="flex flex-col items-start gap-1">
-                    <span className="text-navy">{row.ownerName ?? row.pendingOwner?.fullName}</span>
-                    {row.ownerEmail && <span className="text-sm text-muted">{row.ownerEmail}</span>}
-                    <StatusPill status={OWNER_TONE[row.ownerState]} label={p.ownerState[row.ownerState]} />
-                  </span>
-                ) : (
-                  <Link href={`/admin/tenants/${row._id}/owner`} className="text-alert underline">
-                    {t.list.assignOwner}
-                  </Link>
-                )}
-              </Cell>
-              <Cell className="tabular-nums">{formatNumber(row.memberCount, {}, figures)}</Cell>
-              <Cell className="whitespace-nowrap">
-                {row.dataStatus?.latestMonth ? formatMonth(row.dataStatus.latestMonth, figures) : p.noData}
-              </Cell>
-              <Cell>
-                {needsAction(row, p, figures).length === 0
-                  ? <span className="text-muted">{p.nothing}</span>
-                  : (
-                    <ul className="flex flex-col gap-0.5 text-sm text-alert">
-                      {needsAction(row, p, figures).map((line) => <li key={line}>{line}</li>)}
-                    </ul>
-                  )}
-              </Cell>
-              <Cell>
-                <StatusPill status={tenantStatusTone(row)} label={tenantStatusWord(row, language)} />
-              </Cell>
-              <Cell className="whitespace-nowrap">
-                {row.subscription?.endDate ? formatShortDay(row.subscription.endDate, { year: true }, figures) : '—'}
-              </Cell>
-              <Cell className="whitespace-nowrap">
-                {/* ADR-0157 §4: past the limit — AgencyBoost approved leaders beyond it — the count reads above
-                    it, and *3 over* says by how much in the warning paint. Said once, whole, to a screen reader. */}
-                <span aria-hidden="true">
-                  {leadersWord(row)}
-                  {leadersOver(row) > 0 && (
-                    <StatusPill status="watch" label={t.list.over({ n: leadersOver(row) })} className="ml-2" />
-                  )}
-                </span>
-                <span className="sr-only">{leadersSaid(row, language)}</span>
-              </Cell>
-              <Cell>
-                <Button
-                  variant="secondary"
-                  className="whitespace-nowrap"
-                  aria-label={t.list.editSubscriptionFor({ code: row.code, branch: row.branchName })}
-                  onClick={() => setEditing(row)}
-                >
-                  {t.list.editSubscription}
-                </Button>
-              </Cell>
-            </Row>
-          ))}
-        </DataTable>
-      )}
-
-      <p role="status" className="sr-only">{saved}</p>
-
-      {editing && (
-        <SubscriptionDialog
-          row={editing}
-          open
-          onClose={() => setEditing(null)}
-          onSaved={(saved) => {
-            // The answer is the row as this list reads it, so it is drawn from that, not re-read.
-            setTenants((rows) => rows?.map((r) => (r._id === saved._id ? { ...r, ...saved } : r)) ?? rows);
-            setSaved(t.list.savedFor({ code: saved.code }));
-            setEditing(null);
-          }}
-        />
+      {!data && !error && <SkeletonCards count={4} label={t.loading} />}
+      {data && <Kpms data={data} t={t} add={add} onChanged={load} />}
+      {creating && data && (
+        <NewKpmSheet companies={data.companies} onClose={() => setCreating(false)} onCreated={() => void load()} />
       )}
     </Page>
   );
 }
 
-/** The list's words in the reader's language. */
-type ListWords = MessagesOf<typeof adminPlatformReadsMessages.en>['list'];
+function Kpms({ data, t, add, onChanged }: { data: ConsoleDashboard; t: Words; add: React.ReactNode; onChanged: () => void }) {
+  const fig = useFigureLanguage();
+  const n = (v: number) => formatNumber(v, {}, fig);
+  const searchId = useId();
+  const [q, setQ] = useState('');
+  const [filter, setFilter] = useState<Filter>('all');
 
-/** The Owner's chip (ADR-0212 §2): *Aktif* green, the rest plain — each a word, never a colour alone. */
-const OWNER_TONE: Record<OwnerState, 'success' | 'neutral' | 'alert'> = {
-  active: 'success', invited: 'neutral', not_invited: 'neutral', none: 'alert',
-};
+  const live = data.kpms;
+  const actionCount = live.filter(needsAction).length;
+  // *Anggota* is the Dashboard's tile, read from the same answer (§B.45): the members of the **active** KPMs. Summing every
+  // card here counted a suspended KPM's and an ended subscription's members too — 57 beside the Dashboard's 54 under one
+  // label (found 2026-11-20).
+  const members = data.overall.leaders + data.overall.agents;
+  // The companies that hold a KPM, as the filter offers them.
+  const withKpms = data.companies.filter((c) => live.some((k) => k.companyId === c.companyId));
+  const options = [
+    { value: 'all', label: t.all({ n: n(live.length) }) },
+    { value: 'action', label: t.action({ n: n(actionCount) }) },
+    ...withKpms.map((c) => ({ value: c.companyId, label: c.name })),
+  ];
 
-/**
- * ***Perlu tindakan*** (P19.4-T3 AC-8; SA R5; A2): *"Pemilik belum menerima undangan"* — an Owner named who has not signed
- * in — or *"Belum ada pemilik"*; *"Belum ada anggota"* — nobody but the Owner; *"Data <bulan> belum diunggah"* — the last
- * ended month missing from the KPM's file. An archived KPM needs nothing.
- */
-function needsAction(row: TenantListRow, p: ListWords, figures: Language): string[] {
-  if (row.status === 'archived') return [];
-  const lines: string[] = [];
-  if (row.ownerState === 'none') lines.push(p.actions.noOwner);
-  else if (row.ownerState !== 'active') lines.push(p.actions.ownerNotInvited);
-  if (row.membersBesidesOwner === 0) lines.push(p.actions.noMembers);
-  if (row.dataStatus?.missingMonth) lines.push(p.actions.dataMissing({ month: formatMonth(row.dataStatus.missingMonth, figures) }));
-  return lines;
+  const shown = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    return live.filter((k) => (filter === 'all' || (filter === 'action' ? needsAction(k) : k.companyId === filter))
+      && (!needle || k.name.toLowerCase().includes(needle) || (k.ownerName ?? '').toLowerCase().includes(needle)));
+  }, [live, q, filter]);
+
+  return (
+    <div className="flex flex-col gap-4">
+      <dl className="grid grid-cols-2 gap-3 rounded-[20px] bg-secondary p-4 text-secondary-contrast md:grid-cols-4" data-kpm-tiles="">
+        {([
+          [t.tiles.kpm, n(data.overall.kpms), 'text-primary'],
+          [t.tiles.companies, n(data.overall.companies), 'text-primary'],
+          [t.tiles.members, n(members), 'text-primary'],
+          [t.tiles.action, n(actionCount), 'text-on-navy-red'],
+        ] as const).map(([label, value, tone]) => (
+          <div key={label} className="min-w-0">
+            <dt className="text-sm font-semibold">{label}</dt>
+            <dd className={cn('text-[1.75rem] font-extrabold leading-tight', tone)}>{value}</dd>
+          </div>
+        ))}
+      </dl>
+
+      <div className="flex flex-col gap-2 md:flex-row md:flex-wrap md:items-center">
+        <label htmlFor={searchId} className="sr-only">{t.search}</label>
+        <span className="relative flex min-w-0 md:w-72">
+          <NavIcon name="ti-search" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
+          <input
+            id={searchId}
+            type="search"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder={t.search}
+            className="h-11 w-full rounded-pill border border-hairline bg-card pl-9 pr-3 text-md text-navy placeholder:text-muted"
+          />
+        </span>
+        {/* From 768px the chips; on a phone a dropdown beside the search (§12). */}
+        <div role="group" aria-label={t.filter} className="flex flex-wrap gap-1 rounded-pill bg-card p-1 max-md:hidden">
+          {options.map((o) => (
+            <button
+              key={o.value}
+              type="button"
+              aria-pressed={filter === o.value}
+              onClick={() => setFilter(o.value)}
+              className={cn(
+                'h-10 rounded-pill px-3.5 text-sm font-semibold',
+                filter === o.value ? 'bg-secondary text-secondary-contrast' : 'text-navy hover:bg-pill-grey',
+              )}
+            >
+              {o.label}
+            </button>
+          ))}
+        </div>
+        <div className="md:hidden">
+          <PickerMenu label={t.filter} value={filter} options={options} onChange={setFilter} className="w-full" />
+        </div>
+        <div className="md:ml-auto">{add}</div>
+      </div>
+
+      {live.length === 0 ? (
+        <EmptyState title={t.none} />
+      ) : shown.length === 0 ? (
+        <EmptyState title={t.noMatch} variant="filtered" />
+      ) : (
+        <ul className="grid gap-3 md:grid-cols-2 lg:grid-cols-3" data-kpm-cards="">
+          {shown.map((kpm) => (
+            <KpmCard key={kpm.kpmId} kpm={kpm} data={data} t={t} onChanged={onChanged} />
+          ))}
+        </ul>
+      )}
+      <ul className="flex flex-col gap-1 text-sm text-muted md:flex-row md:gap-x-5">
+        <li>{t.notes.tap}</li>
+        <li>{t.notes.menu}</li>
+      </ul>
+    </div>
+  );
+}
+
+/** The line a KPM's first issue says, and its tone (`superadmin-tablet` f05). */
+function issueLine(issue: KpmIssue | undefined, missingMonth: string | null, t: Words, language: 'id' | 'en') {
+  switch (issue) {
+    case undefined: return { text: t.issue.none, tone: 'bg-pill-green text-pill-green-ink', icon: 'ti-check' as const };
+    case 'suspended': return { text: t.issue.suspended, tone: 'bg-pill-grey text-pill-grey-ink', icon: 'ti-alert-circle' as const };
+    case 'archived': return { text: t.issue.archived, tone: 'bg-pill-grey text-pill-grey-ink', icon: 'ti-alert-circle' as const };
+    case 'subscription_ended': return { text: t.issue.subscription_ended, tone: 'bg-pill-grey text-pill-grey-ink', icon: 'ti-alert-circle' as const };
+    case 'owner_not_invited': return { text: t.issue.owner_not_invited, tone: 'bg-pill-red text-pill-red-ink', icon: 'ti-alert-circle' as const };
+    case 'no_members': return { text: t.issue.no_members, tone: 'bg-pill-red text-pill-red-ink', icon: 'ti-alert-circle' as const };
+    case 'data_missing': return {
+      text: t.issue.data_missing({ month: missingMonth ? formatMonthName(missingMonth, language) : '' }),
+      tone: 'bg-pill-amber text-pill-amber-ink',
+      icon: 'ti-alert-circle' as const,
+    };
+  }
+}
+
+function KpmCard({ kpm, data, t, onChanged }: { kpm: ConsoleKpm; data: ConsoleDashboard; t: Words; onChanged: () => void }) {
+  const fig = useFigureLanguage();
+  const all = countsFor(kpm.usage, 'all');
+  const pct = wholePct(all.used14, all.members);
+  const line = issueLine(kpm.issues[0], kpm.missingMonth, t, fig);
+  // A KPM nobody can use, or with nobody in it, has no share to give: *–*.
+  const usable = kpm.status === 'active' && all.members > 0;
+  return (
+    <li className="flex flex-col gap-2.5 rounded-xl bg-card p-4" data-kpm-card={kpm.kpmId}>
+      <div className="flex items-center gap-2.5">
+        <span aria-hidden="true" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-secondary text-sm font-extrabold text-secondary-contrast">
+          {kpmInitials(kpm.name)}
+        </span>
+        <span className="min-w-0 flex-1">
+          <b className="block truncate text-md text-navy">{kpm.name}</b>
+          <span className="block truncate text-xs text-muted">{kpm.companyName}</span>
+        </span>
+        <KpmActions kpm={kpm} companies={data.companies} onChanged={onChanged} />
+      </div>
+      <p className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-navy">
+        <span className="inline-flex min-w-0 items-center gap-1.5 font-semibold uppercase">
+          <NavIcon name="ti-crown" className="h-4 w-4 shrink-0 text-muted" />
+          <span className="truncate">{kpm.ownerName ?? '—'}</span>
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <NavIcon name="ti-users" className="h-4 w-4 shrink-0 text-muted" />
+          {t.membersN({ n: formatNumber(all.members, {}, fig) })}
+        </span>
+      </p>
+      <p className="flex items-center justify-between gap-2 text-sm text-muted">
+        <span>{t.used14}</span>
+        {usable ? (
+          <b className={cn('rounded-pill px-2 py-0.5 text-sm tabular-nums', TONE_PILL[toneOf(pct, data.scale)])}>{pct}%</b>
+        ) : (
+          <b className="text-muted">–</b>
+        )}
+      </p>
+      <p className={cn('flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-semibold', line.tone)} data-kpm-issue={kpm.issues[0] ?? 'none'}>
+        <NavIcon name={line.icon} className="h-4 w-4 shrink-0" />
+        {line.text}
+      </p>
+      <Link
+        href={`/admin/tenants/${kpm.kpmId}`}
+        onClick={() => enterKpm(kpm.kpmId)}
+        className="inline-flex min-h-10 items-center gap-1 self-start text-md font-bold text-primary-ink"
+      >
+        {t.enter}
+        <NavIcon name="ti-arrow-right" className="h-4 w-4" />
+        <span className="sr-only">{` · ${kpm.name}`}</span>
+      </Link>
+    </li>
+  );
 }

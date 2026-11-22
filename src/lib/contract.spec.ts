@@ -9,7 +9,8 @@ import { PDF_MAX_BYTES } from './recruitment-pitch';
 import { ALLOWED as TRAINING_ALLOWED } from '@/components/module-content';
 import { COMMISSION_MAX_YEARS, OBJECTIONS_MAX, PRODUCT_CURRENCIES, PROPOSAL_LIMITS } from './admin';
 import { LEAD_AGE_MAX, LEAD_AGE_MIN } from './leads';
-import { PROPOSAL_ITEMS_MAX } from './proposals';
+import { PROPOSAL_ITEMS_MAX, PROPOSAL_RECALC_MS } from './proposals';
+import { RATE_TEST_PROFILES } from './product-data';
 import { INBOX_PAGE_SIZE, POPOVER_PAGE_SIZE } from './notifications';
 import { INVITE_NAME_MAX } from './invites';
 import { DEFAULT_LANGUAGE, LANGUAGE_LIVE, LANGUAGES } from '@/i18n/language';
@@ -103,6 +104,12 @@ const PAIRS: ReadonlyArray<[file: string, ours: string, theirs: string]> = [
   // ADR-0157: a leader past the office's limit, read by the office and by AgencyBoost's queue alike.
   ['leader-limit-requests.ts', 'LeaderLimitRequestRow', 'LeaderLimitRequestRowDto'],
   ['admin.ts', 'PlatformAdminRow', 'PlatformAdminRowDto'],
+  // P19.15-T4 (ADR-0260): *Kelola data produk*, *Perubahan oleh pengelola*, and the companies *Data produk* opens.
+  ['product-data-grants.ts', 'ProductDataGrantRow', 'ProductDataGrantRowDto'],
+  ['product-data-grants.ts', 'GrantCompany', 'GrantCompanyDto'],
+  ['product-data-grants.ts', 'ProductDataChange', 'ProductDataChangeRowDto'],
+  ['product-data-grants.ts', 'ProductDataChangesPage', 'ProductDataChangesPageDto'],
+  ['product-data-grants.ts', 'ReadableCompany', 'ReadableCompanyDto'],
   // P19.2-T2 AC-6: the audit page — a group is its newest row with its count, and the page carries the cursor and the
   // chips' options. `AuditEntry`'s fields are the group's (`AuditGroupDto` extends the row).
   ['admin.ts', 'AuditEntry', 'AuditGroupDto'],
@@ -115,7 +122,11 @@ const PAIRS: ReadonlyArray<[file: string, ours: string, theirs: string]> = [
   ['org.ts', 'MemberPage', 'DirectoryPageDto'],
   ['org.ts', 'TeamMember', 'TeamMemberDto'],
   ['org.ts', 'RoleChangeEntry', 'RoleChangeEntryDto'],
-  ['org.ts', 'GroupSummary', 'GroupSummaryDto'],
+  // ADR-0270: the informal groups on ABs, which replaced the group list (`GroupSummary`) on both sides.
+  ['informal-groups.ts', 'InformalGroupsView', 'InformalGroupsViewDto'],
+  ['informal-groups.ts', 'InformalGroup', 'InformalGroupRowDto'],
+  ['informal-groups.ts', 'InformalGroupAb', 'InformalGroupAbDto'],
+  ['informal-groups.ts', 'InformalGroupCounts', 'InformalGroupCountsDto'],
   // P19.3-T4 (ADR-0205 §1): a member's four tiles.
   ['org.ts', 'MemberPerformance', 'MemberPerformanceDto'],
   ['join.ts', 'PendingRequest', 'PendingRequestDto'],
@@ -141,7 +152,11 @@ const PAIRS: ReadonlyArray<[file: string, ours: string, theirs: string]> = [
   ['coaching.ts', 'Roster', 'CoachingRosterDto'],
   ['coaching.ts', 'RosterRow', 'RosterRowDto'],
   ['coaching.ts', 'RosterRung', 'RosterRungDto'],
-  ['coaching.ts', 'RosterUnit', 'RosterUnitDto'],
+  // P19.18-T5 (ADR-0271 §9): the roster grouped as the Unit Dashboard's — sections, team lines, the coaching status tile.
+  ['coaching.ts', 'RosterSection', 'RosterSectionDto'],
+  ['coaching.ts', 'RosterTeam', 'RosterTeamDto'],
+  ['coaching.ts', 'RosterLeader', 'RosterLeaderDto'],
+  ['coaching.ts', 'RosterCoachingStatus', 'RosterCoachingStatusDto'],
   ['coaching.ts', 'LastOneOnOne', 'RosterLastOneOnOneDto'],
   ['coaching.ts', 'RosterPerson', 'RosterPersonDto'],
   // P11-T7: the person shell's header reads these straight off `GET /coaching/coachees/:membershipId`.
@@ -220,6 +235,9 @@ const PAIRS: ReadonlyArray<[file: string, ours: string, theirs: string]> = [
   ['leads.ts', 'LeadLatestProposal', 'LeadLatestProposalDto'],
   // P19.11-T3 AC-1 (UX-9): the finished count and the one the card's proposal icon opens.
   ['leads.ts', 'LeadLatestDoneProposal', 'LeadLatestDoneProposalDto'],
+  // P19.14-T1 AC-5 (ADR-0254 §4): the last client entered on the lead's proposals, what step 1 starts from.
+  ['leads.ts', 'LeadProposalClient', 'LeadProposalClientDto'],
+  ['leads.ts', 'LeadProposalClientDetails', 'ProposalClientDetailsDto'],
   // Phase 14: the Product Catalog, its drawer and the Sales Attack Plan read every one of these straight
   // off the field reads; a field renamed on the server would draw a blank card, block or verdict.
   ['product-catalog.ts', 'CatalogList', 'CatalogListDto'],
@@ -254,6 +272,15 @@ const PAIRS: ReadonlyArray<[file: string, ours: string, theirs: string]> = [
   ['proposals.ts', 'ProposalRow', 'ProposalRowDto'],
   ['proposals.ts', 'ProposalPage', 'ProposalPageDto'],
   ['proposals.ts', 'CatalogProduct', 'ProposalCatalogProductDto'],
+  // P19.14 (ADR-0254, ADR-0255): the client on the proposal, its details, a pay term, the totals per Cara bayar.
+  ['proposals.ts', 'ProposalClient', 'ProposalClientDto'],
+  ['proposals.ts', 'ProposalClientDetails', 'ProposalClientDetailsDto'],
+  ['proposals.ts', 'ProposalInsured', 'ProposalInsuredDto'],
+  ['proposals.ts', 'PayTermView', 'PayTermDto'],
+  ['proposals.ts', 'ProposalTotal', 'ProposalTotalDto'],
+  ['proposals.ts', 'SnapshotLimits', 'ProposalSnapshotLimitsDto'],
+  ['admin.ts', 'ProductPayTerm', 'PayTermDto'],
+  ['admin.ts', 'ProductEntryAge', 'EntryAgeDto'],
   ['product-catalog.ts', 'AttackPlan', 'AttackPlanDto'],
   ['product-catalog.ts', 'AttackPlanBrief', 'AttackPlanBriefDto'],
   ['product-catalog.ts', 'AttackPlanAlternative', 'AttackPlanAlternativeDto'],
@@ -276,76 +303,36 @@ const PAIRS: ReadonlyArray<[file: string, ours: string, theirs: string]> = [
   ['recruitment-playbook.ts', 'PlaybookLimits', 'RecruitmentPlaybookLimitsDto'],
   // In a module of its own since 2026-11-06 (the bundle), which `tenant-config.ts` re-exports.
   ['signed-upload.ts', 'SignedUpload', 'SignedUploadDto'],
-  // Phase 18: the KPM Overview, its not-logged list and target, the analytics, and the platform's adoption.
+  // Phase 18: the platform's adoption; since P19.19 (ADR-0272) the KPM Overview's second version — the analytics' pairs
+  // went with the page. *Red until `backend/openapi.json` is regenerated with the second version's DTOs* (the lead's step).
   ['kpm-overview.ts', 'KpmOverviewView', 'KpmOverviewDto'],
   ['kpm-overview.ts', 'OverviewOffice', 'OfficeHeaderDto'],
-  ['kpm-overview.ts', 'OverviewThresholds', 'ReportingThresholdsDto'],
-  ['kpm-overview.ts', 'OverviewComposition', 'OverviewCompositionDto'],
-  ['kpm-overview.ts', 'OverviewRungCount', 'RungCountDto'],
-  ['kpm-overview.ts', 'OverviewEngagement', 'OverviewEngagementDto'],
-  // P19.3-T2 (ADR-0200 §2, §3): *Aktif bulan ini* where the month's logging was; the setup card and what waits.
-  ['kpm-overview.ts', 'ActiveThisMonth', 'ActiveThisMonthDto'],
+  ['kpm-overview.ts', 'OverviewGroupChoice', 'GroupChoiceDto'],
+  ['kpm-overview.ts', 'UsageCount', 'UsageCountDto'],
+  ['kpm-overview.ts', 'GroupUsage', 'GroupUsageDto'],
+  ['kpm-overview.ts', 'OverviewPerson', 'OverviewPersonDto'],
+  ['kpm-overview.ts', 'PersonUsage', 'PersonUsageDto'],
+  ['kpm-overview.ts', 'PersonCoaching', 'PersonCoachingDto'],
+  ['kpm-overview.ts', 'ChartMonth', 'ChartMonthDto'],
+  ['kpm-overview.ts', 'OverviewProduction', 'OverviewProductionDto'],
   ['kpm-overview.ts', 'OverviewSetup', 'SetupDto'],
   ['kpm-overview.ts', 'SetupStepState', 'SetupStepDto'],
   ['kpm-overview.ts', 'OverviewOpenMonth', 'OpenMonthDto'],
   ['kpm-overview.ts', 'SettingsWaiting', 'SettingsWaitingDto'],
   ['kpm-overview.ts', 'SettingsReviewed', 'ReviewedDto'],
-  ['kpm-overview.ts', 'LoggedThisWeek', 'LoggedThisWeekDto'],
-  ['kpm-overview.ts', 'OverviewRate', 'RateDto'],
-  ['kpm-overview.ts', 'OverviewCoaching', 'OverviewCoachingDto'],
-  ['kpm-overview.ts', 'LeaderboardRow', 'LeaderboardRowDto'],
-  ['kpm-overview.ts', 'OverviewRecruitment', 'OverviewRecruitmentDto'],
-  ['kpm-overview.ts', 'OverviewProduction', 'OverviewProductionDto'],
-  ['kpm-overview.ts', 'OverviewYtd', 'YearToDateDto'],
-  ['kpm-overview.ts', 'OverviewMoney', 'MoneyDto'],
-  ['kpm-overview.ts', 'OverviewAgency', 'OverviewAgencyDto'],
-  ['kpm-overview.ts', 'OverviewAabUnit', 'OverviewUnitDto'],
-  ['kpm-overview.ts', 'NotLoggedList', 'NotLoggedDto'],
-  ['kpm-overview.ts', 'NotLoggedMember', 'NotLoggedMemberDto'],
-  ['kpm-overview.ts', 'NotLoggedRung', 'RungRefDto'],
-  ['kpm-overview.ts', 'RecruitTarget', 'RecruitTargetDto'],
-  ['kpm-analytics.ts', 'KpmAnalyticsView', 'KpmAnalyticsDto'],
-  ['kpm-analytics.ts', 'AgencyRow', 'AnalyticsAgencyDto'],
-  ['kpm-analytics.ts', 'AabUnitRow', 'AnalyticsUnitRowDto'],
-  ['kpm-analytics.ts', 'UnitFigures', 'AnalyticsRowDto'],
-  ['kpm-analytics.ts', 'AnalyticsTotal', 'AnalyticsTotalDto'],
-  ['kpm-analytics.ts', 'Moc', 'MocDto'],
-  ['kpm-analytics.ts', 'MocCriterion', 'MocCriterionDto'],
-  ['kpm-analytics.ts', 'AnalyticsMoney', 'MoneyDto'],
-  ['kpm-analytics.ts', 'AnalyticsRate', 'RateDto'],
-  ['kpm-analytics.ts', 'AnalyticsLeads', 'AnalyticsLeadsDto'],
-  ['kpm-analytics.ts', 'AnalyticsManpower', 'ManpowerDto'],
-  ['kpm-analytics.ts', 'MonthlyProduction', 'MonthlyProductionDto'],
-  ['kpm-analytics.ts', 'AnalyticsHead', 'RowHeadDto'],
-  ['kpm-analytics.ts', 'AnalyticsMember', 'AnalyticsMemberDto'],
-  ['kpm-analytics.ts', 'AnalyticsClub', 'ClubDto'],
-  ['kpm-analytics.ts', 'AnalyticsThresholds', 'ReportingThresholdsDto'],
+  ['kpm-overview.ts', 'OverviewPerformanceView', 'OverviewPerformanceDto'],
+  ['kpm-overview.ts', 'PerformanceActual', 'PerformanceActualDto'],
+  ['kpm-overview.ts', 'PerformanceRow', 'PerformanceRowDto'],
+  ['kpm-overview.ts', 'PerformanceGroup', 'PerformanceGroupDto'],
+  // P19.3-T2 (ADR-0200 §2, §3): *Aktif bulan ini* where the month's logging was; the setup card and what waits.
   // P19.3-T3 (UI-152, OD-258): every leader, and the custom groups.
-  ['kpm-analytics.ts', 'AnalyticsLeader', 'AnalyticsLeaderDto'],
-  ['kpm-analytics.ts', 'LeaderActive', 'LeaderActiveDto'],
-  ['kpm-analytics.ts', 'AnalyticsActiveCount', 'ActiveCountDto'],
-  ['kpm-analytics.ts', 'AnalyticsGroup', 'OfficeGroupDto'],
-  ['admin-analytics.ts', 'AdoptionRung', 'RungCountDto'],
-  ['admin-analytics.ts', 'Adoption', 'AdoptionDto'],
-  ['admin-analytics.ts', 'AdoptionCompanyRef', 'PlatformCompanyRefDto'],
-  ['admin-analytics.ts', 'PlatformOfficeFields', 'PlatformOfficeAdoptionDto'],
-  ['admin-analytics.ts', 'PlatformCompanyFields', 'PlatformCompanyAdoptionDto'],
-  ['admin-analytics.ts', 'PlatformTotalFields', 'PlatformAdoptionDto'],
-  ['admin-analytics.ts', 'PlatformAnalyticsView', 'PlatformAnalyticsDto'],
-  // Phase 18.1: the Strategic Leader Forum — the list, a meeting's card, its editors, its scorecard, its agenda
-  // and tracker, and a share link. `MeetingView` extends `MeetingCard`, which `declaredFields` cannot follow:
-  // its own fields are held in *the forum's routes*, below.
+  // Phase 18.1, P19.22-T8 (ADR-0276): the Strategic Leader Forum — the list, a forum's card, its people, its agenda
+  // and action items, and a share link. `MeetingView` extends `MeetingCard`, which `declaredFields` cannot follow:
+  // its own fields are held in *the forum's routes*, below. Red until `backend/openapi.json` is regenerated.
   ['leader-meetings.ts', 'ForumPerson', 'ForumPersonDto'],
-  ['leader-meetings.ts', 'MeetingEditors', 'MeetingEditorsDto'],
   ['leader-meetings.ts', 'ForumLimits', 'ForumLimitsDto'],
   ['leader-meetings.ts', 'MeetingCard', 'MeetingCardDto'],
   ['leader-meetings.ts', 'MeetingListView', 'MeetingListViewDto'],
-  ['leader-meetings.ts', 'Scorecard', 'ScorecardDto'],
-  ['leader-meetings.ts', 'ScorecardRow', 'ScorecardRowDto'],
-  // P18.9-T1 (ADR-0175): each column's months, a target as a rate and its value, and the (*) notes' periods.
-  ['leader-meetings.ts', 'ColumnPeriod', 'ColumnPeriodDto'],
-  ['leader-meetings.ts', 'MonthlyTarget', 'MonthlyTargetDto'],
-  ['leader-meetings.ts', 'PartialPeriod', 'PartialPeriodDto'],
   ['leader-meetings.ts', 'AgendaItem', 'AgendaItemDto'],
   ['leader-meetings.ts', 'ActionItem', 'LeaderActionItemDto'],
   ['leader-meetings.ts', 'ShareLink', 'ShareLinkDto'],
@@ -360,6 +347,16 @@ const PAIRS: ReadonlyArray<[file: string, ours: string, theirs: string]> = [
   ['events.ts', 'GuestEventLimits', 'GuestEventLimitsDto'],
   ['events.ts', 'GuestEventCan', 'GuestEventCanDto'],
   ['events.ts', 'NpsConstants', 'NpsConstantsDto'],
+  // P19.25-T1, T2 (ADR-0281): Advanced analytics › Event.
+  ['event-analytics.ts', 'Kehadiran', 'KehadiranDto'],
+  ['event-analytics.ts', 'KehadiranFigure', 'KehadiranFigureDto'],
+  ['event-analytics.ts', 'PastEventRow', 'PastEventRowDto'],
+  ['event-analytics.ts', 'UpcomingEventRow', 'UpcomingEventRowDto'],
+  ['event-analytics.ts', 'KehadiranPerson', 'KehadiranPersonDto'],
+  ['event-analytics.ts', 'KehadiranGroupCard', 'KehadiranGroupCardDto'],
+  ['event-analytics.ts', 'KehadiranAbGroup', 'KehadiranAbGroupDto'],
+  ['event-analytics.ts', 'EventFeedback', 'EventFeedbackDto'],
+  ['event-analytics.ts', 'FeedbackEventRow', 'FeedbackEventRowDto'],
   ['events-admin.ts', 'RollCall', 'RollCallDto'],
   ['events-admin.ts', 'RollCallRow', 'RollCallRowDto'],
   ['events-admin.ts', 'RollCallCan', 'RollCallCanDto'],
@@ -414,12 +411,26 @@ describe('the frontend types match the API document (P3.1-T11 AC-4)', () => {
     expect(doc.components.schemas.SaveProductOverridesDto.properties?.objections.maxItems).toBe(OBJECTIONS_MAX);
   });
 
-  it('P19.7-T1 AC-1 the age stepper stops where the API stops taking an age (LEAD_AGE, 1 to 100)', () => {
-    for (const dto of ['CreateLeadDto', 'UpdateLeadDto']) {
+  it('P19.14-T1 AC-3 the age stepper stops where the API stops taking a client’s age (LEAD_AGE, 1 to 100)', () => {
+    for (const dto of ['ProposalClientInputDto', 'ProposalClientDto', 'ProposalInsuredDto']) {
       expect(doc.components.schemas[dto].properties?.age).toMatchObject({ minimum: LEAD_AGE_MIN, maximum: LEAD_AGE_MAX });
     }
-    expect(propertiesOf('LeadResponseDto')).toEqual(expect.arrayContaining(['age', 'ageRecordedOn', 'gender']));
-    expect(propertiesOf('CreateLeadDto')).not.toContain('birthDate');
+  });
+
+  it('P19.14-T1 AC-4 a lead carries no age and no gender: neither taken nor answered, and no birth date ever', () => {
+    for (const dto of ['CreateLeadDto', 'UpdateLeadDto', 'LeadResponseDto']) {
+      for (const key of ['age', 'ageRecordedOn', 'gender', 'birthDate']) expect(propertiesOf(dto)).not.toContain(key);
+    }
+    expect(propertiesOf('ProposalClientDetailsInputDto')).not.toContain('birthDate');
+    expect(propertiesOf('LeadProposalsDto')).toEqual(expect.arrayContaining(['client', 'latest']));
+  });
+
+  it('P19.14-T2 AC-1 no channel and no proposal-wide cara bayar: each item carries its own', () => {
+    expect(propertiesOf('ProposalResponseDto')).not.toEqual(expect.arrayContaining(['channel']));
+    expect(propertiesOf('ProposalResponseDto')).not.toContain('payFrequency');
+    expect(propertiesOf('UpdateProposalDto')).not.toContain('channel');
+    expect(propertiesOf('ProposalItemDto')).toEqual(expect.arrayContaining(['payFrequency', 'payTerm', 'smoker', 'up', 'fixedField']));
+    expect((doc.paths['/api/v1/proposals/catalog'].get.parameters ?? []).map((p) => p.name)).toEqual(['age']);
   });
 
   it('P19.7-T1 AC-3 the Proposal editor stops at the API’s counts (PROPOSAL, §B.34)', () => {
@@ -993,6 +1004,14 @@ const CAMPAIGN_PAIRS: ReadonlyArray<[file: string, ours: string, theirs: string]
   ['tenant-config.ts', 'MetricDefinition', 'MetricDefinitionDto'],
   ['unit-dashboard.ts', 'ChasedRef', 'UnitChasedCampaignDto'],
   ['unit-dashboard.ts', 'MdrtHeader', 'UnitMdrtDto'],
+  // P19.18-T1 (ADR-0271 §3, §5): the panel's two navy tiles and their sheets, and a row's coaching tile and leads.
+  ['unit-dashboard.ts', 'ActiveAgentTile', 'UnitActiveAgentTileDto'],
+  ['unit-dashboard.ts', 'UnitActiveAgent', 'UnitActiveAgentDto'],
+  ['unit-dashboard.ts', 'UnitActiveAgentUnit', 'UnitActiveAgentUnitDto'],
+  ['unit-dashboard.ts', 'RecruitmentTile', 'UnitRecruitmentTileDto'],
+  ['unit-dashboard.ts', 'UnitRecruit', 'UnitRecruitDto'],
+  ['unit-dashboard.ts', 'UnitCoachingStatus', 'UnitCoachingStatusDto'],
+  ['unit-dashboard.ts', 'UnitLeadsByType', 'UnitLeadsByTypeDto'],
 ];
 
 describe('campaigns’ types match the API document (P18.2-T7 to T9)', () => {
@@ -1090,7 +1109,7 @@ describe('campaigns’ types match the API document (P18.2-T7 to T9)', () => {
 });
 
 /**
- * P18.3-T1, P18.3-T2: **the compliance tree's one read** (`GET /kpm/analytics/compliance`), held to its shape as
+ * P18.3-T1, P18.3-T2; since P19.19-T3 the KPM Overview's: **the compliance read** (`GET /kpm/overview/compliance`), held to its shape as
  * campaigns' are — every chip, tab, picker, card and cell on the screen is read straight off these. A field the
  * screen declares always there is one the document requires, one it marks `nullable` is typed `| null`, and a
  * category, phase, kind or rung it names is spelled with exactly the document's values.
@@ -1098,24 +1117,18 @@ describe('campaigns’ types match the API document (P18.2-T7 to T9)', () => {
  * *Red until `backend/openapi.json` is regenerated with the read's DTOs* — the lead's step (P18.3-T3).
  */
 const COMPLIANCE_PAIRS: ReadonlyArray<[file: string, ours: string, theirs: string]> = [
-  ['kpm-compliance.ts', 'ComplianceView', 'ComplianceViewDto'],
-  ['kpm-compliance.ts', 'ComplianceChip', 'ComplianceChipDto'],
-  ['kpm-compliance.ts', 'ComplianceCatalog', 'ComplianceCatalogDto'],
-  ['kpm-compliance.ts', 'ComplianceTrainingCategory', 'ComplianceTrainingCategoryDto'],
-  ['kpm-compliance.ts', 'ComplianceSkill', 'ComplianceTrainingSkillDto'],
-  ['kpm-compliance.ts', 'ComplianceModule', 'ComplianceTrainingModuleDto'],
-  ['kpm-compliance.ts', 'ComplianceGoals', 'ComplianceGoalsCatalogDto'],
-  ['kpm-compliance.ts', 'ComplianceEvent', 'ComplianceEventEntryDto'],
-  ['kpm-compliance.ts', 'ComplianceCampaign', 'ComplianceCampaignEntryDto'],
-  ['kpm-compliance.ts', 'ComplianceSelection', 'ComplianceSelectionDto'],
-  ['kpm-compliance.ts', 'ComplianceSection', 'ComplianceSectionDto'],
-  ['kpm-compliance.ts', 'ComplianceUnit', 'ComplianceUnitDto'],
-  ['kpm-compliance.ts', 'CompliancePerson', 'CompliancePersonDto'],
-  ['kpm-compliance.ts', 'ComplianceRow', 'ComplianceRowDto'],
-  ['kpm-compliance.ts', 'ComplianceCell', 'ComplianceCellDto'],
-  ['kpm-compliance.ts', 'ComplianceOverride', 'ComplianceOverrideDto'],
-  ['kpm-compliance.ts', 'ComplianceOverrideBy', 'ComplianceOverridePersonDto'],
-  ['kpm-compliance.ts', 'ComplianceCan', 'ComplianceCanDto'],
+  // *Since P19.19-T3 (ADR-0272 §6):* the KPM Overview's compliance cards and the card a reader opens.
+  ['kpm-overview.ts', 'ComplianceView', 'ComplianceViewDto'],
+  ['kpm-overview.ts', 'ComplianceCard', 'ComplianceCardDto'],
+  ['kpm-overview.ts', 'ComplianceCatalog', 'ComplianceCatalogDto'],
+  ['kpm-overview.ts', 'ComplianceTrainingCategory', 'ComplianceTrainingCategoryDto'],
+  ['kpm-overview.ts', 'ComplianceSkill', 'ComplianceTrainingSkillDto'],
+  ['kpm-overview.ts', 'ComplianceModule', 'ComplianceTrainingModuleDto'],
+  ['kpm-overview.ts', 'ComplianceEvent', 'ComplianceEventEntryDto'],
+  ['kpm-overview.ts', 'ComplianceCampaign', 'ComplianceCampaignEntryDto'],
+  ['kpm-overview.ts', 'ComplianceSelected', 'ComplianceSelectedDto'],
+  ['kpm-overview.ts', 'ComplianceCell', 'ComplianceCellRowDto'],
+  ['kpm-overview.ts', 'ComplianceThresholds', 'ComplianceThresholdsDto'],
 ];
 
 describe('the compliance tree’s types match the API document (P18.3-T1, P18.3-T2)', () => {
@@ -1143,40 +1156,42 @@ describe('the compliance tree’s types match the API document (P18.3-T1, P18.3-
 
   it('the screen’s one read is in the document, a GET', async () => {
     const { vi } = await import('vitest');
-    const compliance = await import('./kpm-compliance');
+    const compliance = await import('./kpm-overview');
     const sent: string[] = [];
     vi.stubGlobal('fetch', vi.fn(async (url: string, init: RequestInit = {}) => {
       sent.push(`${(init.method ?? 'GET').toLowerCase()} ${new URL(url).pathname.replace('/api/v1', '')}`);
       return { ok: true, status: 200, json: async () => ({}) } as Response;
     }));
     try {
-      await compliance.readCompliance({ category: 'events', item: 'ev-1' });
+      await compliance.readOverviewCompliance({ category: 'events', item: 'ev-1' });
     } finally {
       vi.unstubAllGlobals();
     }
-    expect(sent).toEqual(['get /kpm/analytics/compliance']);
-    expect(Object.keys(doc.paths['/api/v1/kpm/analytics/compliance'] ?? {})).toEqual(['get']);
+    expect(sent).toEqual(['get /kpm/overview/compliance']);
+    expect(Object.keys(doc.paths['/api/v1/kpm/overview/compliance'] ?? {})).toEqual(['get']);
   });
 
   it('the read takes the three parameters the screen sends, and no others — the custom group since P19.3-T3 AC-15', () => {
-    const parameters = doc.paths['/api/v1/kpm/analytics/compliance']?.get.parameters ?? [];
+    const parameters = doc.paths['/api/v1/kpm/overview/compliance']?.get.parameters ?? [];
     expect(parameters.filter((p) => p.in === 'query').map((p) => p.name).sort()).toEqual(['category', 'group', 'item']);
   });
 });
 
 /**
- * P13.2-T2: the quote tool's one read, held to its shape as the activation's are. The screen prices
- * every figure from these fields, so one renamed on the server would price nothing in the browser.
+ * P13.2-T2, P19.23-T5 (ADR-0279): *Langganan & akses*' reads, held to their shapes as the activation's are. The screen
+ * prices every figure from these fields, so one renamed on the server would price nothing in the browser.
  */
 const BILLING_PAIRS: ReadonlyArray<[file: string, ours: string, theirs: string]> = [
   ['billing.ts', 'BillingPrices', 'BillingPricesDto'],
   ['billing.ts', 'BillingTier', 'BillingTierDto'],
-  // P19.4-T3 AC-10 (ADR-0211 §3, §5): the list of KPMs, and what a sent quote answers.
+  // P19.23-T5 AC-4 (ADR-0279 §6): *Langganan per KPM* — the summary, the *Total* row and the rows.
+  ['billing.ts', 'BillingKpmList', 'BillingKpmListDto'],
   ['billing.ts', 'BillingKpmRow', 'BillingKpmRowDto'],
-  ['billing.ts', 'QuoteSent', 'QuoteSentDto'],
+  ['billing.ts', 'BillingSummary', 'BillingSummaryDto'],
+  ['billing.ts', 'BillingTotal', 'BillingTotalDto'],
 ];
 
-describe('the quote tool’s types match the API document (P13.2-T2)', () => {
+describe('Langganan & akses’ types match the API document (P13.2-T2, P19.23-T5)', () => {
   it.each(BILLING_PAIRS)('%s › %s ⊆ %s', (file, ours, theirs) => {
     const documented = new Set(propertiesOf(theirs));
     expect(declaredFields(file, ours).filter((f) => !documented.has(f))).toEqual([]);
@@ -1199,20 +1214,23 @@ describe('the quote tool’s types match the API document (P13.2-T2)', () => {
   });
 
   /*
-   * *Changed 2026-11-05 (P19.4-T3 AC-10; ADR-0211):* the prices read, the list of KPMs, and the quote sent to a KPM's
-   * Owner — the only write, and a `POST`. Each exists in the document with its method.
+   * *Changed 2026-11-20 (P19.23-T5; ADR-0279):* the prices read, *Langganan per KPM* and *Konfirmasi paket* — a `PUT`.
+   * *Buat PDF* (`POST /admin/billing/offer`) goes through `apiBlob`, which this reader does not see; the API consumer gate
+   * (`scripts/check-api-consumers.py`) holds it. The quote sent by email (`POST /admin/tenants/:kpmId/quote`) is retired:
+   * *Kirim penawaran* is a WhatsApp link (OD-359).
    */
-  it('P19.4-T3 AC-10 the screens’ calls are the prices, the KPMs and the quote, each in the document', () => {
+  it('P19.23-T5 the screens’ calls are the prices, the KPMs and a confirmed package, each in the document', () => {
     const paths = new Set(Object.keys(doc.paths).map((p) => p.replace('/api/v1', '')));
     const called = callsIn(readFileSync(join(__dirname, 'billing.ts'), 'utf8'));
-    // A query built beside the path is no segment of it: `callsIn` reads the path up to the query's `${…}`.
-    expect(called).toEqual(['/admin/billing/prices', '/admin/billing/kpms', '/admin/tenants/*/quote']);
+    expect(called).toEqual(['/admin/billing/prices', '/admin/billing/kpms', '/admin/billing/kpms/*/subscription']);
     expect(called.filter((p) => !matches(p, paths))).toEqual([]);
     expect(Object.keys(doc.paths['/api/v1/admin/billing/prices'])).toEqual(['get']);
     expect(Object.keys(doc.paths['/api/v1/admin/billing/kpms'])).toEqual(['get']);
-    expect(Object.keys(doc.paths['/api/v1/admin/tenants/{kpmId}/quote'])).toEqual(['post']);
+    expect(Object.keys(doc.paths['/api/v1/admin/billing/kpms/{kpmId}/subscription'])).toEqual(['put']);
+    expect(Object.keys(doc.paths['/api/v1/admin/billing/offer'])).toEqual(['post']);
+    expect(doc.paths['/api/v1/admin/tenants/{kpmId}/quote']).toBeUndefined();
     const query = (doc.paths['/api/v1/admin/billing/kpms'].get.parameters ?? []).filter((q) => q.in === 'query');
-    expect(query.map((q) => q.name).sort()).toEqual(['companyId', 'dir', 'sort']);
+    expect(query.map((q) => q.name).sort()).toEqual(['filter']);
   });
 });
 
@@ -1222,7 +1240,7 @@ describe('the quote tool’s types match the API document (P13.2-T2)', () => {
  * its query filled in, which reading the source for string literals would not show. Each must be a route of
  * the document with that method. And `MeetingView`'s own fields, which the pairs above cannot reach through `extends`.
  */
-describe('the forum’s routes match the API document (P18.1-T2, P18.1-T3)', () => {
+describe('the forum’s routes match the API document (P18.1-T2, P18.1-T3, P19.22-T8)', () => {
   it('every route the forum’s client calls is in the document, with its method', async () => {
     const { vi } = await import('vitest');
     const forum = await import('./leader-meetings');
@@ -1233,37 +1251,35 @@ describe('the forum’s routes match the API document (P18.1-T2, P18.1-T3)', () 
     }));
     try {
       await forum.readMeetings();
-      await forum.createMeeting({ title: 't', date: '2026-10-13' });
+      await forum.createMeeting({ date: '2026-10-13', time: '14:00' });
       await forum.readMeeting('m1');
-      await forum.rescheduleMeeting('m1', { date: '2026-10-20', version: 1 });
+      await forum.rescheduleMeeting('m1', { time: '15:00', version: 1 });
       await forum.deleteMeeting('m1', 1);
-      await forum.addAgendaItem('m1', 'during');
-      await forum.saveAgendaItem('m1', 'a1', { text: 'x', version: 1 });
-      await forum.addActionItem('m1');
-      await forum.saveActionItem('m1', 'x1', { status: 'planned', version: 1 });
+      await forum.addAgendaItem('m1', { text: 'x' });
+      await forum.saveAgendaItem('m1', 'a1', { done: true, version: 1 });
+      await forum.addActionItem('m1', { text: 'x' });
+      await forum.saveActionItem('m1', 'x1', { status: 'doing', version: 1 });
       await forum.removeActionItem('m1', 'x1', 1);
-      await forum.reorderActionItems('m1', ['x1']);
-      await forum.saveMonthlyTarget('m1', 'ape', { rate: null, version: 0 });
       await forum.createShareLink('m1');
-      await forum.revokeShareLinks('m1');
       await forum.readSharedMeeting('tok');
     } finally {
       vi.unstubAllGlobals();
     }
 
-    expect(sent).toHaveLength(15);
+    expect(sent).toHaveLength(12);
     const routes = Object.entries(doc.paths).flatMap(([path, ops]) =>
       Object.keys(ops).map((method) => ({ method, path: path.replace('/api/v1', '') })));
     const unknown = sent.filter((call) => {
       const [method, path] = call.split(' ');
-      const asCalled = path.split('/').map((seg) => (['m1', 'a1', 'x1', 'tok', 'ape'].includes(seg) ? '*' : seg)).join('/');
+      const asCalled = path.split('/').map((seg) => (['m1', 'a1', 'x1', 'tok'].includes(seg) ? '*' : seg)).join('/');
       return !routes.some((r) => r.method === method && matches(asCalled, new Set([r.path])));
     });
     expect(unknown).toEqual([]);
   });
 
+  /** *Red until `backend/openapi.json` is regenerated with P19.22-T8's DTOs* — the lead's step. */
   it('MeetingView’s own fields are documented on MeetingViewDto', () => {
-    const own = ['version', 'branch', 'scorecard', 'agenda', 'actionItems', 'writtenIn', 'via', 'accessNote', 'can', 'limits'];
+    const own = ['version', 'coreLeaders', 'people', 'agenda', 'actionItems', 'writtenIn', 'via', 'can', 'limits'];
     const documented = new Set(propertiesOf('MeetingViewDto'));
     expect(own.filter((f) => !documented.has(f))).toEqual([]);
     // And the card's, which it extends.
@@ -1461,6 +1477,11 @@ const HOME_PAIRS: ReadonlyArray<[file: string, ours: string, theirs: string]> = 
   ['home.ts', 'HomeSplit', 'HomeSplitDto'],
   ['home.ts', 'HomeTeamPerson', 'HomeTeamPersonDto'],
   ['home.ts', 'HomeLeader', 'HomeLeaderDto'],
+  // P19.18-T4 (ADR-0271 §7): the whole office for its Owner or an Admin, and *Active Agent* from the upload.
+  ['home.ts', 'HomeActiveAgent', 'HomeActiveAgentDto'],
+  ['home.ts', 'HomeOfficeTeam', 'HomeOfficeTeamDto'],
+  ['home.ts', 'HomeTeamUnit', 'HomeTeamUnitDto'],
+  ['home.ts', 'HomeTeamUnitLeader', 'HomeTeamUnitLeaderDto'],
 ];
 
 describe('UI V1 Home’s read matches the API document (Phase 18.11 T11)', () => {
@@ -1494,5 +1515,25 @@ describe('P19.11-T5 the Summary’s leads match the API document', () => {
     expect(fields).toEqual(['rows', 'total', 'shown', 'unitOpen']);
     const documented = new Set(propertiesOf('SummaryLeadsDto'));
     expect(fields.filter((f) => !documented.has(f))).toEqual([]);
+  });
+});
+
+/**
+ * **P19.15-T1: the two numbers the frontend mirrors of the premium tables are the backend's** (invariant §7): the card's
+ * wait before it saves, so before the server calculates (`RECALC_DEBOUNCE_MS`), and how many test profiles activation
+ * asks for (`TEST_PROFILES`). Read out of the constants module, as the languages are above; a change in one repository
+ * and not the other fails here.
+ */
+describe('the premium tables’ mirrored constants are the backend’s (P19.15-T1)', () => {
+  const backend = readFileSync(
+    join(__dirname, '..', '..', '..', 'backend', 'src', 'domain', 'constants', 'product-data.ts'), 'utf8',
+  );
+
+  it('PROPOSAL_RECALC_MS is PRODUCT_DATA.RECALC_DEBOUNCE_MS', () => {
+    expect(Number(/^\s*RECALC_DEBOUNCE_MS: (\d+),$/m.exec(backend)?.[1])).toBe(PROPOSAL_RECALC_MS);
+  });
+
+  it('RATE_TEST_PROFILES is PRODUCT_DATA.TEST_PROFILES', () => {
+    expect(Number(/^\s*TEST_PROFILES: (\d+),$/m.exec(backend)?.[1])).toBe(RATE_TEST_PROFILES);
   });
 });

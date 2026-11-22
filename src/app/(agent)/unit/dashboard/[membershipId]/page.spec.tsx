@@ -23,6 +23,9 @@ function render(reply: StubReply | StubReply[] = { body: SARI_UNIT }, me = AGUS_
   return stub;
 }
 
+/** The roster, as P19.18-T1 draws it: unit cards in a region named by its title. */
+const roster = () => screen.findByRole('region', { name: /^Your team’s roster/ });
+
 const NOT_FOUND = { status: 404, body: { error: { code: 'NOT_FOUND', message: 'Not found.', requestId: 'r-404' } } };
 
 /**
@@ -38,21 +41,21 @@ describe('a unit below the reader (P15-T4 AC-2)', () => {
   it('P15-T4 AC-2 reads that leader’s unit with for, and titles it {name}’s Unit Dashboard', async () => {
     const { calls } = render();
     expect(await screen.findByRole('heading', { level: 1 })).toHaveTextContent(/^Sari Wulandari’s Unit Dashboard$/);
-    expect(calls[0].url).toBe('http://api.test/api/v1/unit/dashboard?period=month&for=mem-sari');
+    expect(calls[0].url).toBe('http://api.test/api/v1/unit/dashboard?period=year&for=mem-sari');
   });
 
-  it('P15-T4 AC-2 reads This month when the address carries no query', async () => {
+  it('P15-T4 AC-2, P19.18-T1 AC-1 reads Tahun ini when the address carries no query', async () => {
     const { calls } = stubFetch({ 'GET /unit/dashboard': { body: SARI_UNIT } });
     renderWithSession(<UnitBelowPage params={routeParams({ membershipId: 'mem-sari' })} />, { me: AGUS_ME });
-    await screen.findByRole('table');
-    expect(calls[0].url).toBe('http://api.test/api/v1/unit/dashboard?period=month&for=mem-sari');
+    await roster();
+    expect(calls[0].url).toBe('http://api.test/api/v1/unit/dashboard?period=year&for=mem-sari');
   });
 
   it('P15-T4 AC-2, UI-009, UI-011 names the head’s row and groups for them, never You; a row opens the person, ‹ back here', async () => {
     render();
-    await screen.findByRole('table', { name: 'Your team’s roster' });
+    await roster();
     expect(screen.queryByText(/^You \(/)).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Sari Wulandari’s Unit · 4' })).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByRole('button', { name: /^SARI WULANDARI’s Unit/ })).toHaveAttribute('aria-expanded', 'true');
     const head = screen.getByRole('link', { name: 'Sari Wulandari' });
     expect(head).toHaveAttribute('href', '/coaching/mem-sari/summary?from=%2Funit%2Fdashboard%2Fmem-sari');
     expect(screen.queryByText(/^Your Unit/)).not.toBeInTheDocument();
@@ -70,24 +73,23 @@ describe('a unit below the reader (P15-T4 AC-2)', () => {
       units: (SARI_UNIT.units as unknown as Group[]).map(group),
     };
     render({ body: outside });
-    await screen.findByRole('table', { name: 'Your team’s roster' });
+    const region = await roster();
     expect(screen.getByText('Sari Wulandari')).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Sari Wulandari' })).not.toBeInTheDocument();
-    expect(within(screen.getByRole('table', { name: 'Your team’s roster' })).queryAllByRole('link')).toHaveLength(0);
+    expect(within(region).queryAllByRole('link')).toHaveLength(0);
   });
 
-  it('P15-T4 AC-2, UI-003 counts the unit’s team in its chips — direct, then AAB — and its recruitment Unit / AAB', async () => {
+  it('P15-T4 AC-2, P19.18-T1 AC-3 counts the unit’s team in one number, no chips — the downline filter splits it', async () => {
     render();
-    await screen.findByRole('table');
-    const tile = (label: string) => screen.getByText(label).closest('[data-stat-tile]')!;
-    expect(tile('Your team')).toHaveTextContent('6agents4 direct2 AAB');
-    expect(tile('Recruitment October')).toHaveTextContent('1candidateUnit 1AAB 0');
-    expect(screen.queryByText(/including you/)).not.toBeInTheDocument();
+    await roster();
+    const team = document.querySelector('[data-panel-tile="team"]')!;
+    expect(team).toHaveTextContent('6Your team');
+    expect(document.querySelector('[data-unit-panel]')).not.toHaveTextContent(/direct|AAB/);
   });
 
   it('P15-T4 AC-2 names the dialog’s first group for the head', async () => {
     render();
-    await screen.findByRole('table');
+    await roster();
     await userEvent.click(screen.getByRole('button', { name: 'Update production' }));
     const dialog = screen.getByRole('dialog', { name: 'Update production' });
     expect(within(dialog).getByRole('rowheader', { name: 'Sari Wulandari’s direct agents' })).toBeInTheDocument();
@@ -96,17 +98,17 @@ describe('a unit below the reader (P15-T4 AC-2)', () => {
   });
 
   it('P15-T4 AC-2 keeps the period on a unit below, and its switch reads that unit again', async () => {
-    const { calls } = render([{ body: { ...SARI_UNIT, period: 'year' } }, { body: SARI_UNIT }], AGUS_ME, 'year');
-    await screen.findByRole('table');
+    const { calls } = render([{ body: { ...SARI_UNIT, period: 'month' } }, { body: SARI_UNIT }], AGUS_ME, 'month');
+    await roster();
     // The period is a menu under its button since P19.8-T4 (AC-12, MOB UI-171), where it was a native select.
-    await userEvent.click(screen.getByRole('button', { name: 'Period This year' }));
-    await userEvent.click(screen.getByRole('option', { name: 'This month' }));
-    // UI V1: the address carries the period only when it is not the first, *Bulan ini*.
+    await userEvent.click(screen.getByRole('button', { name: 'Period This month' }));
+    await userEvent.click(screen.getByRole('option', { name: 'This year' }));
+    // P19.18-T1 AC-1: the address carries the period only when it is not the first, *Tahun ini*.
     expect(nav.replace).toHaveBeenCalledWith('/unit/dashboard/mem-sari', { scroll: false });
-    await screen.findByRole('table');
+    await roster();
     expect(calls.map((c) => c.url)).toEqual([
-      'http://api.test/api/v1/unit/dashboard?period=year&for=mem-sari',
       'http://api.test/api/v1/unit/dashboard?period=month&for=mem-sari',
+      'http://api.test/api/v1/unit/dashboard?period=year&for=mem-sari',
     ]);
   });
 
@@ -115,7 +117,7 @@ describe('a unit below the reader (P15-T4 AC-2)', () => {
     expect(await screen.findByText('This isn’t a unit you can open.')).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^Unit Dashboard$/);
     expect(screen.getByRole('link', { name: 'Your Unit Dashboard' })).toHaveAttribute('href', '/unit/dashboard');
-    expect(screen.queryByRole('table')).not.toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: /^Your team’s roster/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /^Period / })).not.toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(/Sari|office|KPM|reports to|tagged to|untagged|unassigned/);
   });
@@ -140,7 +142,7 @@ describe('a unit below the reader (P15-T4 AC-2)', () => {
 
   it('P15-T4 AC-5 lets a read-only support session read it, with no Update production', async () => {
     render({ body: SARI_UNIT }, makeMe({ ...AGUS_ME, isImpersonating: true, impersonationReadOnly: true, impersonatedBy: 'Root' }));
-    await screen.findByRole('table');
+    await roster();
     expect(screen.queryByRole('button', { name: 'Update production' })).not.toBeInTheDocument();
   });
 
@@ -152,7 +154,7 @@ describe('a unit below the reader (P15-T4 AC-2)', () => {
       'GET /unit/dashboard': { body: SARI_UNIT },
     });
     renderInLayout(AgentLayout, <UnitBelowPage params={routeParams({ membershipId: 'mem-sari' })} />, { me: AGUS_ME });
-    await screen.findByRole('table');
+    await roster();
     const main = screen.getByRole('navigation', { name: 'Main' });
     // The field shell's sidebar since UI V1 (UI-004): *Unit Dashboard*.
     expect(within(main).getByRole('link', { name: 'Unit Dashboard' })).toHaveAttribute('aria-current', 'page');

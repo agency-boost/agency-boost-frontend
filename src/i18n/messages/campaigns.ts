@@ -4,7 +4,7 @@ import { kept } from '@/i18n/kept';
 /**
  * **The agents' *Campaign List*, in words** (P18.10-T4, events, campaigns and the calendar; `functional/campaigns.md`,
  * *The module's own strings*): the page's title and line, *Seasonal · Structural*, the status filter, the five sections
- * and their empty lines, a card — its tags, *Promotion path*, the prize, *Needs:* and each requirement in words, the
+ * and their empty lines (four since P19.25-T5, ADR-0282 §4: no *Production Clubs*), a card — its tags, *Promotion path*, the prize, *Needs:* and each requirement in words, the
  * chase — the campaign's dialog with its requirements and progress, and the toasts (`lib/campaigns.ts`). What a person
  * is chasing — the Summary's rows, *Campaigns they're chasing*, *Chasing MDRT* — is `campaign-chasing.ts`'.
  *
@@ -30,7 +30,7 @@ type Comparator = 'gte' | 'gt' | 'lte' | 'lt' | 'eq';
 
 const en = {
   /** The page (`:10411`): the nav item's words (§A.2), and its line — *Tap*, never *click* (P18.7-T9 AC-5). */
-  title: kept('Campaign List'),
+  title: kept('Campaign'),
   subtitle: "Company and KPM campaigns — mark the ones you're chasing, tap any card for full requirements.",
   /** The two tabs (`:3667-3670`), named for a screen reader, and the status filter (`:3674-3679`). */
   types: 'Campaign types',
@@ -43,14 +43,15 @@ const en = {
   ended: 'Ended',
   /** A structural campaign's status tag (`:8047-8051`). */
   ongoing: 'Ongoing',
-  /** The structural view's two sections (`:8102-8111`), and every section's empty line (`:8091-8111`). */
-  promotionCriteria: 'Promotion Criteria',
-  productionClubs: 'Production Clubs',
+  /**
+   * Every section's empty line (`:8091-8111`). *Changed 2026-11-20 (P19.25-T5 AC-1, ADR-0282 §4):* the structural view is
+   * one section, *Structural* — its *Promotion Criteria* and *Production Clubs* went with the owner's *"no Production
+   * club"* and *"MOC / Club: not shown anywhere"*.
+   */
   noRunning: 'No running campaigns right now.',
   noUpcoming: 'No upcoming campaigns.',
   noEnded: 'No ended campaigns to show.',
-  noPromotion: 'No promotion criteria published yet.',
-  noOngoing: 'No ongoing incentives right now.',
+  noStructural: 'No structural campaigns right now.',
   /** Every campaign is the office's (OD-156, ADR-0146): the source tag reads *KPM* (`:8029`). */
   sourceTag: kept('KPM'),
   promotionPath: 'Promotion path',
@@ -110,7 +111,7 @@ const en = {
 };
 
 const id: MessagesOf<typeof en> = {
-  title: kept('Campaign List'),
+  title: kept('Campaign'),
   subtitle: `${kept('Campaign')} perusahaan dan ${kept('KPM')} — tandai yang Anda kejar, ketuk kartu mana pun untuk melihat syarat lengkapnya.`,
   types: `Jenis ${kept('campaign')}`,
   seasonal: 'Musiman',
@@ -122,13 +123,10 @@ const id: MessagesOf<typeof en> = {
   ended: 'Berakhir',
   // As the compliance tree's tag (`kpm-compliance.ts`): a structural campaign that has started is running.
   ongoing: 'Berjalan',
-  promotionCriteria: 'Kriteria promosi',
-  productionClubs: 'Klub produksi',
   noRunning: `Belum ada ${kept('campaign')} yang berjalan saat ini.`,
   noUpcoming: `Belum ada ${kept('campaign')} yang akan datang.`,
   noEnded: `Belum ada ${kept('campaign')} yang sudah berakhir.`,
-  noPromotion: 'Belum ada kriteria promosi yang diterbitkan.',
-  noOngoing: 'Belum ada insentif berkelanjutan saat ini.',
+  noStructural: `Belum ada ${kept('campaign')} struktural saat ini.`,
   sourceTag: kept('KPM'),
   promotionPath: 'Jalur promosi',
   ongoingIncentive: 'Insentif berkelanjutan',

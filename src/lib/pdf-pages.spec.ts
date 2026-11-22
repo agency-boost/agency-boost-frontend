@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-/** `pdf.js`, as far as step 3 uses it: a document of two A4 pages, each rendered onto a canvas. */
+/** `pdf.js`, as far as the proposal's result screen uses it: a document of one or two A4 pages, each rendered onto a canvas. */
 const pdfjs = vi.hoisted(() => {
   const rendered: { width: number; height: number; scale: number }[] = [];
   const handed: Uint8Array[] = [];

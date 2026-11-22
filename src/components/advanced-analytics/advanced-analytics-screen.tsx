@@ -1,19 +1,28 @@
 'use client';
 
+import dynamic from 'next/dynamic';
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
-import { SurveyResultsScreen } from '@/components/surveys/survey-results';
-import { RouteTabs } from '@/components/ui/route-tabs';
+import { useTabRow } from '@/components/ui/use-tab-row';
 import { useMessages } from '@/i18n/language-provider';
 import { advancedAnalyticsPageMessages } from '@/i18n/messages/advanced-analytics-page';
-import { surveyMessages } from '@/i18n/messages/surveys';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { readShell, type SectionSlug, type Shell } from '@/lib/advanced-analytics-page';
-import { DemographicsSection } from './demographics-section';
-import { EventsSection } from './events-section';
-import { MapaSection } from './mapa-section';
-import { QuantSection } from './quant-section';
-import { SectionError, SectionLoading, TemplateVersionNotice } from './shared';
-import { SubgroupSection } from './subgroup-section';
+import { cn } from '@/lib/cn';
+import { SectionError, SectionLoading } from './shared';
+
+/*
+ * **Each section's screen loads when its tab is opened** (the 200 kB first-load budget; `performance-and-scale.md`): one
+ * tab is on the page at a time, and the four data tabs and the two survey screens are each heavier than the bar.
+ */
+const loading = () => <SectionLoading />;
+const DemographicsSection = dynamic(() => import('./demographics-section').then((m) => m.DemographicsSection), { ssr: false, loading });
+const MapaSection = dynamic(() => import('./mapa-section').then((m) => m.MapaSection), { ssr: false, loading });
+const QuantSection = dynamic(() => import('./quant-section').then((m) => m.QuantSection), { ssr: false, loading });
+const SubgroupSection = dynamic(() => import('./subgroup-section').then((m) => m.SubgroupSection), { ssr: false, loading });
+const EventsSection = dynamic(() => import('./events-section').then((m) => m.EventsSection), { ssr: false, loading });
+const SurveyResultsScreen = dynamic(() => import('@/components/surveys/survey-results').then((m) => m.SurveyResultsScreen), { ssr: false, loading });
 
 /** The shell read, once per page, shared by the tabs and the section below them. */
 export function useAdvancedAnalyticsShell(platformKpmId?: string): { shell: Shell | null; error: ApiError | null } {
@@ -34,17 +43,21 @@ export const ShellProvider = ShellContext.Provider;
 /** The page's shell, from the layout that read it; `null` while it is read. */
 export const useShellOfPage = () => useContext(ShellContext);
 
-/** A section's name on its tab: the template's own words, the survey tabs' from the surveys' catalogue. */
+/** A section's short name on its tab (P19.22-T1 AC-1): *Demografi · MAPA driver · NPS · Kuantitatif · Kualitatif · …*. */
 export function useSectionLabel(): (slug: SectionSlug) => string {
-  const t = useMessages(advancedAnalyticsPageMessages).sections;
-  const s = useMessages(surveyMessages).kpm.tabs;
-  return (slug) => (slug === 'nps' ? s.nps : slug === 'qual' ? s.qual : t[slug]);
+  const t = useMessages(advancedAnalyticsPageMessages).tabLabels;
+  return (slug) => t[slug];
 }
 
 /**
- * **The tabs: the template's sections that are on, in its order, then *Event*** (P19.5-T3 AC-1, AC-11; ADR-0215 §1),
- * and the template-version notice under them. A section turned off has no tab; turned on again, it is back with its
- * earlier results. On a phone the row scrolls sideways (`RouteTabs`).
+ * **The tab bar** (P19.22-T1; ADR-0275 §1; the brief of 19 November, *Advanced analytics, redone*): the seven tabs in the
+ * fixed order, **short labels sized to their text** (padding 0 18px, 14px), **spread evenly** across a white bar, the
+ * current one a navy pill. Links in a `nav`, the current one `aria-current` — they change the address. **On a phone the
+ * bar scrolls sideways** inside itself, fading on the side that has more, the current tab brought into view; the page
+ * never scrolls sideways. A tab the template has off is not drawn.
+ *
+ * *Changed 2026-11-20 (P19.22-T1):* the template-version notice under the tabs is gone — the brief's *no grey
+ * explanation lines* (parity I-1160).
  */
 export function SectionTabs({ shell, hrefOf, activeHref }: {
   shell: Shell;
@@ -53,18 +66,36 @@ export function SectionTabs({ shell, hrefOf, activeHref }: {
 }) {
   const t = useMessages(advancedAnalyticsPageMessages);
   const label = useSectionLabel();
+  const pathname = usePathname();
+  const current = activeHref ?? pathname;
+  const row = useTabRow<HTMLElement>(current);
   return (
-    <>
-      <RouteTabs
-        label={t.tabs}
-        activeHref={activeHref}
-        tabs={shell.sections.map((s) => ({ href: hrefOf(s.slug), label: label(s.slug) }))}
-        className="mb-3"
-      />
-      <TemplateVersionNotice>
-        {t.templateNotice({ name: shell.templateName ?? t.platformTemplate, version: shell.version })}
-      </TemplateVersionNotice>
-    </>
+    <nav
+      ref={row.ref}
+      aria-label={t.tabs}
+      data-fade={row.fade}
+      data-analytics-tabs=""
+      className="mb-3 flex flex-nowrap gap-1 overflow-x-auto rounded-pill bg-card p-1 md:justify-between"
+    >
+      {shell.sections.map((s) => {
+        const href = hrefOf(s.slug);
+        const on = href === current;
+        return (
+          <Link
+            key={s.slug}
+            href={href}
+            aria-current={on ? 'page' : undefined}
+            className={cn(
+              'inline-flex h-10 shrink-0 items-center whitespace-nowrap rounded-pill px-[18px] text-md font-semibold',
+              'focus-visible:[outline-offset:-2px]',
+              on ? 'bg-secondary text-secondary-contrast' : 'text-ink lg:hover:bg-hover-row',
+            )}
+          >
+            {label(s.slug)}
+          </Link>
+        );
+      })}
+    </nav>
   );
 }
 

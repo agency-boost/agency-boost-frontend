@@ -1,90 +1,87 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { useRouter } from 'next/navigation';
-import { Suspense, use, useCallback, useEffect, useState } from 'react';
+import Link from 'next/link';
+import { use, useCallback, useEffect, useState } from 'react';
+import { KpmReportSlot } from '@/components/admin/kpm-report-slot';
+import { InsideKpmBar, KpmSwitcher } from '@/components/admin/kpm-switcher';
+import { MemberName } from '@/components/admin/member-name';
+import { OwnerWhatsAppInviteButton } from '@/components/admin/owner-whatsapp-invite';
+import { ViewAsCards } from '@/components/admin/view-as-cards';
 import { Page } from '@/components/page';
-import { Dialog } from '@/components/ui/dialog';
-import { ActivityBindingCard } from '@/components/activity-binding-card';
-import { KpmDataTab, KpmMonthGrid, KpmMonthGridSkeleton, useKpmData } from '@/components/admin/kpm-data-tab';
-import { KpmOwnerCard } from '@/components/admin/kpm-owner-card';
-import { RouteTabs } from '@/components/ui/route-tabs';
-import { Button, Card, ErrorBanner, Field, Select, TextInput } from '@/components/ui/field';
-import { ChoiceField, ChoicePill } from '@/components/ui/rows-and-sheets';
-import { SkeletonCards, SkeletonTable } from '@/components/ui/skeleton';
-import { StatusPill } from '@/components/ui/status-pill';
+import { Button, ErrorBanner } from '@/components/ui/field';
+import { NavIcon, type NavIconName } from '@/components/ui/nav-icon';
+import { SkeletonCards } from '@/components/ui/skeleton';
+import { useToast } from '@/components/ui/toast';
 import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
-import { adminOfficesMessages } from '@/i18n/messages/admin-offices';
-import { adminPlatformReadsMessages } from '@/i18n/messages/admin-platform-reads';
-import {
-  deleteTenant,
-  moveTenantCompany,
-  readTenant,
-  readTenantContents,
-  setTenantStatus,
-  subscriptionLine,
-  tenantStatusLabels,
-  tenantStatusTone,
-  tenantStatusWord,
-  type TenantRow,
-  type TenantStatus,
-} from '@/lib/admin';
-import { toDisplayError } from '@/lib/api-client';
-import { listInsurers, type Insurer } from '@/lib/companies';
-import { savedTemplateSentence } from '@/lib/templates';
+import { adminConsoleMessages, type AdminConsoleWords } from '@/i18n/messages/admin-console';
+import { readKpmPeople, type ConsoleKpmPeople, type ConsolePerson } from '@/lib/admin-console';
+import { toDisplayError, type ApiError } from '@/lib/api-client';
+import { cn } from '@/lib/cn';
+import { formatMonthLong, formatNumber, formatRupiahCompact } from '@/lib/format';
+import { readOverviewPerformance, type OverviewPerformanceView } from '@/lib/kpm-overview';
 import { useCan } from '@/lib/session';
-import { formatNumber } from '@/lib/format';
-import { useMediaQuery } from '@/lib/use-media-query';
-import { useQuery } from '@/lib/use-query';
-import { useOpenedOnce } from '@/lib/use-opened-once';
+import { enterKpm } from '@/lib/super-admin-kpm';
+import { savedTemplateSentence } from '@/lib/templates';
 
-/*
- * **What the first paint does not draw loads when it is asked for** (the bundle, 2026-11-06; `performance-and-scale.md`):
- * *Anggota* and *Billing* when their tab is chosen — the page draws one tab at a time, *Ringkasan* first — and *Simpan
- * sebagai template*'s dialog when it first opens, mounted from then on as before (`useOpenedOnce`). Cards stand in while a
- * tab arrives, as the tabs' own loading states draw them.
- */
-const PlatformMembers = dynamic(
-  () => import('@/components/admin/platform-members').then((m) => m.PlatformMembers),
-  { loading: () => <MembersLoading /> },
-);
-const KpmBillingTab = dynamic(
-  () => import('@/components/admin/kpm-billing-tab').then((m) => m.KpmBillingTab),
-  { loading: () => <SkeletonCards count={3} /> },
-);
+/** *Simpan sebagai template*'s dialog, loaded the first time it opens. */
 const SaveAsTemplateDialog = dynamic(
   () => import('@/components/save-as-template-dialog').then((m) => m.SaveAsTemplateDialog), { ssr: false },
 );
 
-export default function TenantDetailPage({ params }: { params: Promise<{ kpmId: string }> }) {
+type Words = AdminConsoleWords['inside'];
+
+/** The eight owner pages (spec §5), in the mockup's order, each the Owner's own address. */
+const OWNER_PAGES: readonly { key: keyof Words['pages']; href: string; icon: NavIconName }[] = [
+  { key: 'overview', href: '/kpm/overview', icon: 'ti-layout-dashboard' },
+  { key: 'advancedAnalytics', href: '/kpm/advanced-analytics', icon: 'ti-chart-dots' },
+  { key: 'forum', href: '/leader-meetings', icon: 'ti-presentation' },
+  { key: 'dataUpload', href: '/kpm/data-upload', icon: 'ti-upload' },
+  { key: 'allMembers', href: '/people/members', icon: 'ti-users' },
+  { key: 'orgTree', href: '/people/org-tree', icon: 'ti-hierarchy-2' },
+  { key: 'kpmAdmins', href: '/people/admins', icon: 'ti-user-shield' },
+  { key: 'settings', href: '/kpm/settings', icon: 'ti-settings' },
+];
+
+/**
+ * **Inside a KPM** (`/admin/tenants/[kpmId]`; P19.23-T2 AC-4 to AC-7; ADR-0277 §3; the Super Admin spec §5;
+ * `superadmin-tablet` f11–f13, f23).
+ *
+ * Opening it **enters the KPM** (`enterKpm`, ADR-0268 §3): from here every request names it, so the Super Admin is its
+ * Owner on every owner page it links to — the same pages, menu and rights the Owner has — and each change they make is
+ * audited with them as the actor.
+ *
+ * - **The header**: the KPM's name, the switcher chip and the thin bar *"Anda di dalam KPM ini sebagai Super Admin ·
+ *   semua akses owner · tercatat di audit log"*.
+ * - **The numbers** (navy tiles, orange numbers): *Anggota*, and the month's *Active Agent*, *Rekrut* and *APE* against
+ *   their targets — the KPM Overview's own *Performa vs target* (`GET /kpm/overview/performance`), read as the Owner.
+ * - ***Owner & admin*** (*KPM Owner*, *Admin*, *Core leader* with *Ganti* / *Atur*; *+ Tambah admin*) and ***Anggota***
+ *   (the first five, *Import people*, *Lihat semua*) — the KPM's people (`GET /admin/tenants/:id/people`).
+ * - **The eight owner pages**, and ***Lihat sebagai***.
+ */
+export default function KpmPage({ params }: { params: Promise<{ kpmId: string }> }) {
   const { kpmId } = use(params);
-  const t = useMessages(adminOfficesMessages).detail;
-  const r = useMessages(adminPlatformReadsMessages).kpm;
-  const language = useLanguage();
-  const [kpm, setKpm] = useState<TenantProfile | null>(null);
-  const [error, setError] = useState<{ code: string; message: string; requestId: string } | null>(null);
-  /** *Save as template* (P13.2-T7): the dialog, and what the last save made, said once it is made. */
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState<string | null>(null);
-  // Convenience: the API refuses anybody without it (`company_template:write`, the Super Admin's).
-  const canSaveTemplate = useCan('company_template:write');
-  // P19-T3 (ADR-0191 §5): moving and deleting an office are the Super Admin's; the API refuses anybody else.
-  const canMove = useCan('kpm:update_company_tag');
-  const canDelete = useCan('kpm:archive');
-  // P19.4-T3 (ADR-0207, ADR-0211): the tabs the Super Admin's grants open; the API refuses anybody else in any case.
-  const canMembers = useCan('platform_members:read');
-  const canFigures = useCan('platform_kpm_figures:read');
-  const canBilling = useCan('billing:read_prices');
-  /** What the last move said, once it is done. */
-  const [moved, setMoved] = useState<string | null>(null);
-  const saveMounted = useOpenedOnce(saving);
+  const t = useMessages(adminConsoleMessages).inside;
+  const [people, setPeople] = useState<ConsoleKpmPeople | null>(null);
+  const [performance, setPerformance] = useState<OverviewPerformanceView | null | 'unread'>(null);
+  const [error, setError] = useState<ApiError | null>(null);
 
   const load = useCallback(async () => {
     try {
-      setKpm(await readTenant(kpmId) as TenantProfile);
+      // Inside the KPM first, so the Owner's own read below names it (`X-Kpm-Id`).
+      enterKpm(kpmId);
     } catch (err) {
       setError(toDisplayError(err));
+      return;
     }
+    try {
+      setPeople(await readKpmPeople(kpmId));
+    } catch (err) {
+      setError(toDisplayError(err));
+      return;
+    }
+    // The tiles are the Overview's; a KPM that cannot answer them (no file, suspended) shows *–*, never the page's error.
+    readOverviewPerformance().then(setPerformance).catch(() => setPerformance('unread'));
   }, [kpmId]);
 
   useEffect(() => {
@@ -93,438 +90,222 @@ export default function TenantDetailPage({ params }: { params: Promise<{ kpmId: 
 
   if (error) {
     return (
-      <Page title={t.title}>
+      <Page title={t.loading}>
         <ErrorBanner {...error} />
       </Page>
     );
   }
-
-  if (!kpm) {
+  if (!people) {
     return (
-      <Page title={t.title}>
-        <SkeletonCards count={3} label={t.loading} />
+      <Page title="">
+        <SkeletonCards count={4} label={t.loading} />
       </Page>
     );
   }
 
+  const kpm = people.kpm;
+  const current = { kpmId, name: kpm.name, companyName: kpm.companyName };
   return (
     <Page
-      title={`${kpm.code} · ${kpm.branchName}`}
+      title={kpm.name}
       actions={(
-        <div className="flex flex-wrap items-center gap-3">
-          {/* The list's word, so an ended office reads the same on both (P13.2-T3 AC-8). */}
-          <StatusPill status={tenantStatusTone(kpm)} label={tenantStatusWord(kpm, language)} />
-          {/* P13.2-T7 (ADR-0115 §5): this office's published settings, as a company's template. */}
-          {canSaveTemplate && (
-            <Button variant="secondary" onClick={() => { setSaved(null); setSaving(true); }}>
-              {t.saveAsTemplate}
-            </Button>
-          )}
+        <div className="flex items-center gap-2">
+          <KpmReportSlot kpm={{ kpmId, name: kpm.name, code: kpm.code, companyName: kpm.companyName }} placement="header" />
+          <KpmSwitcher current={current} className="w-80" />
         </div>
       )}
     >
-      {saveMounted && (
-        <SaveAsTemplateDialog
-          open={saving}
-          kpm={kpm}
-          onClose={() => setSaving(false)}
-          onSaved={(template, company) => {
-            setSaving(false);
-            // With what it left out because it names something archived, in the API's words (exit review, finding 2).
-            setSaved(savedTemplateSentence(template, company?.name ?? kpm.companyName, language));
-          }}
-        />
-      )}
-      {/* Polite, and only once there is something to say: the dialog has closed on it. */}
-      <p role="status" className={saved || moved ? 'mb-4 text-md text-navy' : 'sr-only'}>{saved ?? moved ?? ''}</p>
-      <Suspense fallback={null}>
-        <KpmTabs
-          kpm={kpm}
-          tabs={{ members: canMembers, figures: canFigures, billing: canBilling }}
-          summary={(
-            <SummaryTab
-              kpm={kpm}
-              figures={canFigures}
-              onChanged={async (next) => { setKpm((now) => (now ? { ...now, ...next } : now)); await load(); }}
-              profile={(
-                <Card>
-                  <h2 className="font-display text-lg font-bold text-navy">{t.profile}</h2>
-                  <dl className="mt-3 grid grid-cols-[9rem_1fr] gap-y-2 text-md">
-                    {/* The one id on this screen that stays (`04-managing-a-kpm.md`: support asks for it). */}
-                    <Detail
-                      term={t.kpmId}
-                      detail={<code className="select-all text-sm">{kpm._id}</code>}
-                    />
-                    <Detail term={t.company} detail={kpm.companyName} />
-                    <Detail term={t.code} detail={kpm.code} />
-                    <Detail term={t.branch} detail={kpm.branchName} />
-                    <Detail term={t.address} detail={kpm.address ?? '—'} />
-                    <Detail term={t.phone} detail={kpm.contactPhone ?? '—'} />
-                    <Detail term={t.timeZone} detail={kpm.timezone} />
-                    <Detail term={t.currency} detail={kpm.currency} />
-                  </dl>
-                  {canMove && (
-                    <MoveCompany
-                      kpm={kpm}
-                      onMoved={(next) => { setSaved(null); setKpm((now) => ({ ...now, ...next } as TenantProfile)); setMoved(t.moved({ company: next.companyName })); }}
-                    />
-                  )}
-                </Card>
-              )}
-              lifecycle={<StatusCard kpm={kpm} onChanged={load} canDelete={canDelete} />}
-            />
-          )}
-        />
-      </Suspense>
-      <span className="sr-only">{r.tabs}</span>
+      <div className="flex flex-col gap-5" data-kpm-page={kpmId}>
+        <div className="flex flex-col gap-2">
+          <KpmSwitcher current={current} className="lg:hidden" />
+          <InsideKpmBar />
+        </div>
+        <Tiles people={people} performance={performance} t={t} />
+        <div className="grid gap-4 lg:grid-cols-2">
+          <OwnersCard people={people} t={t} onChanged={load} />
+          <MembersCard people={people} t={t} />
+        </div>
+        <section aria-labelledby="owner-pages-heading">
+          <h2 id="owner-pages-heading" className="mb-2 text-md font-bold text-navy">{t.ownerPages}</h2>
+          <ul className="grid grid-cols-2 gap-3 lg:grid-cols-4" data-owner-pages="">
+            {OWNER_PAGES.map((page) => (
+              <li key={page.key}>
+                <Link href={page.href} className="flex min-h-16 items-center gap-3 rounded-xl bg-card px-3.5 py-3 hover:bg-hover-row">
+                  <span aria-hidden="true" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-pill-grey text-secondary-ink">
+                    <NavIcon name={page.icon} className="h-5 w-5" />
+                  </span>
+                  <b className="min-w-0 text-md leading-snug text-navy">{t.pages[page.key]}</b>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+        <ViewAsCards people={people.viewAs} kpmName={kpm.name} />
+        <ul className="flex flex-col gap-1 text-sm text-muted md:flex-row md:gap-x-5">
+          <li>{t.notes.tap}</li>
+          <li>{t.notes.change}</li>
+        </ul>
+        <SaveAsTemplate kpm={{ _id: kpmId, code: kpm.code, companyId: kpm.companyId, companyName: kpm.companyName }} t={t} />
+      </div>
     </Page>
   );
 }
 
-/** The Super Admin's read of a KPM: the admin view, and *Ringkasan*'s Admins and counts by rung (P19.4-T3 AC-9). */
-type TenantProfile = TenantRow & {
-  admins?: { fullName: string; state: 'active' | 'invited' | 'not_invited' }[];
-  membersByRole?: { code: string; label: string; count: number }[];
-};
-
-type KpmTab = 'ringkasan' | 'anggota' | 'data' | 'billing';
-
-/**
- * ***Ringkasan · Anggota · Data bulanan · Lihat sebagai KPM · Billing*** (P19.4-T3 AC-9, AC-10; the setup spec's A2;
- * the route registry: four in the query, `?tab=`, *Ringkasan* when absent; *Lihat sebagai KPM* its own route). A tab the
- * reader's grants do not open is not drawn.
- */
-function KpmTabs({ kpm, tabs, summary }: {
-  kpm: TenantProfile;
-  tabs: { members: boolean; figures: boolean; billing: boolean };
-  summary: React.ReactNode;
-}) {
-  const r = useMessages(adminPlatformReadsMessages).kpm;
-  const query = useQuery();
-  const asked = typeof query.tab === 'string' ? query.tab : 'ringkasan';
-  const allowed: Record<KpmTab, boolean> = { ringkasan: true, anggota: tabs.members, data: tabs.figures, billing: tabs.billing };
-  const tab: KpmTab = (asked in allowed && allowed[asked as KpmTab]) ? asked as KpmTab : 'ringkasan';
-  const base = `/admin/tenants/${kpm._id}`;
-  const href = (key: KpmTab) => (key === 'ringkasan' ? base : `${base}?tab=${key}`);
+/** The navy tiles: *Anggota*, *Active Agent*, *Rekrut*, *APE bulan ini* — the last three the Overview's month. */
+function Tiles({ people, performance, t }: { people: ConsoleKpmPeople; performance: OverviewPerformanceView | null | 'unread'; t: Words }) {
+  const fig = useFigureLanguage();
+  const n = (v: number) => formatNumber(v, {}, fig);
+  const view = performance && performance !== 'unread' ? performance : null;
+  const actual = view?.total.actual ?? null;
+  const month = view ? `${formatMonthLong(view.month, fig)} ${view.month.slice(0, 4)}` : '';
+  const dash = '–';
+  const targetLine = (target: number | null | undefined) => (target ? t.tiles.ofTarget({ t: n(target) }) : t.tiles.noTarget);
+  const tiles: [string, string, string][] = [
+    [t.tiles.members, n(people.members.total), `${n(people.members.leaders)} leader · ${n(people.members.agents)} agent`],
+    [
+      t.tiles.activeAgent,
+      actual?.activeAgents == null ? dash : n(actual.activeAgents),
+      view && !view.held ? t.tiles.notUploaded : targetLine(view?.total.activeAgentTarget),
+    ],
+    [t.tiles.rekrut, actual ? n(actual.rekrut) : dash, targetLine(view?.total.rekrutTarget)],
+    [
+      t.tiles.ape,
+      actual?.apeMinor == null ? dash : formatRupiahCompact(actual.apeMinor, {}, fig),
+      view && !view.held ? t.tiles.notUploaded : actual?.apePct == null ? t.tiles.noTarget : t.tiles.pctOfTarget({ p: n(actual.apePct) }),
+    ],
+  ];
   return (
-    <>
-      <RouteTabs
-        label={r.tabs}
-        activeHref={href(tab)}
-        tabs={[
-          { href: href('ringkasan'), label: r.tab.ringkasan },
-          ...(tabs.members ? [{ href: href('anggota'), label: r.tab.anggota }] : []),
-          ...(tabs.figures ? [{ href: href('data'), label: r.tab.data }] : []),
-          ...(tabs.figures ? [{ href: `${base}/analytics`, label: r.tab.lihat }] : []),
-          ...(tabs.billing ? [{ href: href('billing'), label: r.tab.billing }] : []),
-        ]}
-      />
-      {tab === 'ringkasan' && summary}
-      {tab === 'anggota' && (
-        <div className="flex flex-col gap-3">
-          <p className="text-md text-muted">{r.membersReadOnly}</p>
-          <PlatformMembers kpmId={kpm._id} />
-        </div>
-      )}
-      {tab === 'data' && <KpmDataTab kpmId={kpm._id} />}
-      {tab === 'billing' && <KpmBillingTab kpm={kpm} />}
-    </>
+    <section aria-label={people.kpm.name} className="rounded-[20px] bg-secondary p-4 text-secondary-contrast" data-kpm-tiles="">
+      <p className="text-sm font-bold">{[people.kpm.name, people.kpm.companyName, month].filter(Boolean).join(' · ')}</p>
+      <dl className="mt-3 grid grid-cols-2 gap-2 lg:grid-cols-4">
+        {tiles.map(([label, value, sub]) => (
+          <div key={label} className="min-w-0 rounded-xl bg-secondary-contrast/[0.08] px-3 py-2">
+            <dt className="text-sm font-semibold">{label}</dt>
+            <dd>
+              <b className="block text-[1.625rem] font-extrabold leading-tight text-primary">{performance === null && label !== t.tiles.members ? '…' : value}</b>
+              <span className="block truncate text-xs text-secondary-contrast/75">{sub}</span>
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </section>
   );
 }
 
-/**
- * ***Ringkasan*** (P19.4-T3 AC-9; A2): with no member, *"Belum ada anggota"* saying the Owner imports — no link to an
- * import (UI-151); the Owner's card (*Kirim ulang undangan*, *Ganti pemilik*); the Admins, read-only (delegation is the
- * Owner's, roles §3.3: no *+ Tambah admin*); the members by rung; the 12-month grid; then the KPM's own cards — its
- * profile, its lifecycle and its activity binding, which only the KPM's Owner or an Admin sets.
- */
-function SummaryTab({ kpm, figures, onChanged, profile, lifecycle }: {
-  kpm: TenantProfile;
-  figures: boolean;
-  onChanged: (next: TenantRow) => void | Promise<void>;
-  profile: React.ReactNode;
-  lifecycle: React.ReactNode;
-}) {
-  const r = useMessages(adminPlatformReadsMessages).kpm;
-  const fig = useFigureLanguage();
-  const admins = kpm.admins ?? [];
-  const byRole = kpm.membersByRole ?? [];
-  return (
-    <div className="flex flex-col gap-4">
-      {kpm.membersBesidesOwner === 0 && (
-        <div role="note" className="rounded-lg border border-primary/40 bg-primary/15 px-4 py-3 text-md text-navy">
-          <strong className="font-semibold">{r.noMembers}</strong> {r.noMembersLine}
-        </div>
-      )}
-      <div className="grid gap-4 lg:grid-cols-3">
-        <KpmOwnerCard kpm={kpm} onChanged={onChanged} />
-        <Card>
-          <h2 className="font-display text-lg font-bold text-navy">{r.admins}</h2>
-          {admins.length === 0 ? (
-            <p className="mt-2 text-md text-muted">{r.adminsNone}</p>
-          ) : (
-            <ul className="mt-2 flex flex-col gap-1.5">
-              {admins.map((a) => (
-                <li key={a.fullName} className="flex flex-wrap items-center gap-2 text-md text-navy">
-                  {a.fullName}
-                  <StatusPill status={a.state === 'active' ? 'success' : 'neutral'} label={r.adminState[a.state]} />
-                </li>
-              ))}
-            </ul>
-          )}
-          <p className="mt-2 text-sm text-muted">{r.adminsHint}</p>
-        </Card>
-        <Card>
-          <h2 className="font-display text-lg font-bold text-navy">{r.membersCard}</h2>
-          <p className="mt-1 font-display text-2xl font-bold tabular-nums text-navy">{formatNumber(kpm.memberCount, {}, fig)}</p>
-          {byRole.length > 0 && (
-            <p className="text-sm text-muted" aria-label={r.membersByRole}>
-              {byRole.map((rung) => `${rung.label} ${formatNumber(rung.count, {}, fig)}`).join(' · ')}
-            </p>
-          )}
-        </Card>
-      </div>
-      {figures && <SummaryGrid kpmId={kpm._id} />}
-      <div className="grid gap-4 lg:grid-cols-2">
-        {profile}
-        {lifecycle}
-        {/* P18.6-T2 (ADR-0163): which activities the summary counts at each cascade stage — read-only here since
-            P19.4-T3: the KPM's Owner or an Admin sets it (ADR-0206 §1). */}
-        <ActivityBindingCard kpmId={kpm._id} />
-      </div>
+const asRole = (p: ConsolePerson) => ({ code: p.class.toUpperCase(), label: p.class.toUpperCase(), class: p.class });
+
+/** ***Owner & admin*** (AC-4, AC-6): the Owner, the Admins and the core leaders, with *Ganti* / *Atur* and *+ Tambah admin*. */
+function OwnersCard({ people, t, onChanged }: { people: ConsoleKpmPeople; t: Words; onChanged: () => void }) {
+  const kpmId = people.kpm.kpmId;
+  const owner = people.owner;
+  const uninvited = owner.state === 'none' || owner.state === 'not_invited';
+  const names = (list: ConsolePerson[]) => (list.length === 0
+    ? <span className="text-sm text-muted">{t.noneYet}</span>
+    : list.map((p) => <MemberName key={p.membershipId} name={p.fullName} role={asRole(p)} className="flex" />));
+  const row = (role: string, who: React.ReactNode, action: { href: string; label: string }) => (
+    <div className="grid grid-cols-[6.5rem_minmax(0,1fr)_auto] items-start gap-2 border-b border-divider py-2.5 last:border-b-0">
+      <span className="text-sm text-muted">{role}</span>
+      <span className="flex min-w-0 flex-col gap-1 text-sm">{who}</span>
+      <Link href={action.href} className="inline-flex min-h-10 items-center text-sm font-bold text-primary-ink">{action.label}</Link>
     </div>
   );
-}
-
-/** *Ringkasan*'s 12-month grid, read from `GET /admin/tenants/:id/data` (audited per read). */
-function SummaryGrid({ kpmId }: { kpmId: string }) {
-  const { view, error } = useKpmData(kpmId);
-  if (error) return <ErrorBanner {...error} />;
-  if (!view) return <KpmMonthGridSkeleton />;
-  return <KpmMonthGrid months={view.months} />;
-}
-
-function Detail({ term, detail }: { term: string; detail: React.ReactNode }) {
   return (
-    <>
-      <dt className="text-muted">{term}</dt>
-      <dd className="break-words text-navy">{detail}</dd>
-    </>
+    <section aria-labelledby="owners-heading" className="rounded-xl bg-card p-4" data-owners-card="">
+      <div className="mb-1 flex items-center justify-between gap-2">
+        <h2 id="owners-heading" className="text-md font-bold text-navy">{t.owners}</h2>
+        <Link href="/people/admins" className="inline-flex h-10 items-center gap-1.5 rounded-pill border border-hairline px-3.5 text-sm font-semibold text-navy">
+          <NavIcon name="ti-plus" className="h-4 w-4" />
+          {t.addAdmin}
+        </Link>
+      </div>
+      {row(
+        t.ownerRole,
+        owner.person ? (
+          <>
+            <MemberName name={owner.person.fullName} role={asRole(owner.person)} className="flex" />
+            {uninvited && <OwnerWhatsAppInviteButton kpmId={kpmId} ownerName={owner.person.fullName} variant="outline" onSent={onChanged} />}
+          </>
+        ) : owner.pendingName ? (
+          <>
+            <span className="font-bold uppercase text-ink">{t.pendingOwner({ name: owner.pendingName })}</span>
+            {uninvited && <OwnerWhatsAppInviteButton kpmId={kpmId} ownerName={owner.pendingName} variant="outline" onSent={onChanged} />}
+          </>
+        ) : <span className="text-sm text-muted">{t.noneYet}</span>,
+        { href: `/admin/tenants/${kpmId}/owner`, label: t.change },
+      )}
+      {row(t.adminRole, names(people.admins), { href: '/people/admins', label: t.change })}
+      {row(t.coreRole, names(people.coreLeaders), { href: '/people/admins', label: t.manage })}
+    </section>
+  );
+}
+
+/** ***Anggota · n*** (AC-4): the first five, their group and when they last used the app; *Import people*, *Lihat semua*. */
+function MembersCard({ people, t }: { people: ConsoleKpmPeople; t: Words }) {
+  const fig = useFigureLanguage();
+  const used = (p: ConsoleKpmPeople['members']['first'][number]) => {
+    const text = p.lastUsedDays === null ? t.never : p.lastUsedDays === 0 ? t.today : t.daysAgo({ n: formatNumber(p.lastUsedDays, {}, fig) });
+    return (
+      <span className={cn('shrink-0 rounded-pill px-2 py-0.5 text-xs font-bold', p.lastUsedStatus === 'recent' ? 'bg-pill-green text-pill-green-ink' : 'bg-pill-red text-pill-red-ink')}>
+        {text}
+      </span>
+    );
+  };
+  return (
+    <section aria-labelledby="members-heading" className="rounded-xl bg-card p-4" data-members-card="">
+      <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+        <h2 id="members-heading" className="text-md font-bold text-navy">{t.membersCard({ n: formatNumber(people.members.total, {}, fig) })}</h2>
+        <span className="flex items-center gap-3">
+          <Link href="/people/import" className="inline-flex h-10 items-center gap-1.5 rounded-pill border border-hairline px-3.5 text-sm font-semibold text-navy">
+            <NavIcon name="ti-file-import" className="h-4 w-4" />
+            {t.importPeople}
+          </Link>
+          <Link href="/people/members" className="inline-flex min-h-10 items-center gap-1 text-sm font-bold text-primary-ink">
+            {t.seeAll}
+            <NavIcon name="ti-arrow-right" className="h-4 w-4" />
+          </Link>
+        </span>
+      </div>
+      {people.members.first.length === 0 ? (
+        <p className="py-2 text-sm text-muted">{t.noMembers}</p>
+      ) : (
+        <ul>
+          {people.members.first.map((p) => (
+            <li key={p.membershipId} className="flex items-center gap-2 border-b border-divider py-2 text-sm last:border-b-0">
+              <MemberName name={p.fullName} role={asRole(p)} className="min-w-0 flex-1" />
+              <span className="hidden min-w-0 truncate text-xs text-muted sm:block">{p.groupName ?? t.noGroup}</span>
+              {used(p)}
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }
 
 /**
- * ***Pindahkan ke perusahaan lain*** (ADR-0191 §5, P19-T3 AC-6; UI-168 point 4): a company and one button, under the
- * Profile's *Company*. The API moves only an office with no member but its Owner, provisioning its settings again from
- * the new company's default template, and refuses anything else with the reason, shown here.
+ * ***Simpan sebagai template*** (P13.2-T7, ADR-0115 §5 — kept from the KPM page it was on; parity I-1183): this KPM's
+ * published settings as one of its company's templates. The Super Admin's alone (`company_template:write`).
  */
-function MoveCompany({ kpm, onMoved }: { kpm: TenantRow; onMoved: (next: TenantRow) => void }) {
-  const { detail: t, cancel } = useMessages(adminOfficesMessages);
-  /** **No native select below 1024px** (P19.2-T2 AC-4; UI-134: *a pill that opens a sheet for long lists (company)*). */
-  const belowLaptop = useMediaQuery(['phone', 'tablet']);
-  const [open, setOpen] = useState(false);
-  const [insurers, setInsurers] = useState<Insurer[]>([]);
-  const [target, setTarget] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<{ code: string; message: string; requestId: string } | null>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    void listInsurers().then(setInsurers).catch(() => setInsurers([]));
-  }, [open]);
-
-  if (!open) {
-    return (
-      <Button variant="inline" className="mt-3" onClick={() => setOpen(true)}>
-        {t.changeCompany}
-      </Button>
-    );
-  }
-
-  async function submit(event: React.FormEvent) {
-    event.preventDefault();
-    setBusy(true);
-    setError(null);
-    try {
-      onMoved(await moveTenantCompany(kpm._id, target));
-      setOpen(false);
-      setTarget('');
-    } catch (err) {
-      setError(toDisplayError(err));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <form onSubmit={submit} className="mt-3 flex flex-col gap-3" noValidate>
-      {error && <ErrorBanner {...error} />}
-      <Field label={t.newCompany} htmlFor="new-company" hint={t.moveHint}>
-        {belowLaptop ? (
-          // Says *Perusahaan baru* until one is chosen, as the select's empty option did.
-          <ChoicePill
-            id="new-company"
-            name={t.newCompany}
-            options={insurers.filter((c) => c._id !== kpm.companyId).map((c) => ({ key: c._id, label: c.name }))}
-            value={target}
-            onChange={setTarget}
-            narrows={false}
-            shows="value"
-            className="self-start"
-          />
-        ) : (
-          <Select id="new-company" value={target} onChange={(e) => setTarget(e.target.value)}>
-            <option value="" />
-            {insurers.filter((c) => c._id !== kpm.companyId).map((c) => (
-              <option key={c._id} value={c._id}>{c.name}</option>
-            ))}
-          </Select>
-        )}
-      </Field>
-      <div className="flex gap-2">
-        <Button type="submit" disabled={busy || !target}>{busy ? t.moving : t.move}</Button>
-        <Button variant="secondary" onClick={() => { setOpen(false); setError(null); }}>{cancel}</Button>
-      </div>
-    </form>
-  );
-}
-
-function StatusCard({
-  kpm, onChanged, canDelete,
-}: { kpm: TenantRow; onChanged: () => Promise<void>; canDelete: boolean }) {
-  const { detail: t, saving, office } = useMessages(adminOfficesMessages);
+function SaveAsTemplate({ kpm, t }: { kpm: { _id: string; code: string; companyId: string; companyName: string }; t: Words }) {
+  const can = useCan('company_template:write');
   const language = useLanguage();
-  const figures = useFigureLanguage();
-  const router = useRouter();
-  const labels = tenantStatusLabels(language);
-  /** **No native select below 1024px** (P19.2-T2 AC-4; UI-134: *choice rows for 2–5 options*): the three states. */
-  const belowLaptop = useMediaQuery(['phone', 'tablet']);
-  const [status, setStatus] = useState<TenantStatus>(kpm.status);
-  const [reason, setReason] = useState('');
-  const [error, setError] = useState<{ code: string; message: string; requestId: string } | null>(null);
-  const [busy, setBusy] = useState(false);
-  /** *Hapus KPM*'s question, with the counts it was asked with (P19-T3 AC-7). */
-  const [asking, setAsking] = useState<{ members: number; records: number; deletable: boolean } | null>(null);
-  const named = office({ code: kpm.code, branch: kpm.branchName });
-
-  /** Count first: an empty office is deleted, one with people or data is offered *Arsipkan* (ADR-0191 §5). */
-  async function askToDelete() {
-    setError(null);
-    try {
-      setAsking(await readTenantContents(kpm._id));
-    } catch (err) {
-      setError(toDisplayError(err));
-    }
-  }
-
-  async function confirmed() {
-    const contents = asking;
-    setAsking(null);
-    if (!contents) return;
-    setBusy(true);
-    setError(null);
-    try {
-      if (contents.deletable) {
-        await deleteTenant(kpm._id);
-        router.push('/admin/tenants');
-        return;
-      }
-      await setTenantStatus(kpm._id, 'archived');
-      await onChanged();
-    } catch (err) {
-      setError(toDisplayError(err));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function submit(event: React.FormEvent) {
-    event.preventDefault();
-    setBusy(true);
-    setError(null);
-    try {
-      await setTenantStatus(kpm._id, status, reason || undefined);
-      setReason('');
-      await onChanged();
-    } catch (err) {
-      setError(toDisplayError(err));
-    } finally {
-      setBusy(false);
-    }
-  }
-
+  const { show } = useToast();
+  const [open, setOpen] = useState(false);
+  if (!can) return null;
   return (
-    <Card>
-      <h2 className="font-display text-lg font-bold text-navy">{t.lifecycle}</h2>
-      <p className="mt-1 text-md text-muted">{t.lifecycleLine}</p>
-      {kpm.suspendedReason && (
-        <p className="mt-2 text-md text-alert">{t.suspended({ reason: kpm.suspendedReason })}</p>
+    <div className="flex justify-end">
+      <Button variant="inline" onClick={() => setOpen(true)}>{t.saveAsTemplate}</Button>
+      {open && (
+        <SaveAsTemplateDialog
+          open
+          kpm={kpm}
+          onClose={() => setOpen(false)}
+          onSaved={(template, company) => {
+            setOpen(false);
+            show(savedTemplateSentence(template, company?.name ?? kpm.companyName, language));
+          }}
+        />
       )}
-      {/* P13.2-T3 AC-8: where the subscription stands, beside the office's own status. It is edited
-          on the offices list, where the client asked for it. */}
-      <p className="mt-2 text-md text-navy">
-        <span className="text-muted">{t.subscription}</span>
-        {subscriptionLine(kpm, figures, language)}
-      </p>
-      <form onSubmit={submit} className="mt-3 flex flex-col gap-3" noValidate>
-        {error && <ErrorBanner {...error} />}
-        {belowLaptop ? (
-          <ChoiceField<TenantStatus>
-            id="status"
-            label={t.status}
-            value={status}
-            onChange={setStatus}
-            disabled={busy}
-            options={(Object.keys(labels) as TenantStatus[]).map((s) => ({ key: s, label: labels[s] }))}
-          />
-        ) : (
-          <Field label={t.status} htmlFor="status">
-            <Select
-              id="status"
-              value={status}
-              onChange={(e) => setStatus(e.target.value as TenantStatus)}
-            >
-              {(Object.keys(labels) as TenantStatus[]).map((s) => (
-                <option key={s} value={s}>
-                  {labels[s]}
-                </option>
-              ))}
-            </Select>
-          </Field>
-        )}
-        <Field label={t.reason} htmlFor="reason" hint={t.reasonHint}>
-          <TextInput
-            id="reason"
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-            required={status === 'suspended'}
-          />
-        </Field>
-        <Button type="submit" disabled={busy || (status === kpm.status && !reason)}>
-          {busy ? saving : t.apply}
-        </Button>
-      </form>
-      {canDelete && (
-        <Button variant="inlineDanger" className="mt-3" disabled={busy} onClick={() => void askToDelete()}>
-          {t.deleteOffice}
-        </Button>
-      )}
-      <Dialog
-        open={asking !== null}
-        message={asking
-          ? (asking.deletable ? t.deleteAsk : t.cannotDelete)({ office: named, members: asking.members, records: asking.records })
-          : ''}
-        confirmLabel={asking?.deletable ? t.deleteOffice : t.archive}
-        tone="danger"
-        onCancel={() => setAsking(null)}
-        onConfirm={() => void confirmed()}
-      />
-    </Card>
+    </div>
   );
-}
-
-/** *Anggota* on its way: the members' table as the tab draws it while it reads (`platform-members.tsx`). */
-function MembersLoading() {
-  const t = useMessages(adminPlatformReadsMessages).members;
-  return <SkeletonTable caption={t.loading} columns={[t.columns.name, t.columns.kpm, t.columns.role, t.columns.status]} rows={5} />;
 }

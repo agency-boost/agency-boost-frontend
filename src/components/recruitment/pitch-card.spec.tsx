@@ -140,7 +140,7 @@ describe('PitchCard, an optional document', () => {
 
   it('P18.9-T5 AC-2 empty, the office uploads it as it would any other', () => {
     render(<PitchCard slot={optional({ slot: 'agency', title: 'Agency Profile' })} audience="office" canWrite />);
-    expect(screen.getByRole('button', { name: 'Upload PDF, Agency Profile' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Upload file, Agency Profile' })).toBeInTheDocument();
     expect(document.querySelector('input[type=file]')).not.toBeNull();
   });
 

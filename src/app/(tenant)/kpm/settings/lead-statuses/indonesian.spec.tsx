@@ -46,75 +46,71 @@ function render(me = OWNER) {
   return stub;
 }
 
-const ENGLISH = /\b(Edit|Archive|Restore|Show archived|statuses|Closes the pipeline|Open|Make this close|Add a (sales|recruitment) stage|Switch on|No stages yet|Nothing has been published)\b/;
+const ENGLISH = /\b(Edit|Archive|Restore|Rename|Show archived|statuses|Closes|Open|Make this close|Add status|Count as|Stop counting|No stages yet|Order =)\b/;
+
+/** A stage's row, by the name it was typed with. */
+const rowOf = (label: string) => [...document.querySelectorAll<HTMLElement>('[data-stage]')]
+  .find((li) => li.querySelector('p')?.textContent?.endsWith(label))!;
+async function choose(label: string, name: string) {
+  await userEvent.click(screen.getByRole('button', { name: `Aksi untuk ${label}` }));
+  await userEvent.click(screen.getByRole('menuitem', { name }));
+}
 
 /**
  * **P18.10-T4, Settings › Lead statuses in ID mode**: the screen's words the approved glossary's Indonesian, its title,
- * its tabs and *Expected to close* English (§A), and the office's stages as typed. In English: `page.spec.tsx`.
+ * its tabs and *Expected to close* English (§A), and the office's stages as typed. Drawn since P19.21-T3 AC-2 as the
+ * client's 19 November card (mockup f15): numbered rows, the tags *Expected to close*, *Terbuka* and *Penutup*, one ⋯,
+ * *+ Tambah status* and the legend. In English: `page.spec.tsx`.
  */
 describe('P18.10-T4 Settings › Lead statuses in Indonesian', () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it('AC-2 says the ladder in Indonesian, its title, tabs and Expected to close kept English', async () => {
+  it('AC-2 P19.21-T3 AC-2 says the ladder in Indonesian, its title, tabs and Expected to close kept English', async () => {
     atWidth(1280);
     render();
-    await screen.findByText('Polis terbit');
+    await screen.findByText('3. Polis terbit');
 
     expect(screen.getByRole('heading', { name: 'Lead statuses', level: 1 })).toBeInTheDocument();
     const tabs = screen.getByRole('navigation', { name: 'Pipeline lead' });
     expect(within(tabs).getByRole('link', { name: 'Sales' })).toBeInTheDocument();
     expect(within(tabs).getByRole('link', { name: 'Recruitment' })).toBeInTheDocument();
-    expect(screen.getByText(/^Tahap-tahap yang dilalui sebuah lead\./)).toBeInTheDocument();
-    expect(screen.getByText('3 status — urutannya menentukan alur tahap dalam pipeline')).toBeInTheDocument();
-    expect(document.getElementById('late-stage-hint')).toHaveTextContent(
-      'Aktifkan pada tahap yang biasanya sudah dekat dengan closing. Leads di tahap itu akan dihitung sebagai '
-      + 'Expected to close di KPM Overview.',
-    );
-    expect(screen.getByText('Menutup pipeline')).toBeInTheDocument();
+    expect(screen.getByText('1. Belum didekati')).toBeInTheDocument();
+    expect(screen.getByText('Penutup')).toBeInTheDocument();
     expect(screen.getAllByText('Terbuka')).toHaveLength(2);
-    expect(screen.getAllByRole('switch', { name: 'Expected to close' })).toHaveLength(2);
-    expect(screen.getAllByRole('button', { name: 'Jadikan penutup pipeline' })).toHaveLength(2);
-    expect(screen.getAllByRole('button', { name: 'Ubah' })).toHaveLength(3);
-    // The stage that closes the pipeline cannot be archived, and says why.
-    expect(screen.getAllByRole('button', { name: 'Arsipkan' })[2])
-      .toHaveAttribute('title', 'Jadikan tahap lain penutup pipeline terlebih dahulu.');
-    expect(screen.getByRole('button', { name: 'Tambah tahap Sales' })).toBeInTheDocument();
-    expect(await screen.findByText('Belum ada yang diterbitkan untuk KPM ini.')).toBeInTheDocument();
+    expect(screen.getByText('Expected to close')).toBeInTheDocument();
+    expect(screen.getByText('Urutan = alur pipeline')).toBeInTheDocument();
+    expect(document.getElementById('late-stage-hint')).toHaveTextContent('Expected to close dihitung di KPM Overview');
+    expect(screen.getByRole('button', { name: 'Tambah status ke Sales' })).toHaveTextContent('Tambah status');
     expect(document.body.textContent).not.toMatch(ENGLISH);
   });
 
   it('AC-4 shows the office’s stages as typed, and the archived one’s line in Indonesian', async () => {
-    atWidth(1280);
     render();
-    await screen.findByText('Polis terbit');
-    for (const label of ['Belum didekati', 'Sudah di-follow up']) expect(screen.getByText(label)).toBeInTheDocument();
+    await screen.findByText('3. Polis terbit');
+    for (const label of ['Belum didekati', 'Sudah di-follow up']) expect(rowOf(label)).toBeTruthy();
 
     await userEvent.click(screen.getByRole('checkbox', { name: 'Tampilkan yang diarsipkan' }));
-    const dormant = screen.getByText('Tidak aktif').closest('li')!;
-    expect(within(dormant).getByText('diarsipkan')).toBeInTheDocument();
-    expect(within(dormant).getByRole('button', { name: 'Pulihkan' })).toBeInTheDocument();
+    expect(within(rowOf('Tidak aktif')).getByText('diarsipkan')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Aksi untuk Tidak aktif' }));
+    expect(screen.getByRole('menuitem', { name: 'Pulihkan' })).toBeInTheDocument();
   });
 
-  it('AC-1 edits and adds a stage with the fields in Indonesian', async () => {
-    atWidth(1280);
+  it('AC-1 renames and adds a stage with the fields in Indonesian', async () => {
     render();
-    const row = (await screen.findByText('Sudah di-follow up')).closest('li')!;
-    await userEvent.click(within(row).getByRole('button', { name: 'Ubah' }));
-    // The read-only code's own label is `CodeField`'s, the shared field's (`components/ui/field.tsx`), whose words move
-    // with the shared pieces; its reason is this screen's.
+    await screen.findByText('3. Polis terbit');
+    await choose('Sudah di-follow up', 'Ganti nama');
     expect(screen.getByDisplayValue('FOLLOW_UP')).toHaveAccessibleDescription(
       'Setiap lead yang pernah mencapai tahap ini merujuk ke kode ini.',
     );
     expect(screen.getByLabelText('Label')).toHaveValue('Sudah di-follow up');
-    await userEvent.click(screen.getByRole('button', { name: 'Batal' }));
+    await userEvent.keyboard('{Escape}');
 
-    await userEvent.click(screen.getByRole('button', { name: 'Tambah tahap Sales' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Tambah status ke Sales' }));
     expect(screen.getByLabelText('Kode')).toHaveAccessibleDescription('Permanen. Setiap lead menyimpannya.');
     expect(screen.getByRole('button', { name: 'Tambah' })).toBeInTheDocument();
   });
 
-  it('AC-1 says a refused switch’s retry in Indonesian, named for its stage, the kept term first', async () => {
-    atWidth(1280);
+  it('AC-1 says a refused flag’s retry in Indonesian, named for its stage, the kept term first', async () => {
     stubFetch({
       '/kpm/settings/lead-statuses': { body: PIPELINES },
       '/kpm/settings/publish-state': {
@@ -125,29 +121,27 @@ describe('P18.10-T4 Settings › Lead statuses in Indonesian', () => {
       },
     });
     renderInIndonesian(<LeadStatusesPage />, { me: OWNER });
-    await screen.findByText('Belum didekati');
-    await userEvent.click(screen.getAllByRole('switch', { name: 'Expected to close' })[0]);
-
+    await screen.findByText('1. Belum didekati');
+    await choose('Belum didekati', 'Hitung sebagai Expected to close');
     expect(await screen.findByRole('button', {
       name: 'Gagal menyimpan — coba lagi: Expected to close, Belum didekati',
     })).toBeInTheDocument();
   });
 
-  it('AC-1 puts a stage’s actions behind one ⋮ on a phone, in Indonesian', async () => {
+  it('AC-1 puts a stage’s actions behind one ⋯ at every width, in Indonesian', async () => {
     atWidth(375);
     render();
-    await screen.findByText('Polis terbit');
+    await screen.findByText('3. Polis terbit');
     await userEvent.click(screen.getByRole('button', { name: 'Aksi untuk Sudah di-follow up' }));
-
-    expect(screen.getAllByRole('menuitem').map((item) => item.textContent))
-      .toEqual(['Naikkan', 'Turunkan', 'Ubah', 'Jadikan penutup pipeline', 'Arsipkan']);
+    expect(screen.getAllByRole('menuitem').map((item) => item.textContent)).toEqual([
+      'Naikkan', 'Turunkan', 'Ganti nama', 'Jangan hitung sebagai Expected to close', 'Jadikan penutup pipeline', 'Arsipkan',
+    ]);
   });
 
-  it('AC-2 shows a reader who cannot write the badge, kept English', async () => {
-    atWidth(1280);
+  it('AC-2 shows a reader who cannot write the tag, kept English, and no ⋯', async () => {
     render(READER);
-    await screen.findByText('Polis terbit');
+    await screen.findByText('3. Polis terbit');
     expect(screen.getByText('Expected to close')).toBeInTheDocument();
-    expect(screen.queryByRole('switch')).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Aksi untuk/ })).toBeNull();
   });
 });

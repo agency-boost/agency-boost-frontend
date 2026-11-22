@@ -31,7 +31,8 @@ const PATH = '/admin/companies/c1/template/recruitment_playbook';
 
 function render(view: Record<string, unknown>, extra: Record<string, StubReply | StubReply[]> = {}, indonesian = false) {
   const stub = stubFetch({
-    '/admin/companies': { body: [PRUDENTIAL] },
+    // The Default template's section (P19.23-T4, ADR-0278 §7): it has no KPM, so it publishes here, as before.
+    '/admin/companies': { body: [{ ...PRUDENTIAL, kind: 'template' }] },
     '/admin/companies/c1/templates': { body: [DEFAULT_TEMPLATE, BSD_CITY, ARCHIVED] },
     [`GET ${PATH}`]: { body: view },
     ...extra,

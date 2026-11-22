@@ -79,7 +79,8 @@ export function UserManagementTabs({
   useEffect(() => {
     if (!mayRead || pendingCount !== undefined) return;
     let live = true;
-    readWaitingCount()
+    // P19.20-T6 AC-1: the tab counts what it lists — the reader's own unit, the Owner's too.
+    readWaitingCount('mine')
       .then((answer) => { if (live) setAsked(answer.count); })
       .catch(() => undefined);
     return () => { live = false; };

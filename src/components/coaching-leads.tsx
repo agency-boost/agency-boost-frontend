@@ -1,6 +1,5 @@
 'use client';
 
-import dynamic from 'next/dynamic';
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { LeadContactButtons } from '@/components/contact-buttons';
 import { DateField } from '@/components/ui/date-field';
@@ -15,31 +14,29 @@ import { coachingSessionMessages } from '@/i18n/messages/coaching-session';
 import { leadsMessages } from '@/i18n/messages/leads';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
-import { leadGap, sessionLeadOrder, SESSION_LEADS_SHOWN, type Coachee } from '@/lib/coaching';
+import { leadGap, sessionLeadOrder, SESSION_LEADS_SHOWN } from '@/lib/coaching';
 import { dayInZone, formatShortDay, OFFICE_TIME_ZONE } from '@/lib/format';
 import {
-  countByType, listEveryLead, nameMatches, nextActionState, updateLead, type Lead, type LeadType, type LeadTypeChip,
+  countByType, listEveryLead, nameMatches, nextActionState, updateLead,
+  type Lead, type LeadType, type LeadTypeChip,
 } from '@/lib/leads';
-import { useCan, useSession } from '@/lib/session';
-import { useOpenedOnce } from '@/lib/use-opened-once';
+import { useCan } from '@/lib/session';
 import type { LeadStatusRow } from '@/lib/tenant-config';
 import { useTenantConfig } from '@/lib/tenant-config-cache';
 
-/** The lead sheet, downloaded when a lead is first opened and mounted from then on (`useOpenedOnce`; P18.11-T16). */
-const LeadSheet = dynamic(() => import('@/components/lead-sheet').then((m) => m.LeadSheet), { ssr: false });
-
 /**
- * **A coachee's leads, compact** (UI V1, UI-062, UI-081, UI-029; D-10, D-19): the Coaching Session's *Leads* card and the
- * coachee's *Leads* tab. One read — `GET /leads?owner=` (ADR-0076: answered only for somebody the reader coaches, 404
- * across offices, audited once per page read) — every lead the coachee holds, page after page (`listEveryLead`); the open
- * ones are the rows, the closed ones the one *Ditutup* line.
+ * **A coachee's leads** (UI V1, UI-062, UI-081, UI-029; D-10, D-19): the Coaching Session's *Leads* card, compact, and the
+ * coachee's *Leads* tab, drawn as `/leads` is since P19.16-T4. One read — `GET /leads?owner=` (ADR-0076: answered only for
+ * somebody the reader coaches, 404 across offices, audited once per page read) — every lead the coachee holds, page after
+ * page (`listEveryLead`); the open ones are the card's rows or the tab's cards, the closed ones the card's one *Ditutup*
+ * line or the tab's *Leads yang ditutup*.
  *
- * **A row** (`CoacheeLeadRow`): the avatar, the NAME, the type and stage pills, **one next-action line** — the date bold
- * and the note — and **WhatsApp and Call**, always enabled (UI-081: with no number they ask for one first). A lead with
- * no next action **never drops out**: in the line's place, in red, ***Isi tindakan*** (no note, no date — opens the lead
- * sheet) or ***Isi tanggal*** (a note, no date — opens the date picker, and the date is saved to the lead). The whole row
- * opens the lead sheet (`LeadSheet`, the Leads agent's, T12) — read-only where the session is finalized, and on the tab
- * in a read-only support session.
+ * **The session card's row** (`CoacheeLeadRow`): the avatar, the NAME, the type and stage pills, **one next-action
+ * line** — the date bold and the note — and **WhatsApp and Call**, always enabled (UI-081: with no number they ask for one
+ * first). A lead with no next action **never drops out**: in the line's place, in red, ***Isi tindakan*** (no note, no
+ * date — opens the lead sheet) or ***Isi tanggal*** (a note, no date — opens the date picker, and the date is saved to the
+ * lead). The whole row opens the lead sheet (`LeadSheet`, the Leads agent's, T12) — read-only where the session is
+ * finalized. The tab draws `/leads`' `LeadCard` instead (P19.16-T4 AC-1).
  */
 
 /**
@@ -80,7 +77,7 @@ export function useCoacheeLeads(owner: string, enabled = true) {
 }
 
 /** A ladder's stages by type, from the office's configuration. */
-function useLadders() {
+export function useLadders() {
   const { config } = useTenantConfig();
   return useCallback(
     (type: LeadType | null): LeadStatusRow[] =>
@@ -90,7 +87,7 @@ function useLadders() {
 }
 
 /** The office's today, for a word on screen (*Hari ini*, the year beside a date) — never a computation over data. */
-const officeToday = () => dayInZone(OFFICE_TIME_ZONE, new Date());
+export const officeToday = () => dayInZone(OFFICE_TIME_ZONE, new Date());
 
 /**
  * One lead, compact. **The name is the row's button**, stretched over the row, so a tap anywhere but the controls opens
@@ -234,7 +231,7 @@ function SearchPill({ value, onChange, filter }: { value: string; onChange: (nex
 }
 
 /** Open leads, in the card's order, narrowed by the search and the type. */
-function useShownLeads(leads: readonly Lead[] | null, term: string, type: LeadTypeChip) {
+export function useShownLeads(leads: readonly Lead[] | null, term: string, type: LeadTypeChip) {
   return useMemo(() => {
     const open = (leads ?? []).filter((l) => l.outcome === null);
     const narrowed = open.filter((l) => (type === 'all' || l.type === type) && (!term.trim() || nameMatches(l.name, term)));
@@ -405,112 +402,5 @@ export function SessionLeadsCard({
         </div>
       </LazyResponsiveSheet>
     </section>
-  );
-}
-
-/**
- * **The coachee's *Leads* tab** (UI V1, UI-029; the staging review of 2026-10-31): that agent's leads in the same compact
- * rows — the search pill, the type chips with their counts, every open lead in the card's order, the closed leads in one
- * line. WhatsApp and Call stay live (UI-081: no disabled button anywhere), and a number typed for a lead with none is
- * saved to it, as everywhere they are drawn.
- *
- * **It writes, as the session's Leads card does** (`SessionLeadsCard`; the product owner, 2026-11-01: *add and edit,
- * never delete*), replacing UI-029's read-only tab. The floating **+** of `/leads` adds a lead to the coachee's pipeline
- * (`POST /leads?owner=`, `lead:create` resolved to `COACH`); a row opens the lead sheet to edit, *Isi tindakan* and *Isi
- * tanggal* act, and each write is pinned to the version it read (P11-T4 AC-3). **No *Hapus***: `lead:delete` is the
- * owner's alone (§3.7). A read-only support session, or a reader the server granted no write, is drawn none of it.
- */
-export function CoacheeLeadsTab({ coachee }: { coachee: Coachee }) {
-  const t = useMessages(leadsMessages);
-  const typeName = useTypeName();
-  const ladderFor = useLadders();
-  const s = useMessages(coachingSessionMessages).leadsCard;
-  const { me } = useSession();
-  const { leads, error, put } = useCoacheeLeads(coachee.membershipId);
-  const [term, setTerm] = useState('');
-  const [type, setType] = useState<LeadTypeChip>('all');
-  /** The lead sheet: a lead, or `null` for a new one in the coachee's pipeline. */
-  const [sheet, setSheet] = useState<{ lead: Lead | null; focus?: 'nextAction' } | null>(null);
-  const sheetOpened = useOpenedOnce(sheet !== null);
-  // A support session that may look and not touch (§3.13): no add, no edit, the sheet only to read.
-  const readOnly = !!me?.isImpersonating && !!me.impersonationReadOnly;
-  const canCreate = useCan('lead:create') && !readOnly;
-  const canUpdate = useCan('lead:update') && !readOnly;
-  const { open, rows } = useShownLeads(leads, term, type);
-  const counts = countByType(open);
-
-  return (
-    <div data-coachee-leads="" className="flex flex-col gap-2.5">
-      <SearchPill value={term} onChange={setTerm} />
-      <div role="group" aria-label={t.list.chips} className="flex gap-1.5">
-        {(['all', 'sales', 'recruitment'] as const).map((chip) => (
-          <button
-            key={chip}
-            type="button"
-            aria-pressed={type === chip}
-            aria-label={t.list.chipSaid({ label: typeName(chip), n: counts[chip] })}
-            onClick={() => setType(chip)}
-            className={cn(
-              'flex min-h-9 items-center gap-1.5 rounded-pill px-3.5 text-base font-semibold max-lg:min-h-11',
-              type === chip ? 'bg-secondary text-secondary-contrast' : 'bg-card text-navy hover:bg-hover-row',
-            )}
-          >
-            {typeName(chip)}
-            <span className={cn('text-xs font-semibold', type === chip ? 'text-secondary-muted' : 'text-muted')}>{leads ? counts[chip] : ''}</span>
-          </button>
-        ))}
-      </div>
-      <section aria-label={t.list.title} className="rounded-lg border border-card-edge bg-card px-3.5 py-1.5">
-        {error && <div className="py-2"><ErrorBanner {...error} /></div>}
-        {!leads && !error && <LeadsSkeleton />}
-        {leads && (rows.length === 0 ? (
-          <p className="py-3 text-base text-muted">{term.trim() || type !== 'all' ? s.noMatch : s.none}</p>
-        ) : (
-          <ul role="list" className="divide-y divide-divider">
-            {rows.map((lead) => (
-              <CoacheeLeadRow
-                key={lead.id}
-                lead={lead}
-                ladder={ladderFor(lead.type)}
-                editable={canUpdate}
-                onOpen={(focus) => setSheet({ lead, focus })}
-                onSaved={put}
-              />
-            ))}
-          </ul>
-        ))}
-        {leads && <div className="pb-2"><ClosedLine leads={leads} /></div>}
-      </section>
-      {canCreate && (
-        /*
-         * `/leads`' floating **+** (`leads-list.tsx`), at every width: the tab has no table whose *+ Tambah lead* would
-         * stand in for it on a desktop.
-         */
-        <button
-          type="button"
-          onClick={() => setSheet({ lead: null })}
-          aria-label={t.list.add}
-          className={cn(
-            'fixed bottom-[calc(var(--tab-bar-space)+1rem)] right-4 z-30 flex h-14 w-14 items-center justify-center rounded-full',
-            'bg-primary text-primary-contrast shadow-modal hover:bg-primary-hover lg:bottom-6 lg:right-6',
-          )}
-        >
-          <LineIcon name="plus" className="h-7 w-7" />
-        </button>
-      )}
-      {sheetOpened && (
-        <LeadSheet
-          open={sheet !== null}
-          lead={sheet?.lead ?? null}
-          focus={sheet?.focus}
-          owner={coachee.membershipId}
-          readOnly={!canUpdate && !(sheet?.lead === null && canCreate)}
-          offerDelete={false}
-          onClose={() => setSheet(null)}
-          onSaved={put}
-          onClosedLead={put}
-        />
-      )}
-    </div>
   );
 }

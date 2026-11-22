@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { stubFetch } from '@test/harness';
 import { LANGUAGE_UNCHOSEN } from '@/i18n/language';
 import { ApiConfigError } from './api';
+import { enterKpm, leaveKpm } from './super-admin-kpm';
 import {
   api,
   apiBlob,
@@ -620,5 +621,57 @@ describe('P18.10-T2 AC-6 the language on every request', () => {
     await api('/uploads', { method: 'POST', body: new FormData() });
 
     expect(calls.map((c) => languageOf(c.init))).toEqual(['en', 'en', 'en']);
+  });
+});
+
+/**
+ * **ADR-0268 §3: the KPM a Super Admin works inside, on every request** — `X-Kpm-Id` while `super-admin-kpm.ts` holds an
+ * entered KPM, never on a platform route (`/admin/…`), and never once the KPM is left. The API honours it for a Super Admin
+ * alone, so the client need not know who is signed in to send it.
+ */
+describe('ADR-0268 §3 X-Kpm-Id', () => {
+  const KPM = '65b1f0c2a4d3e5f6a7b8c9e0';
+  const kpmOf = (init: RequestInit) => (init.headers as Record<string, string>)['X-Kpm-Id'];
+
+  beforeEach(() => {
+    setAccessToken('sa-token');
+    setImpersonating(false);
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    leaveKpm();
+  });
+
+  it('sends nothing outside every KPM', async () => {
+    const { calls } = stubFetch({ '/kpm/overview': { body: {} } });
+    await api('/kpm/overview');
+    expect(kpmOf(calls[0].init)).toBeUndefined();
+  });
+
+  it('names the KPM on the office’s reads and writes, and on the session’s own read, once one is entered', async () => {
+    enterKpm(KPM);
+    const { calls } = stubFetch({ '/kpm/overview': { body: {} }, '/auth/me': { body: {} }, '/members/m-1/leader': { body: {} } });
+    await api('/kpm/overview');
+    await api('/auth/me');
+    await api('/members/m-1/leader', { method: 'PUT', body: { leaderMembershipId: 'm-2' } });
+    expect(calls.map((c) => kpmOf(c.init))).toEqual([KPM, KPM, KPM]);
+  });
+
+  it('never on a platform route, which is the Super Admin’s own, in no KPM', async () => {
+    enterKpm(KPM);
+    const { calls } = stubFetch({ '/admin/tenants': { body: [] }, '/admin': { body: {} }, '/administrators': { body: {} } });
+    await api('/admin/tenants');
+    await api('/admin');
+    // Only `/admin` itself and beneath it: a route that merely starts with the letters is an office's.
+    await api('/administrators');
+    expect(calls.map((c) => kpmOf(c.init))).toEqual([undefined, undefined, KPM]);
+  });
+
+  it('stops the moment the KPM is left', async () => {
+    enterKpm(KPM);
+    leaveKpm();
+    const { calls } = stubFetch({ '/kpm/overview': { body: {} } });
+    await api('/kpm/overview');
+    expect(kpmOf(calls[0].init)).toBeUndefined();
   });
 });

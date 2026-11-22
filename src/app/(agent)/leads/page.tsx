@@ -48,7 +48,8 @@ export default function LeadsPage() {
   const split = settled && !compact;
 
   return (
-    <div className="lg:-mx-5" data-leads-page="">
+    // P19.13-T1 AC-2 (UI-192): no gutter of its own from 1024px — the page frame's 32px sides, as every page's (`SPLIT`).
+    <div data-leads-page="">
       <Page
         // *Leads* at every size (P19.1-T1 AC-1; UI-112: *each page's title is its phone title*, not *Leads Management*).
         title={t.list.title}

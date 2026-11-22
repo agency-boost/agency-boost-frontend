@@ -70,9 +70,10 @@ describe('P19.1-T5 AC-4 /campaigns on a tablet and a laptop (UI-123)', () => {
     expect(wears(groups()!, px).split(' ')).toEqual(expect.arrayContaining(['flex', 'flex-wrap']));
   });
 
-  it('P19.1-T5 AC-4 a group of one or two cards asks for their width and grows by its share; three or more take a row', () => {
-    expect(shareOf(1)).toEqual({ flex: '1 1 calc(1 * 300px + 0 * 0.625rem)' });
-    expect(shareOf(2)).toEqual({ flex: '2 1 calc(2 * 300px + 1 * 0.625rem)' });
+  // The gap is `--wide-card-gap` since P19.13-T1 AC-4 (UI-194): 10px on a tablet, 16px from 1024px, as the grid's.
+  it('P19.1-T5 AC-4, P19.13-T1 AC-4 a group of one or two cards asks for their width and grows by its share; three or more take a row', () => {
+    expect(shareOf(1)).toEqual({ flex: '1 1 calc(1 * 300px + 0 * var(--wide-card-gap))' });
+    expect(shareOf(2)).toEqual({ flex: '2 1 calc(2 * 300px + 1 * var(--wide-card-gap))' });
     expect(shareOf(3)).toEqual({ flex: '1 1 100%' });
     expect(shareOf(4)).toEqual({ flex: '1 1 100%' });
   });

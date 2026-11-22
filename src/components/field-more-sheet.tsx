@@ -12,8 +12,7 @@ import { NavIcon } from '@/components/ui/nav-icon';
 import { useMessages } from '@/i18n/language-provider';
 import { shellMessages } from '@/i18n/messages/shell';
 import { cn } from '@/lib/cn';
-import type { FieldDestination } from '@/lib/field-nav';
-import { PANDUAN_GLYPH } from '@/lib/panduan';
+import type { FieldDestination, FieldGroupTag } from '@/lib/field-nav';
 import { hasSurveyDot, useSurveyPending } from '@/lib/survey-pending';
 import { useScrollLock } from '@/lib/use-scroll-lock';
 
@@ -31,13 +30,16 @@ const SWIPE_CLOSE_PX = 72;
  * - **The account row**: the avatar with *Ubah foto* (to *Profil saya*), the name, the profile line, and the **ID | EN
  *   switch** — on a phone and a tablet the switch is here and in *Profil saya*, nowhere else (ADR-0180; it was the
  *   bar's, then the page header's, I-533).
- * - **The groups**, each a 12px grey heading and a 4-column grid of tiles — a 40px soft icon tile over a 12px label of at
- *   most two lines, the whole tile the target — in the order and with the members `fieldNav` gives: what the reader may
- *   open today, and a group with nothing in it left out. *Advanced analytics* is greyed with *Segera hadir* and opens
- *   nothing.
- * - ***📘 Panduan***, then **Keluar**, last, in red (P19.6-T5 AC-1: the guide spec's account menu, *"between Akun Anda and
- *   Keluar"*, which on a phone is this sheet — its account row at the top, *Keluar* at the foot). *Open Owner view*
- *   (ADR-0114) went with P19.2-T1: the views are the avatar's menu (ADR-0198 §3; UI-169 item 3).
+ * - **The groups**, each a heading and a 4-column grid of tiles — a soft icon tile over a 12px label of at most two
+ *   lines, the whole tile the target — in the order and with the members `fieldNav` gives: what the reader may open
+ *   today, and a group with nothing in it left out.
+ * - ***Keluar***, last, in red.
+ *
+ * *Changed 2026-11-20 (P19.17-T3 AC-7; ADR-0269 §5; the brief's *Phone "Lainnya"*, `lainnya-owner-mobile`):* **the
+ * sidebar's groups in the sidebar's order** — Saya · Aktivitas · Tim saya · Program, then for the Owner, the Admins and
+ * the core leaders **KPM · People · Pengaturan** (one tile, *Pengaturan KPM*), their tiles orange and their headings
+ * tagged *KPM Owner* or *Core leader*; each heading 14px bold in ink, each icon tile 48px; **Keluar an outlined pill**.
+ * *📘 Panduan* is gone (ADR-0219 §5 superseded), and nothing of the views (ADR-0198) was ever here.
  *
  * A modal dialog named *Lainnya*, drawn at the end of `<body>` so nothing on the page stands over it; the page behind
  * holds still (`useScrollLock`). Following any link in it closes it.
@@ -136,7 +138,8 @@ export function MoreSheet({
               <span className="text-xs font-semibold leading-tight text-navy">{t.changePhoto}</span>
             </Link>
             <span className="min-w-0 flex-1 leading-snug">
-              <b className="block truncate text-md font-bold text-ink">{account.name}</b>
+              {/* P19.17-T3 (`DESIGN-RULES.md`, *Names*; `lainnya-owner-mobile`): a person's name in capitals. */}
+              <b className="block truncate text-md font-bold uppercase text-ink">{account.name}</b>
               <span className="block truncate text-xs text-muted" title={account.role}>{account.role}</span>
             </span>
             <LanguageSwitch tone="page" />
@@ -157,46 +160,40 @@ export function MoreSheet({
 
         {nav.groups.map((group) => (
           <section key={group.id} aria-labelledby={`more-group-${group.id}`} data-more-group={group.id}>
-            <h2 id={`more-group-${group.id}`} className="mb-2 mt-3.5 text-xs font-semibold text-muted">
-              {t.fieldGroups[group.id]}
+            <h2 id={`more-group-${group.id}`} className="mb-2 mt-4 flex items-center gap-2 text-md font-bold text-ink">
+              <span data-group-name="">{t.fieldGroups[group.id]}</span>
+              {group.tag && <SheetTag tag={group.tag} words={t.sheetTags} />}
             </h2>
-            <ul className="grid grid-cols-4 gap-2">
+            <ul className="grid grid-cols-4 gap-x-1.5 gap-y-2.5">
               {group.items.map((item) => (
                 <li key={item.id}>
-                  <Tile item={item} soon={t.soon} doneSuffix={t.doneSuffix} dot={item.id === 'surveys' && surveyDot} dotSuffix={t.surveyWaiting} />
+                  <Tile
+                    item={item}
+                    extra={Boolean(group.tag)}
+                    soon={t.soon}
+                    doneSuffix={t.doneSuffix}
+                    dot={item.id === 'surveys' && surveyDot}
+                    dotSuffix={t.surveyWaiting}
+                  />
                 </li>
               ))}
             </ul>
           </section>
         ))}
 
-        {/* P19.6-T5 AC-1 (ADR-0219 §5): the reader's own guide, in a new tab; the sheet closes as for any link. */}
-        {account.guideHref && (
-          <a
-            href={account.guideHref}
-            target="_blank"
-            rel="noopener"
-            data-panduan=""
-            aria-label={`${t.guide}${t.opensInNewTab}`}
-            className="mt-3 flex min-h-11 w-full items-center gap-2 px-1 text-md font-semibold text-ink"
-          >
-            <span aria-hidden="true" className="w-5 shrink-0 text-center text-lg leading-none">{PANDUAN_GLYPH}</span>
-            {t.guide}
-          </a>
-        )}
-
+        {/* `lainnya-owner-mobile`: *Keluar* an outlined pill, 48px, red words and the logout icon, centred, last. */}
         <button
           type="button"
           onClick={account.onSignOut}
           disabled={account.signingOut}
           aria-busy={account.signingOut || undefined}
+          data-sign-out=""
           className={cn(
-            'flex min-h-11 w-full items-center gap-2 border-t border-divider px-1 pt-3 text-md font-semibold text-pill-red-ink',
-            'mt-4',
+            'mt-5 flex min-h-12 w-full items-center justify-center gap-1.5 rounded-pill border border-line text-md font-bold text-pill-red-ink',
             'disabled:opacity-60',
           )}
         >
-          <NavIcon name="logout" className="h-5 w-5" />
+          <NavIcon name="ti-logout" className="h-5 w-5" />
           {account.signingOut ? t.signingOut : t.signOut}
         </button>
         {/* P19.6-T1 AC-14 (ADR-0218 §11): under a KPM's own logo only; nothing is added otherwise. */}
@@ -208,13 +205,26 @@ export function MoreSheet({
 }
 
 /**
- * One tile: a 40px soft icon tile over its label, the whole tile the target and at least 64px tall. The current page's
- * tile is navy. A *Segera hadir* tile is greyed, says so under its name, and is no link — named in words for a screen
- * reader, as the sidebar's *Upcoming* items are.
+ * **The extras' tag beside a group's heading** (P19.17-T3 AC-7; `lainnya-owner-mobile`): *KPM Owner* for the Owner and
+ * the Admins, *Core leader* for a core leader — 12px bold on the orange tint, the primary's ink on it.
+ */
+function SheetTag({ tag, words }: { tag: FieldGroupTag; words: { owner: string; coreLeader: string } }) {
+  return (
+    <span data-sheet-tag="" className="rounded-md bg-primary-50 px-1.5 py-0.5 text-2xs font-bold text-primary-ink">
+      {tag === 'owner' ? words.owner : words.coreLeader}
+    </span>
+  );
+}
+
+/**
+ * One tile: a 48px soft icon tile over its label, the whole tile the target and at least 64px tall. The current page's
+ * tile is navy; **the extras' tiles are the orange tint with the primary's ink** (P19.17-T3 AC-7; `lainnya-owner-mobile`:
+ * *orange tiles = owner / core leader extras*). A *Segera hadir* tile is greyed, says so under its name, and is no link —
+ * named in words for a screen reader, as the sidebar's *Upcoming* items are.
  */
 function Tile({
-  item, soon, doneSuffix, dot = false, dotSuffix = '',
-}: { item: FieldDestination; soon: string; doneSuffix: string; dot?: boolean; dotSuffix?: string }) {
+  item, extra = false, soon, doneSuffix, dot = false, dotSuffix = '',
+}: { item: FieldDestination; extra?: boolean; soon: string; doneSuffix: string; dot?: boolean; dotSuffix?: string }) {
   /*
    * **A live count rides the icon** (P19.2-T1 AC-9): the Super Admin's *Leaders past the limit*, as the console's drawer
    * drew its badge — the alert-red pill at the icon's corner, and the number in the tile's name. No field item has one.
@@ -224,13 +234,15 @@ function Tile({
     <span
       aria-hidden="true"
       className={cn(
-        'flex h-10 w-10 items-center justify-center rounded-[12px]',
-        item.active ? 'bg-secondary text-secondary-contrast' : 'bg-pill-grey text-pill-grey-ink',
+        'flex h-12 w-12 items-center justify-center rounded-[14px]',
+        item.active
+          ? 'bg-secondary text-secondary-contrast'
+          : extra ? 'bg-primary-50 text-primary-ink' : 'bg-pill-grey text-secondary-ink',
         item.soon && 'opacity-50',
         (count > 0 || dot) && 'relative',
       )}
     >
-      <NavIcon name={item.icon} className="h-[21px] w-[21px]" />
+      <NavIcon name={item.icon} className="h-[22px] w-[22px]" />
       {/* P19.5-T4 (C-R2): the red dot on *Survei* while a survey waits, said in its name. */}
       {dot && <span data-survey-dot="" className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border-2 border-card bg-alert" />}
       {count > 0 && (
@@ -240,7 +252,7 @@ function Tile({
       )}
     </span>
   );
-  const face = 'flex min-h-16 flex-col items-center gap-1 rounded-row px-0.5 py-1 text-center text-xs leading-tight';
+  const face = 'flex min-h-16 flex-col items-center gap-1.5 rounded-row px-0.5 py-1 text-center text-xs font-semibold leading-tight';
   if (item.soon) {
     return (
       <span aria-disabled="true" data-tile={item.id} className={cn(face, 'cursor-default text-signal-grey')}>

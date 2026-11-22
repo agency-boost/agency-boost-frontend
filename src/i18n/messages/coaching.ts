@@ -43,7 +43,7 @@ const f = (pronoun: Pronoun) => ENGLISH_PRONOUNS[pronoun];
 
 const en = {
   /** The prototype's title for every coaching view (`Overall.html:10407`), and the person's tab (§A.2, §A.3). */
-  title: kept('Coaching Session'),
+  title: kept('Coaching'),
   /** `GOAL_PACE_STATUS`'s pill, verbatim (`Overall.html:10624`), and ADR-0080's *No goal set*. */
   status: {
     on_track: 'On track',
@@ -116,6 +116,17 @@ const en = {
     myNotes: 'My Coaching Notes',
     /** Ours (L-01): a reader nobody reports to, on a typed address. */
     empty: 'No one to coach yet.',
+    /**
+     * P19.18-T5 (ADR-0271 §9; `coaching-owner-mobile`): the card's head *Semua orang · 30*, its right-hand *1:1 terakhir*,
+     * each unit line's *Unit Anda* / *Unit {NAME}* / *Belum punya leader* and *n orang*, and the view picker's name. The
+     * client's words.
+     */
+    everyone: 'Everyone',
+    yourUnit: 'Your Unit',
+    unled: 'No leader yet',
+    people: ({ n }: { n: number }) => (n === 1 ? '1 person' : `${n} people`),
+    /** The view picker's name for a screen reader, before its value. */
+    viewLabel: 'View',
   },
 
   /** The person shell (`Overall.html:3969-3995`) and `/coaching/me`'s head (`:4384-4404`). */
@@ -182,7 +193,7 @@ const en = {
 };
 
 const id: MessagesOf<typeof en> = {
-  title: kept('Coaching Session'),
+  title: kept('Coaching'),
   status: {
     on_track: `Sesuai ${kept('target')}`,
     watch_closely: 'Perlu dipantau',
@@ -236,6 +247,11 @@ const id: MessagesOf<typeof en> = {
     by: ({ name }) => `oleh ${name}`,
     myNotes: `Catatan ${kept('coaching')} saya`,
     empty: `Belum ada orang yang Anda ${kept('coaching')}.`,
+    everyone: 'Semua orang',
+    yourUnit: `${kept('Unit')} Anda`,
+    unled: `Belum punya ${kept('leader')}`,
+    people: ({ n }) => `${n} orang`,
+    viewLabel: 'Tampilan',
   },
 
   person: {

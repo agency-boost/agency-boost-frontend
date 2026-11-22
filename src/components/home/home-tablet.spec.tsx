@@ -33,10 +33,15 @@ vi.mock('next/navigation', () => ({
  * `TaskRow` and the Agenda's `AgendaItem`, today's alone — at every size, where it drew Home's 64px rows; recorded with
  * the working tree of Phase 19.11 as it stood (its *Laporan aktivitas tim* without level tags, P19.11-T6).
  */
+/*
+ * *Re-recorded 2026-11-12 (P19.13-T1, T4 AC-2; UI-192, UI-194, UI-195, ADR-0252):* **1024 and 1280 only** — the frame's
+ * dashboard grid, 2/3 + 1/3 with both columns stretched and each column's last card filling it, 16px between the cards,
+ * and no 1200px cap. **375 is unchanged** (T1 AC-6).
+ */
 const BEFORE_T5: Record<375 | 1024 | 1280, string> = {
   375: '361aaffdcdcdd54fe7320b36690809c5ce9c82fe8767835582d2fffe689195b4',
-  1024: '6f4cdc5d0712e46c57e4f41e749cc372d55980c220e20e0e51186d2a47debda7',
-  1280: '6f4cdc5d0712e46c57e4f41e749cc372d55980c220e20e0e51186d2a47debda7',
+  1024: 'dbf73e388fbff0b1da5d5844a8454d94f4aeb3da20383f8422f3d701c0af3880',
+  1280: 'dbf73e388fbff0b1da5d5844a8454d94f4aeb3da20383f8422f3d701c0af3880',
 };
 
 const BLOCKS = ['quote', 'buttons', 'tiles', 'actions', 'team', 'chart'] as const;

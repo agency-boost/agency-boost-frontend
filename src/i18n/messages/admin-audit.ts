@@ -12,7 +12,12 @@ import { kept } from '@/i18n/kept';
  * (`kpm.created`, `company_template.published`, `memberships`) — evidence, never relabelled (ADR-0023's note) — and the
  * target's and the actors' names are as stored. A row's moment is a figure, written by the page.
  *
+ * **Since P19.23-T6 (ADR-0279)** at `/admin/platform/audit`, the console's *Platform* › *Audit log* (frame f52): *Cari
+ * perubahan*, *Semua perusahaan · Semua KPM · Semua tindakan*, and each line *when · what (before → after) · who · KPM ·
+ * company*; `/admin/audit` redirects there.
+ *
  * @moved app/(admin)/admin/audit/
+ * @moved components/admin/platform/audit-log.tsx
  */
 const en = {
   title: kept('Audit / Role Change Log'),
@@ -48,6 +53,17 @@ const en = {
   timesSince: ({ n, oldest }: { n: number; oldest: string }) => `${n} times since ${oldest}`,
   emptyFiltered: 'Nothing recorded matches these filters.',
   clearFilters: 'Clear filters',
+
+  /* P19.23-T6 AC-1 (ADR-0279; frame f52): the search, the three filters' *all*, the KPM and the note under the list. */
+  search: 'Search changes',
+  kpm: kept('KPM'),
+  allCompanies: 'All companies',
+  allKpms: `Every ${kept('KPM')}`,
+  allActions: 'All actions',
+  allActors: 'Everyone',
+  emptyAll: 'Nothing recorded yet.',
+  note: `Every ${kept('Super Admin')} change: who, when, before → after`,
+  officeNote: `Every change in this ${kept('KPM')}: who, when, before → after`,
 };
 
 const id: MessagesOf<typeof en> = {
@@ -76,6 +92,16 @@ const id: MessagesOf<typeof en> = {
   timesSince: ({ n, oldest }) => `${n} kali sejak ${oldest}`,
   emptyFiltered: 'Tidak ada catatan yang cocok dengan saringan ini.',
   clearFilters: 'Hapus saringan',
+
+  search: 'Cari perubahan',
+  kpm: kept('KPM'),
+  allCompanies: 'Semua perusahaan',
+  allKpms: `Semua ${kept('KPM')}`,
+  allActions: 'Semua tindakan',
+  allActors: 'Semua pelaku',
+  emptyAll: 'Belum ada yang dicatat.',
+  note: `Semua perubahan ${kept('Super Admin')}: siapa, kapan, sebelum → sesudah`,
+  officeNote: `Semua perubahan di ${kept('KPM')} ini: siapa, kapan, sebelum → sesudah`,
 };
 
 export const adminAuditMessages = defineMessages({ en, id });

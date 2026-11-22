@@ -90,7 +90,8 @@ describe('a training module’s page (P5-T1)', () => {
 
     expect(await screen.findByRole('heading', { name: 'Building Your Prospect List' })).toBeInTheDocument();
     expect(screen.getByText('Sales › Prospecting')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Back to Training' })).toHaveAttribute('href', '/kpm/settings/training#modules');
+    // P19.25-T4 (ADR-0282 §1): one tree, no tabs — back to the tree itself.
+    expect(screen.getByRole('link', { name: 'Back to Training' })).toHaveAttribute('href', '/kpm/settings/training');
   });
 
   it('shows the code it can never change', async () => {

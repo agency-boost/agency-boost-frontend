@@ -71,7 +71,7 @@ describe('/proposal, Riwayat (P19.7-T2)', () => {
     expect(within(first).getByText('Done')).toHaveAttribute('data-tone', 'green');
     expect(first).toHaveTextContent(/5 Nov 2026/);
     expect(within(second).getByText('Draft')).toHaveAttribute('data-tone', 'grey');
-    expect(within(first).getAllByRole('link')[0]).toHaveAttribute('href', '/proposal/p-1?step=3');
+    expect(within(first).getAllByRole('link')[0]).toHaveAttribute('href', '/proposal/p-1?step=pdf');
     expect(within(second).getAllByRole('link')[0]).toHaveAttribute('href', '/proposal/p-2?step=2');
     // The reader's own: the list asks no owner — the server answers nobody else's (ADR-0221 §2).
     expect(calls.find((c) => c.url.includes('/proposals?'))!.url).not.toMatch(/owner=/);

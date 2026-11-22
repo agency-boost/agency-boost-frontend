@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { sequenceVersions, signedUploadForm, stageChange, type ConfigChange } from '@/lib/tenant-config';
+import {
+  PUBLISHED_SETTINGS, sequenceVersions, settingOfPath, signedUploadForm, stageChange, type ConfigChange,
+} from '@/lib/tenant-config';
 import { gcsSignedUpload } from '@test/storage-fixtures';
 
 describe('sequenceVersions — the version a batch finds each row at', () => {
@@ -78,5 +80,34 @@ describe('signedUploadForm — the form a signed upload is sent as', () => {
     const form = signedUploadForm({ ...signed, fields: { b: '2', a: '1' } }, file);
 
     expect([...form.keys()]).toEqual(['b', 'a', 'file']);
+  });
+});
+
+describe('settingOfPath — the setting a settings page publishes (P19.21-T2 AC-3)', () => {
+  it.each([
+    ['/kpm/settings/activity-types', 'activity_types'],
+    ['/kpm/settings/ratio-benchmarks', 'activity_types'],
+    ['/kpm/settings/lead-statuses', 'lead_statuses'],
+    ['/kpm/settings/activation-checklist', 'activation_checklist'],
+    ['/kpm/settings/training', 'training'],
+    ['/kpm/settings/training/66f0000000000000000000a1', 'training'],
+    ['/kpm/settings/capability-mapping', 'capability_mapping'],
+    ['/kpm/settings/events', 'events'],
+    ['/kpm/settings/events?tab=types', 'events'],
+  ])('%s → %s', (path, setting) => {
+    expect(settingOfPath(path)).toBe(setting);
+  });
+
+  it.each([
+    '/kpm/settings', '/kpm/settings/products', '/kpm/settings/campaigns', '/kpm/settings/recruitment-pitch',
+    '/kpm/settings/branch-info', '/kpm/settings/branding', '/admin/companies/c1/template', '', null, undefined,
+  ])('%s is saved live, or is no settings page: null', (path) => {
+    expect(settingOfPath(path)).toBeNull();
+  });
+
+  it('names every one of the six settings the API publishes', () => {
+    expect(PUBLISHED_SETTINGS).toEqual([
+      'activity_types', 'lead_statuses', 'activation_checklist', 'training', 'capability_mapping', 'events',
+    ]);
   });
 });

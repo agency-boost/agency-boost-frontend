@@ -11,8 +11,8 @@ const MONTHS_ID = [
 ] as const;
 
 /**
- * **Settings › Branch info** (`/kpm/settings/branch-info`, P4-T5; P18.10-T4): what the office is called and where it
- * is, two fields the platform sets shown read-only. *Save*, *Saving…* and *Saved.* are `settings.ts`'.
+ * **Settings › Branch info** (`/kpm/settings/branch-info`, P4-T5; P18.10-T4; **P19.21-T3 AC-7**, frame 23): a simple
+ * two-column form — what the office is called and where it is — the fields the platform sets grey, each saying so. *Save*, *Saving…* and *Saved.* are `settings.ts`'.
  *
  * **Content, shown as typed** (ADR-0179 §5): the office's code, branch name, address and phone, the company's name and
  * the Owner's. **Kept English** (§A): the title (§A.1), *KPM*, *KPM Owner*, *Superadmin* and *AgencyBoost* (§A.5).
@@ -23,40 +23,39 @@ const MONTHS_ID = [
  * @moved app/(tenant)/kpm/settings/branch-info/
  */
 const en = {
-  subtitle: 'What this office is called, and where it is.',
-  kpmCode: 'KPM code',
-  kpmCodeReason: 'Set when the office was created, and unique within your company.',
+  kpmCode: `${kept('KPM')} code`,
+  /** P19.21-T3 AC-7 (frame 23): the platform's fields grey, each saying so in two or three words. */
+  kpmCodeReason: 'Unique in your company, cannot be changed',
   branchName: 'Branch name',
-  /** Disabled and labelled, as the prototype has it: the label says who can change it. */
-  company: 'Company (tagged by Superadmin)',
-  companyReason: 'The insurer this office belongs to. Only the platform can change it.',
+  company: 'Company',
+  /** The company's and the Owner's line: the platform sets them. */
+  companyReason: 'Set by the platform',
   address: 'Address',
   contactPhone: 'Contact phone',
   /** The Owner's field while the office has none. */
   nobodyYet: 'Nobody yet',
-  ownerReason: 'Assigned and transferred by the platform, not from inside the office.',
+  ownerReason: 'Set by the platform',
   financialYear: 'Financial year starts',
   /** A month by its number, 1 to 12, for the financial year's select. */
   month: ({ month }: { month: number }): string => MONTHS_EN[month - 1] ?? '',
-  timeLanguageCurrency: 'Time zone, language and currency',
-  timeLanguageCurrencyReason: 'Every office runs on these in this version of AgencyBoost.',
+  timeLanguageCurrency: 'Time zone · language · currency',
+  timeLanguageCurrencyReason: 'The same for every office',
 };
 
 const id: MessagesOf<typeof en> = {
-  subtitle: `Nama ${kept('KPM')} ini, dan lokasinya.`,
   kpmCode: `Kode ${kept('KPM')}`,
-  kpmCodeReason: `Ditetapkan saat ${kept('KPM')} ini dibuat, dan unik di perusahaan Anda.`,
+  kpmCodeReason: 'Unik di perusahaan, tidak bisa diubah',
   branchName: 'Nama cabang',
-  company: `Perusahaan (di-tag oleh ${kept('Superadmin')})`,
-  companyReason: `Perusahaan asuransi tempat ${kept('KPM')} ini bernaung. Hanya platform yang dapat mengubahnya.`,
+  company: 'Perusahaan',
+  companyReason: 'Diatur platform',
   address: 'Alamat',
   contactPhone: 'Telepon kontak',
   nobodyYet: 'Belum ada',
-  ownerReason: `Ditetapkan dan dipindahkan oleh platform, bukan dari dalam ${kept('KPM')}.`,
+  ownerReason: 'Diatur platform',
   financialYear: 'Tahun buku dimulai',
   month: ({ month }) => MONTHS_ID[month - 1] ?? '',
-  timeLanguageCurrency: 'Zona waktu, bahasa, dan mata uang',
-  timeLanguageCurrencyReason: `Setiap ${kept('KPM')} memakai pengaturan ini di versi ${kept('AgencyBoost')} ini.`,
+  timeLanguageCurrency: 'Zona waktu · bahasa · mata uang',
+  timeLanguageCurrencyReason: `Sama untuk semua ${kept('KPM')}`,
 };
 
 export const branchInfoMessages = defineMessages({ en, id });

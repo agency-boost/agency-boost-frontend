@@ -21,7 +21,7 @@ const LEAD: Lead = {
   id: 'l1', ownerMembershipId: 'mem-1', type: 'sales', name: 'Handoko', contact: { phone: '+6282335967649', email: null },
   statusCode: 'APPROVED_NOT_PAID', thisMonth: false, committedMonths: [], closedThisMonth: false, lastEditedBy: null,
   remarks: null, nextActionDate: null, nextActionNote: null, outcome: null, source: null,
-  dateRegistered: '2026-11-01T03:00:00.000Z', version: 2, flags: [], overdueDays: null, age: null, gender: null,
+  dateRegistered: '2026-11-01T03:00:00.000Z', version: 2, flags: [], overdueDays: null,
   proposals: null,
 };
 

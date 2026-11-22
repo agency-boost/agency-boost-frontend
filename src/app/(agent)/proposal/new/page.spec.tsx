@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import AgentLayout from '@/app/(agent)/layout';
 import { renderInLayout, stubFetch, type StubReply } from '@test/harness';
-import { lead, proposal, RINA, ROSA, SHELL, VIEWING_RINA, WULAN } from '@test/proposal-fixtures';
+import { EMPTY_DETAILS, lead, proposal, RINA, ROSA, SHELL, VIEWING_RINA, WULAN } from '@test/proposal-fixtures';
 import NewProposalPage from './page';
 
 const nav = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn(), back: vi.fn(), search: '' }));
@@ -33,11 +33,12 @@ const body = (calls: { url: string; init: RequestInit }[], method: string, fragm
   calls.filter((c) => c.init.method === method && c.url.includes(fragment)).map((c) => JSON.parse(String(c.init.body)));
 
 /**
- * **`/proposal/new`, step 1 with nothing stored** (P19.7-T2 AC-2, AC-3, AC-4, AC-14, AC-16; Acc. 2, 3, 6; ADR-0221 §3,
- * ADR-0224). The reader's own Sales leads, *Klien baru* with three fields, *Umur belum ada* and its card, and *Lanjut*,
- * which saves the lead first and then creates the draft.
+ * **`/proposal/new`, step 1 *Untuk siapa?*** (P19.14-T1 AC-1 to AC-6; ADR-0254; the 11 Nov spec's *Step 1*): the
+ * reader's own leads searched, *+ Lead baru* under the box, the client box under the chosen lead — the age with its
+ * helper, the gender, the collapsed details — prefilled from the lead's earlier proposal, and **nothing written to the
+ * lead**: *Lanjut* creates the draft with the client.
  */
-describe('/proposal/new, step 1 (P19.7-T2)', () => {
+describe('/proposal/new, step 1 Untuk siapa (P19.14-T1)', () => {
   beforeEach(() => {
     nav.push.mockReset();
     nav.replace.mockReset();
@@ -45,140 +46,161 @@ describe('/proposal/new, step 1 (P19.7-T2)', () => {
   });
   afterEach(() => vi.unstubAllGlobals());
 
-  it('P19.7-T2 AC-2 the progress bar reads 1 Klien · 2 Produk · 3 PDF, on step 1; Kembali goes back to Riwayat', async () => {
+  const chooseWulan = async () => userEvent.click(await screen.findByRole('button', { name: /Ibu Wulan Sari/ }));
+
+  it('P19.14-T1 AC-1 the step pills read 1 Untuk siapa · 2 Produk — the PDF is no step — on step 1; Kembali goes to Riwayat', async () => {
     show();
     const steps = await screen.findByRole('list', { name: 'Steps' });
     const items = within(steps).getAllByRole('listitem');
-    expect(items.map((s) => s.textContent)).toEqual(['11 Client', '22 Products', '33 PDF']);
+    expect(items.map((s) => s.textContent)).toEqual(['11 Who for', '22 Products']);
     expect(items[0]).toHaveAttribute('aria-current', 'step');
     expect(screen.getByRole('link', { name: 'Back' })).toHaveAttribute('href', '/proposal');
-    // The steps carry the bar and *Kembali*, not the Sales tools strip (ADR-0221 §8).
     expect(screen.queryByRole('navigation', { name: 'Sales tools' })).not.toBeInTheDocument();
   });
 
-  it('P19.7-T2 AC-3 lists the reader’s own Sales leads, newest first, searched on the server', async () => {
+  it('P19.14-T1 AC-2 searches the reader’s own Sales leads, most recent first, on the server', async () => {
     const { calls } = show();
-    await screen.findByRole('radio', { name: /Ibu Rosa Damayanti/ });
+    await screen.findByRole('button', { name: /Ibu Rosa Damayanti/ });
     const url = calls.find((c) => c.url.includes('/leads?'))!.url;
     expect(url).toMatch(/owner=mem-rina/);
     expect(url).toMatch(/type=sales/);
     expect(url).toMatch(/sort=dateRegistered/);
     expect(url).toMatch(/dir=desc/);
-    await userEvent.type(screen.getByRole('searchbox', { name: 'Search your Sales leads' }), 'Wulan');
+    await userEvent.type(screen.getByRole('searchbox', { name: 'Search your leads' }), 'Wulan');
     await waitFor(() => expect(calls.some((c) => c.url.includes('search=Wulan'))).toBe(true));
   });
 
-  it('P19.7-T2 AC-3 Klien baru asks three fields only — Nama, Umur with − / + and the keypad, Laki-laki / Perempuan — no slider, no dropdown', async () => {
+  it('P19.14-T1 AC-2 with no exact match, + Lead baru "{text}" sits directly under the box; an exact name offers none', async () => {
     show();
-    await screen.findByRole('radio', { name: /Ibu Rosa Damayanti/ });
-    await userEvent.click(screen.getByRole('button', { name: 'New client' }));
-    const form = document.querySelector('[data-new-client]') as HTMLElement;
-    expect(within(form).getAllByRole('textbox').map((b) => b.getAttribute('id') ? (document.querySelector(`label[for="${b.id}"]`)?.textContent ?? '') : ''))
-      .toEqual(['Name', 'Age at next birthday']);
-    const age = within(form).getByRole('textbox', { name: 'Age at next birthday' });
+    await screen.findByRole('button', { name: /Ibu Rosa Damayanti/ });
+    const box = screen.getByRole('searchbox', { name: 'Search your leads' });
+    await userEvent.type(box, 'Pak Budi');
+    const add = await screen.findByRole('button', { name: '+ New lead “Pak Budi”' });
+    // Directly under the box: the box's next element, before any lead.
+    expect(box.closest('div')!.nextElementSibling).toBe(add);
+    await userEvent.clear(box);
+    await userEvent.type(box, 'Ibu Wulan Sari');
+    await waitFor(() => expect(screen.queryByRole('button', { name: /New lead/ })).not.toBeInTheDocument());
+  });
+
+  it('P19.14-T1 AC-2 + Lead baru saves the name and the phone as a Sales lead, moves it to the first stage, and chooses it', async () => {
+    const created = lead({ id: 'l-new', name: 'Pak Budi', version: 1, proposals: null });
+    const { calls } = show({
+      'POST /leads': { status: 201, body: created },
+      'PATCH /leads/l-new/status': { body: { ...created, statusCode: 'NOT_YET_APPROACHED', version: 2 } },
+    });
+    await screen.findByRole('button', { name: /Ibu Rosa Damayanti/ });
+    await userEvent.type(screen.getByRole('searchbox', { name: 'Search your leads' }), 'Pak Budi');
+    await userEvent.click(await screen.findByRole('button', { name: '+ New lead “Pak Budi”' }));
+    expect(screen.getByRole('textbox', { name: 'Name' })).toHaveValue('Pak Budi');
+    await userEvent.type(screen.getByRole('textbox', { name: 'Phone (optional)' }), '0812 1100 2200');
+    await userEvent.click(screen.getByRole('button', { name: 'Save the lead' }));
+    expect(await screen.findByText('Lead saved in Leads')).toBeInTheDocument();
+    expect(body(calls, 'POST', '/leads')).toEqual([{ name: 'Pak Budi', type: 'sales', contact: { phone: '+6281211002200', email: null } }]);
+    expect(body(calls, 'PATCH', '/leads/l-new/status')).toEqual([{ statusCode: 'NOT_YET_APPROACHED', version: 1 }]);
+    expect(document.querySelector('[data-chosen-lead="l-new"]')).not.toBeNull();
+    // The client box opens empty: a new lead has no earlier proposal.
+    expect(screen.getByRole('textbox', { name: 'Age at next birthday' })).toHaveValue('');
+  });
+
+  it('P19.14-T1 AC-2 a phone that is not one is said under the field, and nothing is saved', async () => {
+    const { calls } = show();
+    await screen.findByRole('button', { name: /Ibu Rosa Damayanti/ });
+    await userEvent.type(screen.getByRole('searchbox', { name: 'Search your leads' }), 'Pak Budi');
+    await userEvent.click(await screen.findByRole('button', { name: '+ New lead “Pak Budi”' }));
+    await userEvent.type(screen.getByRole('textbox', { name: 'Phone (optional)' }), '12');
+    await userEvent.click(screen.getByRole('button', { name: 'Save the lead' }));
+    expect(screen.getByText('Enter 9 to 13 digits after +62.')).toBeInTheDocument();
+    expect(calls.some((c) => c.init.method === 'POST')).toBe(false);
+  });
+
+  it('P19.14-T1 AC-3 under the chosen lead: the age with − / + and its helper, Laki-laki / Perempuan, details collapsed', async () => {
+    show();
+    await chooseWulan();
+    const box = document.querySelector('[data-client-box]') as HTMLElement;
+    const age = within(box).getByRole('textbox', { name: 'Age at next birthday' });
     expect(age).toHaveAttribute('inputMode', 'numeric');
-    expect(within(form).getByRole('button', { name: 'One year less' })).toBeInTheDocument();
-    expect(within(form).getByRole('button', { name: 'One year more' })).toBeInTheDocument();
-    expect(within(form).getAllByRole('radio').map((r) => r.textContent)).toEqual(['Male', 'Female']);
-    expect(within(form).queryByRole('slider')).not.toBeInTheDocument();
-    expect(within(form).queryByRole('combobox')).not.toBeInTheDocument();
-    expect(form.querySelectorAll('input, select, textarea')).toHaveLength(2);
+    expect(age).toHaveAccessibleDescription('Born May 1991 → now 35 → enter 36');
+    expect(within(box).getByRole('button', { name: 'One year less' })).toBeInTheDocument();
+    expect(within(box).getAllByRole('radio').map((r) => r.textContent)).toEqual(['Male', 'Female']);
+    expect(within(box).queryByRole('slider')).not.toBeInTheDocument();
+    const toggle = within(box).getByRole('button', { name: '+ Client details (optional)' });
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(document.querySelector('[data-client-details]')).toBeNull();
+    await userEvent.click(toggle);
+    const details = document.querySelector('[data-client-details]') as HTMLElement;
+    expect(within(details).getAllByRole('button').map((b) => b.textContent)).toEqual([
+      'Single', 'Married', 'Hospital costs', 'Income during critical illness', 'Family benefit', 'Education fund',
+      'Future / retirement fund', 'Other',
+    ]);
+    expect(within(details).getByRole('textbox', { name: 'Dependants' })).toHaveAttribute('placeholder', 'e.g. Wife, 2 children');
+    expect(within(details).getByRole('textbox', { name: 'Occupation' })).toBeInTheDocument();
+    expect(within(details).getByRole('textbox', { name: 'City' })).toBeInTheDocument();
+    await userEvent.click(within(details).getByRole('button', { name: 'Other' }));
+    expect(within(details).getByRole('textbox', { name: 'What else was discussed' })).toBeInTheDocument();
   });
 
-  it('P19.7-T2 AC-3 a new client is saved as a Sales lead, then the draft is made and step 2 opens in its place', async () => {
-    const created = lead({ id: 'l-new', name: 'Pak Budi', age: 36, gender: 'male' });
-    const { calls } = show({ 'POST /leads': { status: 201, body: created } });
-    await screen.findByRole('radio', { name: /Ibu Rosa Damayanti/ });
-    await userEvent.click(screen.getByRole('button', { name: 'New client' }));
+  it('P19.14-T1 AC-3, AC-4 Lanjut needs the age and the gender, then creates the draft with the client — nothing written to the lead', async () => {
+    const { calls } = show();
+    await chooseWulan();
     const next = screen.getByRole('button', { name: 'Next' });
     expect(next).toBeDisabled();
-    await userEvent.type(screen.getByRole('textbox', { name: 'Name' }), 'Pak Budi');
+    expect(next).toHaveAccessibleDescription('Enter the age and the gender to continue.');
     await userEvent.type(screen.getByRole('textbox', { name: 'Age at next birthday' }), '36');
-    await userEvent.click(screen.getByRole('radio', { name: 'Male' }));
-    await userEvent.click(next);
-    await waitFor(() => expect(nav.replace).toHaveBeenCalledWith('/proposal/p-new?step=2'));
-    expect(body(calls, 'POST', '/leads')).toEqual([{ name: 'Pak Budi', type: 'sales', age: 36, gender: 'male' }]);
-    expect(body(calls, 'POST', '/proposals')).toEqual([{ leadId: 'l-new' }]);
-    const order = calls.filter((c) => c.init.method === 'POST').map((c) => new URL(c.url).pathname.replace(/^\/api\/v1/, ''));
-    expect(order).toEqual(['/leads', '/proposals']);
-  });
-
-  it('P19.7-T2 AC-3 with no Sales lead at all, Klien baru is already open', async () => {
-    show({ 'GET /leads?': page([]) });
-    expect(await screen.findByRole('button', { name: 'New client' })).toHaveAttribute('aria-pressed', 'true');
-    expect(document.querySelector('[data-new-client]')).not.toBeNull();
-  });
-
-  it('P19.7-T2 AC-3 a lead that already has an age and a gender skips them: Lanjut makes the draft at once', async () => {
-    const { calls } = show();
-    await userEvent.click(await screen.findByRole('radio', { name: /Ibu Rosa Damayanti/ }));
-    expect(document.querySelector('[data-missing-card]')).toBeNull();
-    await userEvent.click(screen.getByRole('button', { name: 'Next' }));
-    await waitFor(() => expect(nav.replace).toHaveBeenCalledWith('/proposal/p-new?step=2'));
-    expect(calls.some((c) => c.init.method === 'PATCH')).toBe(false);
-    expect(body(calls, 'POST', '/proposals')).toEqual([{ leadId: 'l-rosa' }]);
-  });
-
-  it('P19.7-T2 AC-3 ?leadId= chooses that lead', async () => {
-    show({}, RINA, 'leadId=l-rosa');
-    const r = await screen.findByRole('radio', { name: /Ibu Rosa Damayanti/ });
-    expect(r).toHaveAttribute('aria-checked', 'true');
-  });
-
-  it('P19.7-T2 AC-3 ?leadId= of a lead past the first page is read, chosen and shown first', async () => {
-    const older = lead({ id: 'l-old', name: 'Pak Hendro Gunawan', age: 51, gender: 'male' });
-    show({ 'GET /leads/l-old': { body: older } }, RINA, 'leadId=l-old');
-    const radios = await screen.findAllByRole('radio');
-    await waitFor(() => expect(screen.getByRole('radio', { name: /Pak Hendro Gunawan/ })).toHaveAttribute('aria-checked', 'true'));
-    expect(screen.getAllByRole('radio')[0]).toHaveAccessibleName(/Pak Hendro Gunawan/);
-    expect(radios.length).toBeGreaterThan(0);
-  });
-
-  it('P19.7-T2 AC-4 a lead without them carries the amber Umur belum ada; picking it opens the card under the list', async () => {
-    show();
-    const wulan = await screen.findByRole('radio', { name: /Ibu Wulan Sari/ });
-    expect(within(wulan).getByText('No age yet')).toHaveAttribute('data-tone', 'amber');
-    expect(within(screen.getByRole('radio', { name: /Ibu Rosa Damayanti/ })).queryByText('No age yet')).not.toBeInTheDocument();
-    await userEvent.click(wulan);
-    const card = document.querySelector('[data-missing-card]') as HTMLElement;
-    expect(card).toHaveTextContent('This lead has no age or gender yet. Fill them in once and they are kept on the lead.');
-    // Under the list, on the same screen.
-    expect(screen.getByRole('radiogroup', { name: 'Your Sales leads' }).compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING)
-      .toBeTruthy();
-  });
-
-  it('P19.7-T2 AC-4 Lanjut saves both to the lead, pinned, says Umur tersimpan di lead, then makes the draft', async () => {
-    const { calls } = show({ 'PATCH /leads/l-wulan': { body: { ...WULAN, age: 51, gender: 'female', version: 4 } } });
-    await userEvent.click(await screen.findByRole('radio', { name: /Ibu Wulan Sari/ }));
-    const next = screen.getByRole('button', { name: 'Next' });
     expect(next).toBeDisabled();
-    await userEvent.type(screen.getByRole('textbox', { name: 'Age at next birthday' }), '51');
     await userEvent.click(screen.getByRole('radio', { name: 'Female' }));
+    await userEvent.click(screen.getByRole('button', { name: '+ Client details (optional)' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Married' }));
+    await userEvent.type(screen.getByRole('textbox', { name: 'City' }), ' Bandung ');
+    await userEvent.click(screen.getByRole('button', { name: 'Education fund' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Hospital costs' }));
     await userEvent.click(next);
     await waitFor(() => expect(nav.replace).toHaveBeenCalledWith('/proposal/p-new?step=2'));
-    expect(body(calls, 'PATCH', '/leads/l-wulan')).toEqual([{ age: 51, gender: 'female', version: 3 }]);
-    expect(body(calls, 'POST', '/proposals')).toEqual([{ leadId: 'l-wulan' }]);
-    expect(await screen.findByText('Age saved on the lead')).toBeInTheDocument();
+    expect(body(calls, 'POST', '/proposals')).toEqual([{
+      leadId: 'l-wulan',
+      client: { age: 36, gender: 'female', details: { ...EMPTY_DETAILS, status: 'married', city: 'Bandung', needs: ['HOSPITAL', 'EDUCATION'] } },
+    }]);
+    // AC-4: no lead write at all.
+    expect(calls.some((c) => c.url.includes('/leads') && c.init.method && c.init.method !== 'GET')).toBe(false);
   });
 
-  it('P19.7-T2 AC-2 nothing is stored until Lanjut: the three fields live in the tab', async () => {
+  it('P19.14-T1 AC-5 a lead with an earlier proposal starts from its client — the age the server moved up', async () => {
     const { calls } = show();
-    await screen.findByRole('radio', { name: /Ibu Rosa Damayanti/ });
-    await userEvent.click(screen.getByRole('button', { name: 'New client' }));
-    await userEvent.type(screen.getByRole('textbox', { name: 'Name' }), 'Pak Budi');
-    expect(calls.some((c) => c.init.method && c.init.method !== 'GET')).toBe(false);
-    expect(JSON.parse(window.sessionStorage.getItem('ab.proposal.step1') ?? '{}')).toMatchObject({ mode: 'new', name: 'Pak Budi' });
+    await userEvent.click(await screen.findByRole('button', { name: /Ibu Rosa Damayanti/ }));
+    expect(screen.getByRole('textbox', { name: 'Age at next birthday' })).toHaveValue('43');
+    expect(screen.getByRole('radio', { name: 'Female' })).toHaveAttribute('aria-checked', 'true');
+    await userEvent.click(screen.getByRole('button', { name: 'Next' }));
+    await waitFor(() => expect(nav.replace).toHaveBeenCalled());
+    expect(body(calls, 'POST', '/proposals')[0].client).toEqual({
+      age: 43, gender: 'female', details: { ...EMPTY_DETAILS, city: 'Bandung', needs: ['HOSPITAL'] },
+    });
   });
 
-  it('P19.7-T2 AC-16 Lanjut is the main action, a floating pill above the tab bar', async () => {
+  it('P19.14-T1 AC-2 a proposal started from a lead skips the pick: ?leadId= is chosen, Ganti opens the search', async () => {
+    show({ 'GET /leads/l-rosa': { body: ROSA } }, RINA, 'leadId=l-rosa');
+    await waitFor(() => expect(document.querySelector('[data-chosen-lead="l-rosa"]')).not.toBeNull());
+    expect(screen.queryByRole('searchbox', { name: 'Search your leads' })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Change' }));
+    expect(await screen.findByRole('searchbox', { name: 'Search your leads' })).toBeInTheDocument();
+  });
+
+  it('P19.14-T1 AC-2 nothing is stored until Lanjut: the fields live in the tab', async () => {
+    const { calls } = show();
+    await chooseWulan();
+    await userEvent.type(screen.getByRole('textbox', { name: 'Age at next birthday' }), '36');
+    expect(calls.some((c) => c.init.method && c.init.method !== 'GET')).toBe(false);
+    expect(JSON.parse(window.sessionStorage.getItem('ab.proposal.step1') ?? '{}')).toMatchObject({ leadId: 'l-wulan', age: '36' });
+  });
+
+  it('P19.14-T1 AC-1 Lanjut is the main action, a floating pill above the tab bar', async () => {
     show();
-    await screen.findByRole('radio', { name: /Ibu Rosa Damayanti/ });
+    await screen.findByRole('button', { name: /Ibu Rosa Damayanti/ });
     expect(screen.getByRole('button', { name: 'Next' }).closest('[data-floating-bar]')).not.toBeNull();
   });
 
-  it('P19.7-T2 AC-14 a view-only session makes nothing: Lanjut stays disabled', async () => {
+  it('P19.14-T1 AC-6 a view-only session makes nothing: no lead is chosen, Lanjut stays disabled', async () => {
     show({}, VIEWING_RINA);
-    await userEvent.click(await screen.findByRole('radio', { name: /Ibu Rosa Damayanti/ }));
+    expect(await screen.findByRole('button', { name: /Ibu Rosa Damayanti/ })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled();
   });
 });

@@ -7,8 +7,9 @@ import { parse, SRC } from '@test/copy-scan';
 import { landingFor } from './landing';
 import type { Me } from './session';
 import {
-  canOpen, FAMILY_GATES, familyAllows, GATES, gatesFor, OWNER_ONLY, routeFor, ROUTES, type RouteFamily,
+  canOpen, FAMILY_GATES, familyAllows, GATES, gatesFor, readsOfficeAnalytics, routeFor, ROUTES, stewardsOffice, type RouteFamily,
 } from './route-access';
+import { enterKpm, leaveKpm } from './super-admin-kpm';
 
 /*
  * Who is who, with the grants the server resolves for each (`backend/src/modules/rbac/permissions.ts`), cut
@@ -23,9 +24,9 @@ const FIELD = [
 ];
 const LEADING = [...FIELD, 'member:search_untagged_pool', 'leader_request:read_inbox', 'coaching_profile:read'];
 const OFFICE = [
-  ...FIELD, 'member:search_untagged_pool', 'leader_request:read_inbox', 'kpm_overview:read', 'kpm_analytics:read',
+  ...FIELD, 'member:search_untagged_pool', 'leader_request:read_inbox', 'kpm_overview:read',
   'data_upload:read', 'kpm:read_profile', 'kpm:import_roster', 'activation_settings:read', 'training_settings:read',
-  'product_settings:read', 'campaign_settings:read', 'event_settings:read',
+  'product_settings:read', 'campaign_settings:read', 'event_settings:read', 'kpm_admin:list',
 ];
 
 const membership = (over: Partial<NonNullable<Me['membership']>> = {}): NonNullable<Me['membership']> => ({
@@ -66,11 +67,19 @@ const AGENT_WITH_REPORTS = makeMe({ membership: membership({ directCount: 1 }), 
 const PENDING = makeMe({ membership: membership({ status: 'pending' }), permissions: ['profile:read_self', 'notification:read_inbox'] });
 const REMOVED = makeMe({ membership: membership({ status: 'removed' }), permissions: ['profile:read_self'] });
 const NOBODY_S = makeMe({ membership: null, permissions: ['profile:read_self', 'notification:read_inbox'] });
+/**
+ * **A core leader** (ADR-0268 §1): an AB tagged *Core leader*, holding the Owner's grants in KPM, Pengaturan and People —
+ * but neither the KPM admins' (`kpm_admin:list`) nor the core leader tag's.
+ */
+const CORE_LEADER = makeMe({
+  membership: membership({ orgLevelCode: 'AB', hierarchyRole: 'ab', directCount: 4, isCoreLeader: true }),
+  permissions: [...LEADING, ...OFFICE.filter((p) => p !== 'kpm_admin:list')],
+});
 
 /** The addresses each family's checks are read against, one per kind of gate. */
 const ADDRESSES = {
   console: ['/admin', '/admin/billing', '/admin/tenants/kpm-1/roster'],
-  office: ['/kpm/overview', '/kpm/analytics/compliance', '/kpm/settings/activity-types', '/people/members/mem-2'],
+  office: ['/kpm/overview', '/kpm/settings/activity-types', '/people/members/mem-2'],
   field: ['/activity/log', '/unit/dashboard', '/coaching/mem-2/session', '/training/onboarding/m-1'],
 };
 
@@ -102,20 +111,50 @@ describe('canOpen — by family and role (2026-10-11)', () => {
     expect(opens(OWNER, ADDRESSES.console)).toEqual([]);
   });
 
-  it('an Admin opens the same, but for the Owner’s one page', () => {
+  it('an Admin opens the same — the KPM admins page included, read-only, since ADR-0268 §2', () => {
     expect(opens(ADMIN, ADDRESSES.office)).toEqual(ADDRESSES.office);
     expect(opens(ADMIN, ADDRESSES.field)).toEqual(ADDRESSES.field);
     expect(opens(ADMIN, ADDRESSES.console)).toEqual([]);
-    expect(canOpen('/people/admins', ADMIN)).toBe(false);
+    expect(canOpen('/people/admins', ADMIN)).toBe(true);
   });
 
-  it('/people/admins is the Owner’s alone, decided by being the Owner and not by the grant', () => {
+  it('ADR-0268 §2 /people/admins is decided by its gate, kpm_admin:list: the Owner and an Admin, never a core leader', () => {
+    expect(gatesFor('/people/admins')).toEqual(['member:read_profile', 'kpm_admin:list']);
     expect(canOpen('/people/admins', OWNER)).toBe(true);
-    // An Admin given the grant by hand is still not the Owner, as the console's nav decides (`ownerOnly`).
-    expect(canOpen('/people/admins', makeMe({ ...ADMIN, permissions: [...OFFICE, 'kpm_admin:grant'] }))).toBe(false);
-    // The Owner without it is refused by the page's own gate.
-    expect(canOpen('/people/admins', makeMe({ ...OWNER, permissions: OFFICE }))).toBe(false);
-    expect(OWNER_ONLY).toEqual(['/people/admins']);
+    expect(canOpen('/people/admins', ADMIN)).toBe(true);
+    expect(canOpen('/people/admins', CORE_LEADER)).toBe(false);
+    // Whoever lacks the grant is refused by the page's own gate.
+    expect(canOpen('/people/admins', makeMe({ ...OWNER, permissions: OFFICE.filter((p) => p !== 'kpm_admin:list') }))).toBe(false);
+  });
+
+  it('ADR-0268 §1 a core leader opens the KPM, People and Pengaturan pages their grants allow, and the field view', () => {
+    expect(opens(CORE_LEADER, ADDRESSES.office)).toEqual(ADDRESSES.office);
+    expect(opens(CORE_LEADER, ['/kpm/data-upload', '/people/import', '/people/org-tree', '/people/members'])).toEqual([
+      '/kpm/data-upload', '/people/import', '/people/org-tree', '/people/members',
+    ]);
+    expect(opens(CORE_LEADER, ADDRESSES.field)).toEqual(ADDRESSES.field);
+    expect(opens(CORE_LEADER, ADDRESSES.console)).toEqual([]);
+    // The tag alone, on an AB holding only a leader's grants, opens no office page: the gates still decide.
+    const untagged = makeMe({ ...AB, membership: { ...AB.membership!, isCoreLeader: true } });
+    expect(opens(untagged, ['/kpm/overview', '/people/import'])).toEqual([]);
+  });
+
+  it('ADR-0268 §3 a Super Admin inside a KPM opens its office pages as its Owner, and the console; outside, none', () => {
+    const inside = makeMe({ ...SUPER_ADMIN, permissions: [...SUPER_ADMIN.permissions, ...OFFICE, 'kpm_admin:grant'] });
+    expect(opens(inside, ADDRESSES.office)).toEqual([]);
+    enterKpm('65b1f0c2a4d3e5f6a7b8c9e0');
+    try {
+      expect(opens(inside, ADDRESSES.office)).toEqual(ADDRESSES.office);
+      expect(canOpen('/people/admins', inside)).toBe(true);
+      expect(opens(inside, ADDRESSES.console)).toEqual(ADDRESSES.console);
+      // The field view is a member's: the Super Admin is nobody's member in the KPM.
+      expect(opens(inside, ADDRESSES.field)).toEqual([]);
+      // A support session is a member's, never the Super Admin inside: it follows the member.
+      expect(opens(makeMe({ ...AGENT, isImpersonating: true, impersonatedBy: 'u-root' }), ADDRESSES.office)).toEqual([]);
+    } finally {
+      leaveKpm();
+    }
+    expect(opens(inside, ADDRESSES.office)).toEqual([]);
   });
 
   it('an AB and an AAB open the field view, the coaching of a person they lead included, and no console', () => {
@@ -167,22 +206,11 @@ describe('canOpen — by family and role (2026-10-11)', () => {
     expect(canOpen('/notifications', REMOVED)).toBe(false);
   });
 
-  it('P18.5-T5 KPM analytics is the Owner’s, an Admin’s and a Core Leader’s — in their own shell — and no other leader’s', () => {
-    const analytics = ['/kpm/analytics', '/kpm/analytics/compliance?category=training'];
-    // The AB and AAB hold the grant for this (ADR-0159 §2); whether they are one is the session's fact.
-    const withGrant = (me: Me, isCoreLeader: boolean) => makeMe({
-      ...me, membership: { ...me.membership!, isCoreLeader }, permissions: [...me.permissions, 'kpm_analytics:read'],
-    });
-    for (const leader of [AB, AAB]) {
-      expect(opens(withGrant(leader, true), analytics)).toEqual(analytics);
-      expect(opens(withGrant(leader, false), analytics)).toEqual([]);
-    }
-    expect(opens(OWNER, analytics)).toEqual(analytics);
-    expect(opens(ADMIN, analytics)).toEqual(analytics);
-    // An Agent holds no grant, whatever a session claimed; a Super Admin reads it only as a member, in a session.
-    expect(opens(makeMe({ ...AGENT, membership: { ...AGENT.membership!, isCoreLeader: true } }), analytics)).toEqual([]);
-    expect(opens(makeMe({ ...SUPER_ADMIN, permissions: EVERY_GATE }), analytics)).toEqual([]);
-    expect(ROUTES['/kpm/analytics']).toBe('shared');
+  it('P19.19-T4 AC-1 KPM Analytics is gone for everyone: neither route is a page any more (ADR-0272 §1)', () => {
+    expect(ROUTES['/kpm/analytics']).toBeUndefined();
+    expect(ROUTES['/kpm/analytics/compliance']).toBeUndefined();
+    expect(ROUTES['/admin/tenants/[kpmId]/analytics']).toBeUndefined();
+    expect(opens(OWNER, ['/kpm/analytics', '/kpm/analytics/compliance'])).toEqual([]);
   });
 
   it('the screens for somebody not signed in are nowhere to return to', () => {
@@ -207,6 +235,7 @@ describe('familyAllows — whose chrome a reader may be in, which the shells ask
     ['the Owner', OWNER, ['tenant', 'agent']],
     ['an Admin', ADMIN, ['tenant', 'agent']],
     ['an AB', AB, ['agent']],
+    ['a core leader, an AB tagged (ADR-0268 §1)', CORE_LEADER, ['tenant', 'agent']],
     ['an AAB', AAB, ['agent']],
     ['an Agent', AGENT, ['agent']],
     ['an Agent with a report', AGENT_WITH_REPORTS, ['agent']],
@@ -218,6 +247,22 @@ describe('familyAllows — whose chrome a reader may be in, which the shells ask
     expect(allowed(me)).toEqual(expected);
   });
 
+  it('ADR-0268 §3 a Super Admin inside a KPM is in the office’s chrome too, and out of it on leaving', () => {
+    enterKpm('65b1f0c2a4d3e5f6a7b8c9e0');
+    try {
+      expect(allowed(SUPER_ADMIN)).toEqual(['admin', 'tenant']);
+      expect(stewardsOffice(SUPER_ADMIN)).toBe(true);
+      expect(readsOfficeAnalytics(SUPER_ADMIN)).toBe(true);
+      // Entering a KPM makes nobody else a steward of it: the header is ignored for them, and so is the state here.
+      expect(allowed(AB)).toEqual(['agent']);
+      expect(allowed(AS_AGENT)).toEqual(['agent']);
+    } finally {
+      leaveKpm();
+    }
+    expect(allowed(SUPER_ADMIN)).toEqual(['admin']);
+    expect(readsOfficeAnalytics(SUPER_ADMIN)).toBe(false);
+  });
+
   it('the screens for somebody not signed in are nobody’s chrome, and the routes outside every group everybody’s', () => {
     for (const me of [SUPER_ADMIN, OWNER, AGENT]) {
       expect(familyAllows('auth', me)).toBe(false);
@@ -226,7 +271,7 @@ describe('familyAllows — whose chrome a reader may be in, which the shells ask
   });
 
   it('every landing is in a family that admits its reader, so a shell’s redirect cannot go round in a circle', () => {
-    for (const me of [SUPER_ADMIN, OWNER, ADMIN, AB, AAB, AGENT, AGENT_WITH_REPORTS, PENDING, PENDING_OWNER, REMOVED, NOBODY_S]) {
+    for (const me of [SUPER_ADMIN, OWNER, ADMIN, CORE_LEADER, AB, AAB, AGENT, AGENT_WITH_REPORTS, PENDING, PENDING_OWNER, REMOVED, NOBODY_S]) {
       const landing = landingFor(me);
       expect(familyAllows(ROUTES[routeFor(landing)!], me), landing).toBe(true);
     }
@@ -247,8 +292,6 @@ describe('canOpen — matching an address to its page', () => {
   });
 
   it('holds a page to its own gate, and to its layouts’ gates, which reach every page beneath them', () => {
-    // Outside every group since P18.5-T5 (ADR-0159 §3): its layout's gate alone, no console shell's.
-    expect(gatesFor('/kpm/analytics/compliance')).toEqual(['kpm_analytics:read']);
     expect(gatesFor('/kpm/overview')).toEqual(['member:read_profile', 'kpm_overview:read']);
     expect(gatesFor('/coaching/[membershipId]/activity')).toEqual(['coaching_session:read', 'activity_log:read_raw']);
     expect(gatesFor('/training/[categoryCode]/[moduleCode]')).toEqual(['training_progress:read']);
@@ -270,8 +313,8 @@ describe('canOpen — matching an address to its page', () => {
   });
 
   it('ignores the query and the hash, and a trailing slash', () => {
-    expect(canOpen('/kpm/analytics/compliance?category=training&item=m-1#units', OWNER)).toBe(true);
-    expect(canOpen('/kpm/analytics/compliance#x', AGENT)).toBe(false);
+    expect(canOpen('/kpm/overview?group=none#compliance', OWNER)).toBe(true);
+    expect(canOpen('/kpm/overview#x', AGENT)).toBe(false);
     expect(canOpen('/kpm/overview/', OWNER)).toBe(true);
     expect(canOpen('/leader-meetings/shared/tok?from=wa', AGENT)).toBe(true);
   });
@@ -433,11 +476,14 @@ describe('the route table is the app directory’s', () => {
     expect(existsSync(join(SRC, 'components', 'admin-shell.tsx'))).toBe(false);
   });
 
-  it('P19.2-T1 AC-6 OWNER_ONLY is the office view’s Owner-only items', () => {
-    const nav = readFileSync(join(SRC, 'lib', 'field-nav.ts'), 'utf8');
-    const ownerOnly = [...nav.matchAll(/isKpmOwner \? \[dest\('[^']+', '([^']+)'/g)].map((m) => m[1]);
-    expect(ownerOnly.length).toBeGreaterThan(0);
-    expect([...OWNER_ONLY].sort()).toEqual(ownerOnly.sort());
+  /*
+   * *Replaced 2026-11-20 (ADR-0268 §2):* **no page is the Owner's alone.** `OWNER_ONLY` named *Manage KPM admins*, which
+   * the office menu hid from an Admin; the Admin now reads it, and the gate decides who opens it (`kpm_admin:list`).
+   */
+  it('ADR-0268 §2 no route is decided by being the Owner: the KPM admins page by its gate alone', () => {
+    const source = readFileSync(join(SRC, 'lib', 'route-access.ts'), 'utf8');
+    expect(source).not.toMatch(/export const OWNER_ONLY/);
+    expect(GATES.filter((g) => g.route === '/people/admins').map((g) => g.permission)).toEqual(['kpm_admin:list']);
   });
 
   it('no component declares a gate of its own: a gate is on the page or the layout, where the table keys it', () => {

@@ -17,7 +17,7 @@ import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
 import { formatCalendarDay } from '@/lib/format';
 import {
-  deleteProposal, duplicateProposal, listProposals, newProposalHref, proposalHref, proposalPdf, type ProposalRow,
+  deleteProposal, duplicateProposal, listProposals, newProposalHref, proposalHref, proposalPdf, proposalRowHref, type ProposalRow,
 } from '@/lib/proposals';
 import { saveFile } from '@/lib/save-file';
 import { useCan, useSession } from '@/lib/session';
@@ -165,7 +165,7 @@ export function ProposalHistory() {
             <ul aria-label={t.history.heading} className="flex flex-col gap-2">
               {rows.map((row) => {
                 const items: ActionMenuItem[] = [
-                  { label: t.history.open, onSelect: () => router.push(proposalHref(row.id, row.status === 'done' ? 3 : 2)) },
+                  { label: t.history.open, onSelect: () => router.push(proposalRowHref(row)) },
                   ...(canDownload && row.status === 'done' ? [{ label: t.history.download, onSelect: () => { void download(row); } }] : []),
                   ...(canCreate && !row.leadDeleted ? [{ label: t.history.duplicate, onSelect: () => { void duplicate(row); } }] : []),
                   ...(canDelete ? [{ label: t.history.delete, tone: 'alert' as const, glyph: '🗑', onSelect: () => setDeleting(row) }] : []),
@@ -173,7 +173,7 @@ export function ProposalHistory() {
                 return (
                   <li key={row.id} data-proposal-row={row.id} className="relative flex items-center gap-2 rounded-lg bg-card py-2 pl-4 pr-2">
                     <Link
-                      href={proposalHref(row.id, row.status === 'done' ? 3 : 2)}
+                      href={proposalRowHref(row)}
                       className="min-w-0 flex-1 py-1 after:absolute after:inset-0 after:content-['']"
                     >
                       <span className="flex items-center gap-2">

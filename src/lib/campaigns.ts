@@ -201,13 +201,10 @@ export const PROTOTYPE_COPY = {
   upcoming: EN.upcoming,
   ended: EN.ended,
   ongoing: EN.ongoing,
-  promotionCriteria: EN.promotionCriteria,
-  productionClubs: EN.productionClubs,
   noRunning: EN.noRunning,
   noUpcoming: EN.noUpcoming,
   noEnded: EN.noEnded,
-  noPromotion: EN.noPromotion,
-  noOngoing: EN.noOngoing,
+  noStructural: EN.noStructural,
   /** Every campaign is the office's (OD-156, ADR-0146): the source tag reads *KPM* (`tagLabel`, `:8029`). */
   sourceTag: EN.sourceTag,
   promotionPath: EN.promotionPath,
@@ -432,7 +429,7 @@ export const seasonalFilters = (language: Language = SOURCE_LANGUAGE): readonly 
 export const SEASONAL_FILTERS = seasonalFilters(SOURCE_LANGUAGE);
 
 export interface CampaignSection {
-  id: 'running' | 'upcoming' | 'ended' | 'promotion' | 'ongoing';
+  id: 'running' | 'upcoming' | 'ended' | 'structural';
   heading: string;
   empty: string;
   items: CampaignCard[];
@@ -455,20 +452,17 @@ export function seasonalSections(
   return sections.filter((s) => filter === 'all' || s.id === filter);
 }
 
-/** The structural view's two sections (`renderStructural`, `:8102-8111`), in the server's order. */
+/**
+ * **The structural view: one section** (P19.25-T5 AC-1, ADR-0282 §4), in the server's order. It was two — *Promotion
+ * Criteria* and *Production Clubs* (`renderStructural`, `:8102-8111`) — until the owner's *"no Production club"* and
+ * *"MOC / Club: not shown anywhere for now"* (19 Nov): a campaign is *Struktural* or *Musiman*, and nothing else.
+ */
 export function structuralSections(campaigns: readonly CampaignCard[], language: Language = SOURCE_LANGUAGE): CampaignSection[] {
   const t = campaignWordsIn(language);
-  const structural = campaigns.filter((c) => c.kind === 'structural');
-  return [
-    {
-      id: 'promotion', heading: t.promotionCriteria, empty: t.noPromotion,
-      items: structural.filter((c) => c.subtype === 'promotion'),
-    },
-    {
-      id: 'ongoing', heading: t.productionClubs, empty: t.noOngoing,
-      items: structural.filter((c) => c.subtype !== 'promotion'),
-    },
-  ];
+  return [{
+    id: 'structural', heading: t.structural, empty: t.noStructural,
+    items: campaigns.filter((c) => c.kind === 'structural'),
+  }];
 }
 
 /**

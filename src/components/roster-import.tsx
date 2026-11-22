@@ -1,480 +1,430 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useId, useState } from 'react';
-import { Cell, DataTable, Row } from '@/components/ui/data-table';
-import { Button, Card, ErrorBanner, Field, Textarea } from '@/components/ui/field';
-import { ConsoleCode } from '@/components/ui/console-code';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { KpmStructure } from '@/components/org-tree/kpm-tree';
+import { MemberSheet } from '@/components/people/member-sheet';
+import { HIT_AREA } from '@/components/people/people-parts';
+import { Button, ErrorBanner } from '@/components/ui/field';
 import { LineIcon } from '@/components/ui/line-icon';
-import { Toast, useToast } from '@/components/ui/toast';
+import { Modal } from '@/components/ui/modal';
+import { SkeletonCards } from '@/components/ui/skeleton';
 import { TonePill, type PillTone } from '@/components/ui/tone-pill';
-import { useMessages } from '@/i18n/language-provider';
+import { useToast } from '@/components/ui/toast';
+import { useFigureLanguage, useMessages } from '@/i18n/language-provider';
 import { rosterImportMessages } from '@/i18n/messages/roster-import';
-import { toDisplayError, type ApiError } from '@/lib/api-client';
-import { errorReference } from '@/lib/browser-errors';
-import { cn } from '@/lib/cn';
-import { inviteWhatsAppLink } from '@/lib/invites';
-import { saveFile } from '@/lib/save-file';
-import { useSession } from '@/lib/session';
-import { usePhone } from '@/lib/use-phone';
-import { LeaderLimitNotice, isLeaderLimit } from './leader-limit-notice';
 import {
-  downloadRosterTemplate,
-  importRoster,
-  importRosterFile,
-  previewRoster,
-  previewRosterFile,
-  ROSTER_TEMPLATE_FILENAME,
-  rosterTemplate,
-  SKIPPED_ROWS_FILENAME,
-  type RosterImportResult,
-  type RosterOutcome,
-  type RosterPreview,
-  type RosterTemplateFormat,
+  downloadRosterTemplate, importRosterFile, previewRosterFile, ROSTER_TEMPLATE_FILENAME,
 } from '@/lib/admin';
+import { toDisplayError, type ApiError } from '@/lib/api-client';
+import { cn } from '@/lib/cn';
+import { formatOfficeDay, OFFICE_TIME_ZONE } from '@/lib/format';
+import { inviteWhatsAppLink } from '@/lib/invites';
+import { readOrgTree, type OrgTree } from '@/lib/org';
+import {
+  previewPeopleRows, readRosterImports, rowsToCsv, savePeopleRows, type PeoplePreview, type PeopleRow, type PeopleSaved,
+  type RosterImportView,
+} from '@/lib/people';
+import { saveFile } from '@/lib/save-file';
 
-/**
- * **The file's columns, in its order, and what each holds** (P18.9-T4 AC-4, ADR-0176 §6; A3's since P19.3-T4, ADR-0205
- * §5). The names are the file's header — *Kode agen*, *Nama*, *Peran* … — the same in both languages, because they are
- * what the file holds (P18.10-T3 AC-4); what each holds is the rule the import applies, which the Excel template's
- * *Petunjuk* sheet spells out in full.
- */
+/** The template's eleven columns, in its order — the file's contract (ADR-0205 §5), the same in both languages. */
 const COLUMNS = [
-  ['Kode agen', 'agentCode'], ['Nama', 'fullName'], ['Peran', 'role'], ['Kode upline', 'upline'], ['No. WhatsApp', 'phone'],
-  ['Email', 'email'], ['Tanggal bergabung', 'joinDate'], ['Waktu', 'workStatus'], ['Tanggal lahir', 'dateOfBirth'],
-  ['Jenis kelamin', 'gender'], ['Bulan bergabung di perusahaan', 'companyJoinMonth'],
+  'Kode agen', 'Nama', 'Peran', 'Kode upline', 'No. WhatsApp', 'Email', 'Tanggal bergabung', 'Waktu', 'Tanggal lahir',
+  'Jenis kelamin', 'Bulan bergabung di perusahaan',
 ] as const;
+/** What a column takes, where its hint is the file's own shape — the contract, the same in both languages (ADR-0205 §5). */
+const FORMATS: Readonly<Record<string, string>> = {
+  Peran: 'Agent / AAB / AB',
+  'Tanggal bergabung': 'DD/MM/YYYY',
+  Waktu: 'Full-time / Part-time',
+  'Tanggal lahir': 'DD/MM/YYYY',
+  'Jenis kelamin': 'L / P',
+  'Bulan bergabung di perusahaan': 'YYYY-MM',
+};
+const hintOf = (words: Record<string, string>, column: string): string | undefined => words[column] ?? FORMATS[column];
+
+/** The three a row cannot do without (*wajib*). */
+const REQUIRED = new Set<string>(['Kode agen', 'Nama', 'Peran']);
+
+/** What a row comes to, as its pill says it: *Baru*, *Diperbarui*, *Perlu dicek* — or *Dilewati*. */
+type RowState = 'new' | 'updated' | 'check' | 'skipped';
+const STATE_TONE: Record<RowState, PillTone> = { new: 'green', updated: 'blue', check: 'amber', skipped: 'red' };
+const stateOf = (row: PeopleRow): RowState =>
+  row.outcome === 'skipped' ? 'skipped' : row.flagged.length > 0 ? 'check' : row.outcome === 'updated' ? 'updated' : 'new';
 
 /**
- * A3's chips: *Masuk* green, *Diperbarui* blue, *Dilewati* red — each with its words, never the colour alone — and
- * *Diundang lewat WhatsApp* grey, as New Hires draws an invitation still waiting (ADR-0250 §4).
+ * **Import people** (P19.20-T5; ADR-0273 §6, amending ADR-0205 §5–§11 and ADR-0250 for the screen; the People mockup's
+ * frames 13–21) — the same pattern as Data upload.
+ *
+ * - **One navy card** (AC-1): *Tambah banyak anggota sekaligus · Isi template, lalu unggah*, *"Satu baris per orang ·
+ *   wajib: kode agen, nama, peran · Lihat kolom"*, *Unggah file* and *Unduh template* — nothing else. *Lihat kolom* opens a
+ *   compact three-column grid of the eleven columns, the required marked *, a short hint each.
+ * - **After *Unggah*** (AC-2): *Unggah anggota* — the file and *Ganti*, the tiles *orang baru · diperbarui · perlu dicek ·
+ *   semua disimpan*, the rows with a status pill; **a tapped row opens its cells to fix or fill**, the unreadable field in
+ *   yellow; *Periksa lagi* checks the corrected rows again, and ***Simpan semua (n orang)*** saves — the file as it came,
+ *   or the corrected rows with its name (`roster`, `fileName`). The same agent code updates, never duplicates; an
+ *   unreadable optional cell is left empty, *perlu dicek*, and the person still added; new people are invited by email or
+ *   WhatsApp — the WhatsApp ones shared from here once saved.
+ * - **Below** (AC-3): ***Struktur saat ini*** — the KPM's tree, AB → AAB → Agent under each leader, *Lihat seluruh struktur
+ *   di Org tree ›*; after a save the new people under their upline with a green *Baru* on a light green row — then
+ *   ***Riwayat unggah*** (`GET /people/imports`). A row of the tree opens the member sheet.
+ * - The Owner, the Admins, a core leader and the Super Admin inside the KPM (AC-4): `kpm:import_roster`, the page's gate.
+ *   **No word *impor* on the screen.**
  */
-const OUTCOME_TONE: Record<RosterOutcome, PillTone> = { imported: 'green', updated: 'blue', invited: 'grey', skipped: 'red' };
-
-/**
- * Filling and updating an office from a spreadsheet (P3.2-T4; the setup spec's §A3 since P19.3-T4, ADR-0205).
- *
- * Rendered by two routes: `/admin/tenants/[kpmId]/roster`, where a Super Admin names the office, and `/people/import`,
- * where an Owner or an Admin does not have to because their session already says which one. One component, because the
- * two differ only in where the office id comes from.
- *
- * **Three parts, the guide apart from the data** (ADR-0184): *Unduh template* — Excel, recommended, and CSV; *Panduan
- * pengisian* — the file's columns and its rules, open on a desktop and folded on a phone; *Unggah* — the filled file,
- * `.xlsx` or `.csv`, sent as it is for the server to read, or the paste. **Template, upload, preview, import.**
- *
- * **Under A3 each row has a result** (AC-10): *Masuk*, *Diperbarui* or *Dilewati*, with the server's reason, and the
- * line above them — *"N orang baru siap diimpor, M diperbarui, K baris dilewati."* The skipped rows download as the same
- * columns with an *Alasan* column, built by the server so the browser never splits a CSV. *Impor N orang* writes the
- * valid rows as one unit; *Kirim undangan lewat email* (on by default) mails each new person a one-time link to choose
- * their password. **No password is ever shown** (ADR-0205 §10).
- */
-export function RosterImport({
-  kpmId,
-  backHref,
-  touchTargets = false,
-}: {
-  kpmId: string;
-  backHref: string;
-  /**
-   * **Every control of its own 44px tall below 1024px** (P19.2-T3 AC-4; UI-142) on `/people/*`. Opt-in, so
-   * `/admin/tenants/[kpmId]/roster` — the Super Admin's, another ticket's (UI-135) — draws what it drew.
-   */
-  touchTargets?: boolean;
-}) {
+export function RosterImport({ kpmId }: { kpmId: string }) {
   const t = useMessages(rosterImportMessages);
-  /** A line a finger aims at, 44px tall below 1024px, where `touchTargets` asks for it. */
-  const line = touchTargets ? 'max-lg:min-h-11' : undefined;
-  const phone = usePhone();
-  const recommendedId = useId();
-  const guideHeadingId = useId();
-  const inviteHintId = useId();
-  const { toast, show } = useToast();
-  // The leader limit's words differ by reader (P13.2-T4 AC-5): the Super Admin can raise it.
-  const { me } = useSession();
-  const audience = me?.user.platformRole === 'super_admin' ? 'platform' : 'office';
-  // The filled file first: the Excel template is the recommended way in (ADR-0184). The paste stays, second.
-  const [how, setHow] = useState<'file' | 'paste'>('file');
-  const [rows, setRows] = useState('');
+  const figures = useFigureLanguage();
+  const { show } = useToast();
+  const picker = useRef<HTMLInputElement>(null);
+  const [columnsOpen, setColumnsOpen] = useState(false);
   const [file, setFile] = useState<File | null>(null);
-  const [preview, setPreview] = useState<RosterPreview | null>(null);
-  const [done, setDone] = useState<RosterImportResult | null>(null);
-  /** A3's checkbox, on by default. */
-  const [invite, setInvite] = useState(true);
+  const [preview, setPreview] = useState<PeoplePreview | null>(null);
+  const [cells, setCells] = useState<string[][]>([]);
+  /** Rows changed since the file came: saved as corrected text, not the file. */
+  const [dirty, setDirty] = useState(false);
+  /** Rows changed since the last check: *Periksa lagi* is offered. */
+  const [edited, setEdited] = useState(false);
+  const [openRow, setOpenRow] = useState<number | null>(null);
+  const [busy, setBusy] = useState<null | 'reading' | 'checking' | 'saving'>(null);
   const [error, setError] = useState<ApiError | null>(null);
-  const [busy, setBusy] = useState<'preview' | 'commit' | null>(null);
-  const [examples, setExamples] = useState<string[][]>([]);
-  /** The template being fetched, and why the last one could not be — said beside the buttons, with a way to ask again. */
-  const [saving, setSaving] = useState<RosterTemplateFormat | null>(null);
-  const [templateError, setTemplateError] = useState<{ format: RosterTemplateFormat; error: ApiError } | null>(null);
-  /** The guide is open on a desktop and folded on a phone, where the upload would otherwise be a long scroll away. */
-  const [guideOpen, setGuideOpen] = useState(true);
-  useEffect(() => { setGuideOpen(!phone); }, [phone]);
+  const [saved, setSaved] = useState<PeopleSaved | null>(null);
+  const [tree, setTree] = useState<OrgTree | null>(null);
+  const [history, setHistory] = useState<RosterImportView[] | null>(null);
+  const [fresh, setFresh] = useState<Set<string>>(new Set());
+  const [sheet, setSheet] = useState<string | null>(null);
 
-  /*
-   * The three worked examples, for the paste box's placeholder. Read from the API rather than written here: an example
-   * the screen composed could disagree with the parser. A placeholder is all they are, so a read that fails leaves the
-   * box without one and asks nothing of the reader.
-   */
-  useEffect(() => {
-    let live = true;
-    rosterTemplate()
-      .then((template) => { if (live) setExamples(template.examples); })
-      .catch(() => undefined);
-    return () => { live = false; };
+  const loadBelow = useCallback(async () => {
+    const [read, files] = await Promise.all([
+      readOrgTree(undefined, 'kpm').catch(() => null),
+      readRosterImports().catch(() => [] as RosterImportView[]),
+    ]);
+    setTree(read);
+    setHistory(files);
+    return read;
   }, []);
+  useEffect(() => { void loadBelow(); }, [loadBelow]);
 
-  /** **The template as a file, fetched with the token and saved** (ADR-0184), the office named for its ladder. */
-  async function download(format: RosterTemplateFormat) {
-    setSaving(format);
-    setTemplateError(null);
-    try {
-      saveFile(await downloadRosterTemplate(format, kpmId), ROSTER_TEMPLATE_FILENAME[format]);
-    } catch (err) {
-      setTemplateError({ format, error: toDisplayError(err) });
-    } finally {
-      setSaving(null);
-    }
-  }
+  const answered = (next: PeoplePreview) => {
+    setPreview(next);
+    setCells(next.rows.map((r) => [...r.cells]));
+  };
 
-  /** The file is kept as it was chosen and sent as bytes: the server reads a workbook or a CSV, the browser neither. */
-  function choose(event: React.ChangeEvent<HTMLInputElement>) {
-    const chosen = event.target.files?.[0] ?? null;
-    setError(null);
-    setPreview(null);
-    setDone(null);
+  async function choose(chosen: File | undefined) {
+    if (!chosen) return;
     setFile(chosen);
-  }
-
-  const ready = how === 'file' ? file !== null : rows.trim() !== '';
-
-  async function check() {
-    setBusy('preview');
+    setDirty(false);
+    setEdited(false);
+    setOpenRow(null);
     setError(null);
+    setBusy('reading');
     try {
-      setPreview(how === 'file' && file ? await previewRosterFile(kpmId, file) : await previewRoster(kpmId, rows));
+      answered(await previewRosterFile(kpmId, chosen) as PeoplePreview);
     } catch (err) {
       setError(toDisplayError(err));
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  async function commit() {
-    setBusy('commit');
-    setError(null);
-    try {
-      const result = how === 'file' && file ? await importRosterFile(kpmId, file, invite) : await importRoster(kpmId, rows, invite);
-      setDone(result);
       setPreview(null);
-      setRows('');
-      setFile(null);
-      // A3's toast, naming email (ADR-0205 §7).
-      show(t.toast({
-        imported: result.counts.imported, updated: result.counts.updated, whatsApp: result.counts.invited, invited: result.invited > 0,
-      }));
+    } finally {
+      setBusy(null);
+      if (picker.current) picker.current.value = '';
+    }
+  }
+
+  async function recheck() {
+    if (!preview) return;
+    setBusy('checking');
+    setError(null);
+    try {
+      answered(await previewPeopleRows(kpmId, rowsToCsv(preview.header, cells)));
+      setEdited(false);
     } catch (err) {
       setError(toDisplayError(err));
-      // A file the server could not read carries its issues: the list reappears rather than a bare refusal.
-      // `err.error.details`, not `err.details`: `ApiRequestError` carries the envelope on an `error` field.
-      const issues = (err as { error?: { details?: { issues?: RosterPreview['issues'] } } })?.error?.details?.issues;
-      if (issues) setPreview({ issues, header: [], counts: { imported: 0, updated: 0, invited: 0, skipped: 0 }, rows: [], skippedCsv: null });
     } finally {
       setBusy(null);
     }
   }
 
-  /** *"⬇ Unduh baris yang dilewati"*: the server's CSV — the file's columns and *Alasan* — saved as it is. */
-  function downloadSkipped(csv: string) {
-    saveFile(new Blob([csv], { type: 'text/csv;charset=utf-8' }), SKIPPED_ROWS_FILENAME);
+  async function saveAll() {
+    if (!preview || !file) return;
+    setBusy('saving');
+    setError(null);
+    try {
+      const result = dirty
+        ? await savePeopleRows(kpmId, rowsToCsv(preview.header, cells), file.name)
+        : await importRosterFile(kpmId, file) as PeopleSaved;
+      const created = result.counts.imported + result.counts.invited;
+      show(t.done({ created, updated: result.counts.updated }));
+      setSaved(result);
+      setPreview(null);
+      setFile(null);
+      const read = await loadBelow();
+      const newCodes = new Set(result.rows.filter((r) => r.outcome === 'imported').map((r) => r.agentCode));
+      setFresh(new Set((read?.nodes ?? []).filter((n) => newCodes.has(n.agentCode)).map((n) => n.membershipId)));
+    } catch (err) {
+      setError(toDisplayError(err));
+    } finally {
+      setBusy(null);
+    }
   }
 
-  /* The paste box shows the same three people the template does, tab-separated — what a clipboard carries. */
-  const placeholder = examples.map((cells) => cells.join('\t')).join('\n');
-  const code = (typed: string) => <code>{typed}</code>;
-  // The rows the import acts on: the new, the updated, and those it invites on WhatsApp (ADR-0250 §4).
-  const writes = preview ? preview.counts.imported + preview.counts.updated + preview.counts.invited : 0;
+  async function template() {
+    try {
+      saveFile(await downloadRosterTemplate('xlsx', kpmId), ROSTER_TEMPLATE_FILENAME.xlsx);
+    } catch (err) {
+      setError(toDisplayError(err));
+    }
+  }
+
+  const rows = preview?.rows ?? [];
+  const toSave = preview ? preview.counts.imported + preview.counts.invited + preview.counts.updated : 0;
+  const invites = (saved?.rows ?? []).filter((r) => r.invite);
 
   return (
-    <>
-      <Toast toast={toast} />
-      {/* The office filled up while the import was written (P13.2-T4 AC-4): said in the limit's words, never its code. */}
-      {error && (isLeaderLimit(error)
-        ? <LeaderLimitNotice error={error} audience={audience} action="roster" />
-        : <ErrorBanner {...error} />)}
-
-      {done ? (
-        <Card>
-          <h2 className="font-display text-lg font-bold text-navy">
-            {t.done({ imported: done.counts.imported, updated: done.counts.updated, whatsApp: done.counts.invited })}
-          </h2>
-          <p className="mt-1 text-md text-muted">
-            {done.invited > 0 ? t.invitedLine({ n: done.invited }) : done.counts.imported > 0 ? t.notInvitedLine : null}
-            {/* ADR-0250 §4: the WhatsApp invitations are shared from their rows, or later from New Hires. */}
-            {done.counts.invited > 0 && <>{done.invited > 0 || done.counts.imported > 0 ? ' ' : null}{t.whatsAppLine}</>}
+    <div className="flex flex-col gap-5">
+      {/* ── The navy card (AC-1) ── */}
+      <section className="flex flex-col gap-3 rounded-lg bg-secondary px-5 py-4 text-secondary-contrast md:flex-row md:items-center">
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold text-secondary-muted">{t.eyebrow}</p>
+          <h2 className="font-display text-xl font-bold text-primary">{t.title}</h2>
+          <p className="text-sm">
+            {t.line}{' · '}
+            <button type="button" className={cn('underline', HIT_AREA)} aria-expanded={columnsOpen} onClick={() => setColumnsOpen((o) => !o)}>
+              {t.seeColumns}
+            </button>
           </p>
-          {done.skippedCsv && (
-            <div className="mt-3 flex flex-wrap items-center gap-3">
-              <p className="text-md text-navy">{t.skippedLine({ n: done.counts.skipped })}</p>
-              <Button variant="secondary" className={line} onClick={() => downloadSkipped(done.skippedCsv as string)}>
-                {t.downloadSkipped}
-              </Button>
+        </div>
+        <div className="flex flex-col gap-2 max-md:w-full">
+          <input ref={picker} type="file" accept=".xlsx,.csv" className="sr-only" tabIndex={-1} aria-hidden="true"
+            onChange={(e) => void choose(e.target.files?.[0])} />
+          <Button className="min-h-11 rounded-pill" disabled={busy !== null} onClick={() => picker.current?.click()}>
+            <LineIcon name="upload" className="h-4 w-4" />{busy === 'reading' ? t.reading : t.upload}
+          </Button>
+          <button type="button" onClick={() => void template()}
+            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-pill bg-secondary-contrast/10 px-4 font-semibold text-secondary-contrast hover:bg-secondary-contrast/20">
+            <LineIcon name="download" className="h-4 w-4" />{t.template}
+          </button>
+        </div>
+      </section>
+
+      {error && !preview && <ErrorBanner {...error} />}
+
+      {columnsOpen && (
+        <section aria-labelledby="columns-title" className="rounded-lg bg-card p-4">
+          <div className="mb-2 flex items-center justify-between">
+            <h2 id="columns-title" className="text-md font-bold text-navy">{t.columnsTitle}</h2>
+            <button type="button" aria-label={t.closeColumns} onClick={() => setColumnsOpen(false)}
+              className="flex h-11 w-11 items-center justify-center rounded-pill text-muted hover:bg-hover-row">
+              <LineIcon name="close" className="h-4 w-4" />
+            </button>
+          </div>
+          <dl className="grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2 md:grid-cols-3">
+            {COLUMNS.map((column) => (
+              <div key={column}>
+                <dt className="text-md font-bold text-navy">
+                  {column}{REQUIRED.has(column) && <span className="text-alert" aria-hidden="true"> *</span>}
+                </dt>
+                {hintOf(t.hints, column) && <dd className="text-sm text-muted">{hintOf(t.hints, column)}</dd>}
+              </div>
+            ))}
+          </dl>
+          <p className="mt-2 text-sm text-muted"><span className="text-alert" aria-hidden="true">*</span>{t.columnsNote.slice(1)}</p>
+        </section>
+      )}
+
+      {invites.length > 0 && (
+        <section aria-labelledby="invites-title" className="rounded-lg bg-card p-4">
+          <h2 id="invites-title" className="mb-2 text-md font-bold text-navy">{t.whatsAppTitle}</h2>
+          <ul className="flex flex-col gap-1.5">
+            {invites.map((r) => {
+              const link = r.invite ? inviteWhatsAppLink(r.invite.phone, r.fullName, r.invite.link) : null;
+              return (
+                <li key={r.line} className="flex items-center justify-between gap-2">
+                  <span className="truncate font-bold uppercase text-ink">{r.fullName}</span>
+                  {link && (
+                    <a href={link} target="_blank" rel="noreferrer" aria-label={t.sendOnWhatsApp({ name: r.fullName })}
+                      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-success text-white">
+                      <LineIcon name="whatsapp" className="h-5 w-5" />
+                    </a>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
+
+      {/* ── Struktur saat ini (AC-3) ── */}
+      <section aria-labelledby="structure-title">
+        <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
+          <h2 id="structure-title" className="text-md font-bold text-navy">{t.structureTitle}</h2>
+          <span className="text-sm text-muted">{fresh.size > 0 ? t.structureFresh({ n: fresh.size }) : t.structureNote}</span>
+        </div>
+        {tree === null ? <SkeletonCards count={3} label={t.structureLoading} /> : (
+          <KpmStructure
+            tree={tree}
+            fresh={fresh}
+            onOpen={setSheet}
+            footer={(
+              <Link href="/people/org-tree" className="flex min-h-11 items-center justify-center border-t border-divider text-md font-semibold text-navy hover:bg-hover-row">
+                {t.seeOrgTree}
+              </Link>
+            )}
+          />
+        )}
+      </section>
+
+      {/* ── Riwayat unggah (AC-3) ── */}
+      <section aria-labelledby="history-title">
+        <h2 id="history-title" className="mb-2 text-md font-bold text-navy">{t.historyTitle}</h2>
+        {history === null ? null : history.length === 0 ? (
+          <p className="rounded-lg bg-card px-4 py-3 text-md text-muted">{t.historyEmpty}</p>
+        ) : (
+          <ul className="flex flex-col divide-y divide-divider overflow-hidden rounded-lg bg-card">
+            {history.map((h) => (
+              <li key={h.importId} data-import={h.importId} className="flex flex-wrap items-center gap-3 px-4 py-2.5">
+                <LineIcon name="document" className="h-5 w-5 text-muted" />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-md font-semibold text-navy">{h.fileName ?? t.noFileName}</p>
+                  <p className="text-sm text-muted">
+                    {t.historyLine({ date: formatOfficeDay(h.importedAt, OFFICE_TIME_ZONE, figures), by: h.byName?.toUpperCase() ?? null })}
+                  </p>
+                </div>
+                <span className="flex gap-1.5">
+                  <TonePill tone="green">{t.newN({ n: h.created })}</TonePill>
+                  <TonePill tone="blue">{t.updatedN({ n: h.updated })}</TonePill>
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      {/* ── Unggah anggota (AC-2) ── */}
+      {preview && file && (
+        <Modal
+          open
+          title={t.dialogTitle}
+          onClose={() => { setPreview(null); setFile(null); setError(null); }}
+          className="max-w-[40rem]"
+          footer={(
+            <div className="flex flex-col gap-2">
+              {edited ? (
+                <Button variant="secondary" className="min-h-11 w-full rounded-pill" disabled={busy !== null} onClick={() => void recheck()}>
+                  {t.recheck}
+                </Button>
+              ) : null}
+              <div className="grid grid-cols-2 gap-2">
+                <Button variant="secondary" className="min-h-11 w-full rounded-pill" onClick={() => { setPreview(null); setFile(null); }}>{t.cancel}</Button>
+                <Button className="min-h-11 w-full rounded-pill" disabled={busy !== null || toSave === 0 || preview.issues.length > 0}
+                  onClick={() => void saveAll()}>
+                  {busy === 'saving' ? t.saving : t.saveAll({ n: toSave })}
+                </Button>
+              </div>
             </div>
           )}
-          <Results rows={done.rows} touchTargets={touchTargets} />
-          <Link
-            href={backHref}
-            className={cn('mt-4 inline-block text-md font-semibold text-navy underline', touchTargets && 'max-lg:inline-flex max-lg:min-h-11 max-lg:items-center')}
-          >
-            {t.back}
-          </Link>
-        </Card>
-      ) : (
-        <>
-          {/* 1 · The template: Excel, recommended, and CSV (ADR-0184). Always in view (P18.9-T4 AC-4). */}
-          <Card>
-            <h2 className="font-display text-lg font-bold text-navy">{t.downloadHeading}</h2>
-            <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2">
-              <Button
-                className="gap-1"
-                onClick={() => void download('xlsx')}
-                disabled={saving !== null}
-                aria-describedby={recommendedId}
-              >
-                <span aria-hidden="true">⬇</span>{saving === 'xlsx' ? t.preparing : t.downloadExcel}
-              </Button>
-              <span id={recommendedId} className="text-sm font-semibold text-success">{t.recommended}</span>
-              <Button variant="secondary" onClick={() => void download('csv')} disabled={saving !== null}>
-                {saving === 'csv' ? t.preparing : t.downloadCsv}
-              </Button>
+        >
+          <div className="flex flex-col gap-3 pb-2">
+            {error && <ErrorBanner {...error} />}
+            <div className="flex items-center gap-3 border-b border-divider pb-2">
+              <LineIcon name="document" className="h-6 w-6 text-muted" />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-md font-semibold text-navy">{file.name}</p>
+                <p className="text-sm text-muted">{t.rowsN({ n: rows.length })}</p>
+              </div>
+              <button type="button" className="min-h-11 px-2 text-md text-navy underline" onClick={() => picker.current?.click()}>{t.change}</button>
             </div>
-            {templateError && (
-              <p role="alert" className="mt-2 flex flex-wrap items-center gap-x-2 text-sm text-alert">
-                <span>{t.templateFailed({ message: templateError.error.message })}</span>
-                <Button variant="inline" onClick={() => void download(templateError.format)}>{t.tryAgain}</Button>
-                {/* A server's code and request id for support; none for a failure the browser detected (AC-10). */}
-                {errorReference(templateError.error) === null
-                  ? <ConsoleCode code={templateError.error.code} message={templateError.error.message} />
-                  : <span className="text-2xs text-muted">{errorReference(templateError.error)}</span>}
-              </p>
-            )}
-          </Card>
-
-          {/* 2 · The fill-in guide, apart from the data: open on a desktop, folded on a phone. */}
-          <Card className="mt-4">
-            <details
-              open={guideOpen}
-              onToggle={(e) => setGuideOpen(e.currentTarget.open)}
-              aria-labelledby={guideHeadingId}
-              className="group"
-            >
-              <summary className={cn('flex cursor-pointer list-none items-center gap-2 [&::-webkit-details-marker]:hidden', line)}>
-                <span aria-hidden="true" className="text-muted transition-transform group-open:rotate-90">›</span>
-                <h2 id={guideHeadingId} className="font-display text-lg font-bold text-navy">{t.guideHeading}</h2>
-              </summary>
-              {/* One row per person, these columns in this order (A3): the file's header names, and what each holds. */}
-              <DataTable className="mt-3" caption={t.guideCaption} columns={[t.guideColumns.column, t.guideColumns.holds]}>
-                {COLUMNS.map(([column, key]) => {
-                  const holds = t.holds[key];
-                  return (
-                    <Row key={column}>
-                      <Cell className="font-semibold">{column}</Cell>
-                      <Cell className="text-muted">{typeof holds === 'function' ? holds({ code }) : holds}</Cell>
-                    </Row>
-                  );
-                })}
-              </DataTable>
-              <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-muted">
-                <li>{t.ruleRequired}</li>
-                <li>{t.ruleOnePerRow}</li>
-                <li>{t.ruleUplines}</li>
-                <li>{t.ruleSkipped}</li>
-              </ul>
-            </details>
-          </Card>
-
-          {/* 3 · The upload: the filled file first, sent as it is; the paste second, which needs no file at all. */}
-          <Card className="mt-4">
-            <h2 className="font-display text-lg font-bold text-navy">{t.uploadHeading}</h2>
-            <fieldset className="mt-3">
-              <legend className="text-md font-semibold text-navy">{t.how}</legend>
-              <div className="mt-2 flex flex-wrap gap-4">
-                {([
-                  ['file', t.upload],
-                  ['paste', t.paste],
-                ] as const).map(([value, label]) => (
-                  <label key={value} className={cn('flex items-center gap-2 text-md text-navy', line)}>
-                    <input
-                      type="radio"
-                      name="how"
-                      value={value}
-                      checked={how === value}
-                      onChange={() => {
-                        // Switching wipes what was there: checking a paste and importing a file chosen earlier is not
-                        // a thing anybody means to do.
-                        setHow(value);
-                        setRows('');
-                        setFile(null);
-                        setPreview(null);
-                        setError(null);
+            {preview.issues.length > 0 ? (
+              <div role="alert" className="rounded-md bg-pill-red px-3 py-2 text-sm text-pill-red-ink">
+                <p className="font-semibold">{t.unreadable}</p>
+                <ul className="list-disc pl-5">{preview.issues.map((i) => <li key={`${i.line}-${i.column}`}>{i.message}</li>)}</ul>
+              </div>
+            ) : (
+              <>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  <Tile n={preview.counts.imported + preview.counts.invited} label={t.tiles.created} tone="bg-pill-green text-pill-green-ink" />
+                  <Tile n={preview.counts.updated} label={t.tiles.updated} tone="bg-pill-blue text-pill-blue-ink" />
+                  <Tile n={rows.filter((r) => stateOf(r) === 'check' || stateOf(r) === 'skipped').length} label={t.tiles.check} tone="bg-pill-amber text-pill-amber-ink" />
+                  <Tile n={toSave} label={t.tiles.saved} tone="bg-base text-navy" />
+                </div>
+                <ul className="flex flex-col divide-y divide-divider rounded-md border border-hairline">
+                  {rows.map((row, index) => (
+                    <PreviewRow
+                      key={row.line}
+                      row={row}
+                      header={preview.header}
+                      cells={cells[index] ?? row.cells}
+                      open={openRow === index}
+                      onToggle={() => setOpenRow(openRow === index ? null : index)}
+                      onCell={(column, value) => {
+                        setCells((now) => now.map((c, i) => (i === index ? c.map((v, j) => (j === column ? value : v)) : c)));
+                        setDirty(true);
+                        setEdited(true);
                       }}
                     />
-                    {label}
-                  </label>
-                ))}
-              </div>
-            </fieldset>
-
-            {how === 'file' ? (
-              <Field label={t.rosterFile} htmlFor="roster" className="mt-4">
-                <input
-                  id="roster"
-                  type="file"
-                  accept=".xlsx,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv"
-                  onChange={choose}
-                  className={cn('text-md text-navy', line)}
-                />
-              </Field>
-            ) : (
-              <Field label={t.rows} htmlFor="rows" hint={t.rowsHint} className="mt-4">
-                <Textarea
-                  id="rows"
-                  rows={8}
-                  value={rows}
-                  onChange={(e) => setRows(e.target.value)}
-                  placeholder={placeholder}
-                  className="font-mono text-sm"
-                />
-              </Field>
-            )}
-
-            <div className="mt-4 flex flex-wrap items-center gap-3">
-              <Button onClick={() => void check()} disabled={!ready || busy !== null}>
-                {busy === 'preview' ? t.checking : t.check}
-              </Button>
-              {how === 'file' && file && <span className="text-sm text-muted">{file.name}</span>}
-            </div>
-
-            {/* The file could not be read at all: its problems, and nothing to import. */}
-            {preview && preview.issues.length > 0 && (
-              <div className="mt-4">
-                <h3 className="font-display text-md font-bold text-navy">{t.unreadable({ n: preview.issues.length })}</h3>
-                <p className="mt-1 text-sm text-muted">{t.unreadableLine}</p>
-                <DataTable
-                  className="mt-3"
-                  caption={t.problemsCaption}
-                  columns={[t.problemColumns.line, t.problemColumns.column, t.problemColumns.problem]}
-                >
-                  {preview.issues.map((issue) => (
-                    <Row key={`${issue.line}-${issue.column}-${issue.message}`}>
-                      <Cell>{issue.line}</Cell>
-                      <Cell className="text-muted">{issue.column}</Cell>
-                      <Cell>{issue.message}</Cell>
-                    </Row>
                   ))}
-                </DataTable>
-              </div>
+                </ul>
+                <p className="text-sm text-muted">{t.note}</p>
+              </>
             )}
-
-            {/* A3's preview: the line, a result per row, the invitation, and the three actions. */}
-            {preview && preview.issues.length === 0 && (
-              <div className="mt-4">
-                <p role="status" className="font-semibold text-navy">{t.ready(preview.counts)}</p>
-                <Results rows={preview.rows} />
-                {preview.counts.imported > 0 && (
-                  <div className="mt-3">
-                    <label className={cn('flex items-center gap-2 text-md text-navy', line)}>
-                      <input
-                        type="checkbox"
-                        checked={invite}
-                        onChange={(e) => setInvite(e.target.checked)}
-                        aria-describedby={inviteHintId}
-                      />
-                      {t.invite({ n: preview.counts.imported })}
-                    </label>
-                    <p id={inviteHintId} className="mt-1 text-sm text-muted">{t.inviteHint}</p>
-                  </div>
-                )}
-                <div className="mt-3 flex flex-wrap items-center gap-3">
-                  <Button onClick={() => void commit()} disabled={busy !== null || writes === 0}>
-                    {busy === 'commit' ? t.importing : t.importN({ n: writes })}
-                  </Button>
-                  <Button variant="secondary" disabled={busy !== null} onClick={() => setPreview(null)}>{t.cancel}</Button>
-                  {preview.skippedCsv && (
-                    <Button variant="secondary" onClick={() => downloadSkipped(preview.skippedCsv as string)}>
-                      {t.downloadSkipped}
-                    </Button>
-                  )}
-                </div>
-              </div>
-            )}
-          </Card>
-        </>
+          </div>
+        </Modal>
       )}
-    </>
+
+      {sheet && <MemberSheet membershipId={sheet} onClose={() => setSheet(null)} onChanged={() => void loadBelow()} />}
+    </div>
   );
 }
 
-/**
- * **Each row and what it comes to** (A3): *Kode agen · Nama · Peran · Kode upline · Hasil*, the server's words beside the
- * chip. **What a row leaves out** — a cell left empty, no number, details missing (ADR-0250 §2, §3) — follows in the
- * warning tone. **A row invited on WhatsApp** carries, once imported, the WhatsApp button that sends its link (§4).
- */
-function Results({ rows, touchTargets = false }: { rows: RosterPreview['rows']; touchTargets?: boolean }) {
-  const t = useMessages(rosterImportMessages);
-  if (rows.length === 0) return null;
+function Tile({ n, label, tone }: { n: number; label: string; tone: string }) {
   return (
-    <DataTable
-      className="mt-3"
-      caption={t.resultsCaption}
-      columns={[t.resultColumns.agentCode, t.resultColumns.name, t.resultColumns.role, t.resultColumns.upline, t.resultColumns.result]}
-    >
-      {rows.map((row) => (
-        <Row key={row.line}>
-          <Cell className="whitespace-nowrap"><code className="text-sm">{row.agentCode}</code></Cell>
-          <Cell>{row.fullName}</Cell>
-          <Cell>{row.role}</Cell>
-          <Cell className="whitespace-nowrap">{row.leaderAgentCode ? <code className="text-sm">{row.leaderAgentCode}</code> : t.none}</Cell>
-          <Cell>
-            <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
-              <TonePill tone={OUTCOME_TONE[row.outcome]}>{t.outcome[row.outcome]}</TonePill>
-              {row.invite && <SendOnWhatsApp name={row.fullName} invite={row.invite} touchTargets={touchTargets} />}
-              {row.messages.length > 0 && <span className="text-sm text-muted">{row.messages.join(' ')}</span>}
-              {row.warnings.length > 0 && <span className="text-sm text-pill-amber-ink">{row.warnings.join(' ')}</span>}
-            </span>
-          </Cell>
-        </Row>
-      ))}
-    </DataTable>
+    <div className={cn('rounded-md px-3 py-2', tone)}>
+      <div className="font-display text-xl font-bold">{n}</div>
+      <div className="text-sm font-semibold">{label}</div>
+    </div>
   );
 }
 
-/**
- * **The row's invitation, sent on WhatsApp** (ADR-0250 §4): the chat with the invitee's number, *+ Tambah agent*'s
- * message and link filled in — `inviteWhatsAppLink`, as *Menunggu bergabung* sends one. An icon in the *Hasil* cell, its
- * name and tooltip saying whom it goes to; none when the number is not one WhatsApp opens.
- */
-function SendOnWhatsApp({
-  name, invite, touchTargets,
-}: { name: string; invite: { link: string; phone: string }; touchTargets: boolean }) {
+/** One row of the file: the NAME, what it comes to, and — tapped — its cells to fix or fill. */
+function PreviewRow({
+  row, header, cells, open, onToggle, onCell,
+}: {
+  row: PeopleRow;
+  header: readonly string[];
+  cells: readonly string[];
+  open: boolean;
+  onToggle: () => void;
+  onCell: (column: number, value: string) => void;
+}) {
   const t = useMessages(rosterImportMessages);
-  const href = inviteWhatsAppLink(invite.phone, name, invite.link);
-  if (!href) return null;
-  const label = t.sendOnWhatsApp({ name });
+  const id = useId();
+  const state = stateOf(row);
+  const line = [row.role, row.leaderAgentCode ? t.upline({ code: row.leaderAgentCode }) : null, ...row.messages, ...row.warnings]
+    .filter(Boolean).join(' · ');
   return (
-    <a
-      href={href}
-      target="_blank"
-      rel="noopener noreferrer"
-      aria-label={label}
-      title={label}
-      data-channel="whatsapp"
-      className={cn(
-        'flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-whatsapp text-white',
-        'focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus-ring',
-        touchTargets && 'max-lg:h-11 max-lg:w-11',
+    <li data-preview-row={row.line} data-state={state}>
+      <button type="button" onClick={onToggle} aria-expanded={open} aria-controls={id} aria-label={t.rowOpen({ name: row.fullName })}
+        className="flex min-h-12 w-full items-center gap-3 px-3 py-2 text-left hover:bg-hover-row">
+        <div className="min-w-0 flex-1">
+          <p className="truncate font-bold uppercase text-ink">{row.fullName || row.agentCode}</p>
+          <p className="truncate text-sm text-muted">{line}</p>
+        </div>
+        <TonePill tone={STATE_TONE[state]}>{t.pill[state]}</TonePill>
+        <LineIcon name={open ? 'chevronUp' : 'chevronDown'} className="h-4 w-4 text-muted" />
+      </button>
+      {open && (
+        <div id={id} className="grid grid-cols-1 gap-2 px-3 pb-3 sm:grid-cols-3">
+          {header.map((column, index) => {
+            const flagged = row.flagged.includes(column);
+            const inputId = `${id}-${index}`;
+            return (
+              <div key={column} className={cn('rounded-md border px-2.5 py-1.5', flagged ? 'border-primary bg-pill-amber' : 'border-hairline bg-card')}>
+                <label htmlFor={inputId} className="block text-xs text-muted">{column}</label>
+                <input id={inputId} value={cells[index] ?? ''} onChange={(e) => onCell(index, e.target.value)}
+                  className={cn('min-h-11 w-full bg-transparent text-md font-bold text-navy placeholder:font-normal placeholder:text-muted focus:outline-none')}
+                  placeholder={hintOf(t.hints, column)} />
+              </div>
+            );
+          })}
+        </div>
       )}
-    >
-      <LineIcon name="whatsapp" className="h-4 w-4" />
-    </a>
+    </li>
   );
 }

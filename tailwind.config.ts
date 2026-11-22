@@ -99,7 +99,9 @@ const config: Config = {
           'blue-ink': token('pill-blue-ink'),
         },
         // Words on white, and words on navy.
-        signal: { red: token('signal-red'), green: token('signal-green'), grey: token('signal-grey') },
+        signal: {
+          red: token('signal-red'), green: token('signal-green'), grey: token('signal-grey'), amber: token('signal-amber'),
+        },
         'on-navy': {
           red: token('on-navy-red'),
           green: token('on-navy-green'),
@@ -139,6 +141,10 @@ const config: Config = {
         badge: { potensi: token('badge-potensi'), won: token('badge-won') },
         potensi: { DEFAULT: token('pill-potensi'), ink: token('pill-potensi-ink') },
         kandidat: { DEFAULT: token('avatar-kandidat'), ink: token('avatar-kandidat-ink') },
+        // P19.22-T6, T7 (DESIGN-RULES; ADR-0276): the NPS bar, *Status kerja*, *Lama di KPM*, the response panel's agents.
+        nps: { promoter: token('nps-promoter'), passive: token('nps-passive'), detractor: token('nps-detractor') },
+        survey: { 'part-time': token('survey-part-time'), agent: token('survey-agent') },
+        tenure: { 1: token('tenure-1'), 2: token('tenure-2'), 3: token('tenure-3'), 4: token('tenure-4') },
         role: {
           ab: token('role-ab'),
           aab: token('role-aab'),
@@ -171,9 +177,24 @@ const config: Config = {
         title: ['var(--text-title)', '1.2'],
       },
       // `lg` is a card's corner: 12px, and 16px on a V1 surface; `row` a row's or a tile's inside one, 14px there (UI-008).
-      borderRadius: { sm: '4px', md: '8px', lg: 'var(--radius-card)', row: 'var(--radius-row)', pill: '999px' },
+      // `sidebar` the floating panel's 20px corners (P19.13-T2, UI-196).
+      borderRadius: {
+        sm: '4px', md: '8px', lg: 'var(--radius-card)', row: 'var(--radius-row)', pill: '999px', sidebar: 'var(--radius-sidebar)',
+      },
       boxShadow: { modal: 'var(--shadow-modal)', bar: 'var(--shadow-bar)' },
-      spacing: { sidebar: 'var(--sidebar-width)' },
+      /*
+       * **The desktop frame's spacing scale** (P19.13-T1 AC-1, AC-4; UI-192, UI-194; ADR-0252): `gap-cards` 16px between
+       * sibling cards, `gap-section` / `mb-section` 24px between sections and under the title row, `px-frame` the frame's
+       * 32px sides. Used behind `lg:` only: the phone keeps its own spacing.
+       */
+      spacing: {
+        sidebar: 'var(--sidebar-width)',
+        cards: 'var(--space-cards)',
+        section: 'var(--space-section)',
+        frame: 'var(--page-frame-gutter)',
+      },
+      // The frame's 1320px and a form's or a reading column's 720px (UI-192, UI-198): `lg:max-w-frame`, `lg:max-w-form`.
+      maxWidth: { frame: 'var(--page-frame-max)', form: 'var(--form-max)' },
     },
   },
   plugins: [],

@@ -147,6 +147,13 @@ export const sectionsWaiting = (template: Pick<NamedTemplate, 'sections'>): Temp
 /** Where a template's pages are. */
 export const companyHref = (companyId: string) => `/admin/companies/${companyId}`;
 export const settingsHref = (companyId: string) => `/admin/companies/${companyId}/settings`;
+/** P19.23-T4 (ADR-0278 §1): *Produk & proposal*, a product, the full editor, *Campaigns*, and *Terbitkan ke KPM*. */
+export const productsHref = (companyId: string) => `/admin/companies/${companyId}/products`;
+export const productHref = (companyId: string, productId: string) => `/admin/companies/${companyId}/products/${productId}`;
+export const productDetailsHref = (companyId: string) => `/admin/companies/${companyId}/products/details`;
+export const campaignsHref = (companyId: string) => `/admin/companies/${companyId}/settings/campaigns`;
+export const publishHref = (companyId: string) => `/admin/companies/${companyId}/publish`;
+export const proposalHref = (companyId: string) => `/admin/companies/${companyId}/proposal`;
 export const templateHref = (companyId: string, templateId: string) => `/admin/companies/${companyId}/templates/${templateId}`;
 export const sectionHref = (companyId: string, templateId: string, slug: SectionSlug) =>
   `${templateHref(companyId, templateId)}/${slug}`;

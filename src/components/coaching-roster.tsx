@@ -1,274 +1,188 @@
 'use client';
 
-import { useId, type ReactNode } from 'react';
-import { PersonRow, TreeIndent, TreeNode } from '@/components/ui/person-row';
-import { shortOfRung, useLadder } from '@/components/ui/role-badge';
-import { TonePill, type PillTone } from '@/components/ui/tone-pill';
-import { useLanguage, useMessages } from '@/i18n/language-provider';
+import { useId, useState } from 'react';
+import { MemberContactButtons } from '@/components/contact-buttons';
+import { Avatar } from '@/components/ui/avatar';
+import { LineIcon } from '@/components/ui/line-icon';
+import { PersonRow } from '@/components/ui/person-row';
+import { RungTag, useIsLeaderRung } from '@/components/ui/rung-tag';
+import { CoachingStatusTile } from '@/components/unit/coaching-status-tile';
+import { useFigureLanguage, useMessages } from '@/i18n/language-provider';
 import { coachingMessages } from '@/i18n/messages/coaching';
-import { cn } from '@/lib/cn';
-import { useMediaQuery } from '@/lib/use-media-query';
-import {
-  coachingSessionHref, firstName, lastOneOnOneLine, rosterStatusLabel,
-  type Roster, type RosterRow, type RosterStatus,
-} from '@/lib/coaching';
+import { unitDashboardMessages } from '@/i18n/messages/unit-dashboard';
+import { coachingSessionHref, firstName, type Roster, type RosterLeader, type RosterRow, type RosterSection } from '@/lib/coaching';
+import { formatNumber } from '@/lib/format';
+import { useCan } from '@/lib/session';
 
 /**
- * **The roster: one row per person, at every size** (UI V1, UI-033, UI-034; D-09, D-23, D-27).
+ * **The coaching roster, grouped by unit** (P19.18-T5 AC-1, AC-2; ADR-0271 §9; the brief's part B, gap 2;
+ * `coaching-owner-mobile` frames 1–3) — every reader's, the KPM Owner's being the whole office (OD-394: an AB's too).
  *
- * - **A 60px row** (`PersonRow`): the avatar, the NAME in capitals, and **the whole row opens their *Coaching Session***
- *   with a › — no orange *Coaching →* per row (UI-034).
- * - **Below 768px** the row's line is *1 hari lalu · oleh Agus*: *Last 1:1* and the first name of who held it, 12px
- *   grey — *Belum ada 1:1* grey too, never red; **red only for *terlambat***, which the words say as well (P18.5-T15
- *   AC-7). Then the status pill and the ›. **From 768px** the same facts in columns under a 40px header — *Nama · 1:1
- *   terakhir · Terakhir di-coaching oleh · Status* — every word 12px or more.
- * - **Groups under 36px bands**: *Agen langsung Anda · 3*, then *AAB units*, each AAB's people **as a tree** at every
- *   size (`TreeIndent`, the Group Tree's and New Hires'): indented 36px, a grey line down from the AAB, an elbow into
- *   each — the subtree as the server sends it, a nested AAB's people a level further in. No *↳*.
- * - **The status pill** is `GOAL_PACE_STATUS` in UI-005's tones — green *Sesuai target*, amber *Perlu dipantau*, red
- *   *Perlu perhatian*, grey *Goal belum diatur* — a tinted pill, never a dot.
+ * - **The card's head**: ***Semua orang · 30*** — everybody on the roster, the reader included — and on its right *1:1
+ *   terakhir*, the column the tiles answer.
+ * - **One orange line per unit**: the leader's photo, *Unit Anda* / *Unit AGUS PRASETYO* / *Belum punya leader*, *n orang*
+ *   and a ⌄ that opens and closes it — every unit open at first. **An AB below the Owner is a unit of their own, never
+ *   called AAB** (the label is their rung's own).
+ * - **Team lines**: each team inside a unit — an AAB with people — gets a line built like the unit's, the same tint, the
+ *   team leader's photo and *n orang*; never a folder to open.
+ * - **A person**: photo (initials without one), the orange **AB / AAB label** before the NAME in capitals (the naming
+ *   rule; agents none), the **coaching status tile** — red *Belum pernah coaching*, green *Coaching n hari lalu* up to 14
+ *   days, yellow after (`COACHING_STATUS`, the server's) — and under it ***oleh {COACH}***; WhatsApp; ›. **The whole row
+ *   opens their *Coaching Session*** where the reader coaches them (`opens`); the reader's own row (*ANDA (WILSON)*) opens
+ *   *Catatan coaching saya*; a row of the whole office outside the reader's own downline opens nothing.
+ * - **WhatsApp**: `MemberContactButtons`' rule — straight to WhatsApp with a number; *Isi nomor WhatsApp* for a reader who
+ *   may save one (`member:update_phone`); nothing on the reader's own row, nor for a reader who may not save a missing one.
  *
- * Everyone the reader coaches, which is their whole downline (ADR-0074): the server decides who. *Last 1:1* and the
- * status are the server's, worked out in the office's day; nothing here counts days.
- *
- * *Changed 2026-11-05 (P19.1-T5 AC-1; UI-115, `coaching-newhires-tablet` 1):* **a tablet (768–1023px) draws the phone's
- * rows, slightly larger, and no table** — at 768 the columns cut *ARIEF HIDA…* while *Terakhir di-coaching oleh* was
- * mostly *—*. Each row: a 40px avatar, the full NAME on one line and never cut, one 13px line — *17 hari lalu ·
- * terlambat · oleh Agus Prasetyo*, **only the *… · terlambat* part red**, who held it grey and in full — the status
- * pill, ›. A separate variant for the range (`useMediaQuery('tablet')`), so a phone's markup and a desktop's are what
- * they were, to the byte (the digests in `coaching/coaching-tablet.spec.tsx`).
+ * Phone, tablet and laptop draw the same rows, the same order, in one column; the server decides who and every verdict.
+ * *Changed 2026-11-20 (P19.18-T5): the rows were grouped as *Agen langsung Anda* and *Unit AAB* — the Owner's ABs under
+ * *Unit AAB* — with the 1:1's line and the `GOAL_PACE_STATUS` pill per row, and columns from 1024px.*
  */
-
-/** `GOAL_PACE_STATUS` as UI-005's pill tones. */
-const TONE = {
-  on_track: 'green',
-  watch_closely: 'amber',
-  needs_attention: 'red',
-  no_goal_set: 'grey',
-} as const satisfies Record<RosterStatus, PillTone>;
-
-/** The columns from 768px: their widths, so the header and every row line up (UI-034). */
-const COL = {
-  last: 'md:w-[132px] lg:w-[184px]',
-  coach: 'md:w-[132px] lg:w-[184px]',
-  status: 'md:w-[132px] lg:w-[150px]',
-} as const;
-
-/** A 60px row's elbow, at the middle of its avatar (`TreeNode`'s `--elbow`). */
-const ELBOW_60 = '[--elbow:1.875rem]';
-
-/**
- * **The tablet's avatar is 40px** (P19.1-T5 AC-1; `coaching-newhires-tablet`'s `.ini`), the phone's 36: the tree's line
- * moves 2px right with its centre — 32px in on a head's row (12px padding, half of 40), 20px on a child's.
- */
-const TABLET_AVATAR = 40;
-
-/** One person and the people under them, as the flat subtree the server sends (`depth`) nests. */
-interface Branch {
-  row: RosterRow;
-  children: Branch[];
-}
-
-/**
- * **The subtree as a tree**: each row's children are the rows after it that sit deeper, up to the next row that does
- * not. The server sends a unit depth-first, so this is its order kept, nested.
- */
-export function branchesOf(rows: readonly RosterRow[]): Branch[] {
-  const out: Branch[] = [];
-  let i = 0;
-  while (i < rows.length) {
-    const row = rows[i];
-    let j = i + 1;
-    while (j < rows.length && rows[j].depth > row.depth) j += 1;
-    out.push({ row, children: branchesOf(rows.slice(i + 1, j)) });
-    i = j;
-  }
-  return out;
-}
-
-/**
- * `tablet` is the page's answer when the page has one: it asks where it mounts, before its read (`use-media-query.ts`),
- * so the roster that arrives with the data is drawn at its size from its first frame. A caller with no page around it
- * (a sample, a spec) leaves it out and the roster asks for itself.
- */
-export function CoachingRoster({ roster, tablet: asked }: { roster: Roster; tablet?: boolean }) {
+export function CoachingRoster({ roster }: { roster: Roster; tablet?: boolean }) {
   const t = useMessages(coachingMessages).roster;
-  // The junior rung: a member on any other rung heads a unit of their own, nested or not, and carries its badge.
-  const ladder = useLadder();
-  const agentRung = [...ladder].sort((a, b) => a.displayOrder - b.displayOrder)[0]?.code;
-  const badged = (row: RosterRow) => agentRung !== undefined && row.rung.code.toUpperCase() !== agentRung.toUpperCase();
-  const { directAgents, units } = roster;
-  const directId = useId();
-  const unitsId = useId();
-  // P19.1-T5 AC-1 (UI-115): the phone's rows on a tablet, no table. Phone and desktop draw what they drew.
-  const own = useMediaQuery('tablet');
-  const tablet = asked ?? own;
+  const figures = useFigureLanguage();
+  const headingId = useId();
+  // Every unit open at first; a tap closes one (`coaching-owner-mobile`).
+  const [closed, setClosed] = useState<ReadonlySet<string>>(() => new Set());
+  const toggle = (key: string) => setClosed((now) => {
+    const next = new Set(now);
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
+    return next;
+  });
 
   return (
-    <div data-roster="" className="overflow-hidden rounded-lg border border-card-edge bg-card">
-      <h2 className="sr-only">{t.caption}</h2>
-      {/* The columns' header from 768px (UI-034): drawn for the eye; each row's cells say what they are. Not on a
-          tablet, which has no columns (P19.1-T5 AC-1). */}
-      {!tablet && (
-        <div
-          aria-hidden="true"
-          className="flex h-10 items-center gap-3 bg-hover-row px-3 text-xs font-semibold text-muted max-md:hidden"
+    <section data-roster="" aria-labelledby={headingId} className="overflow-hidden rounded-lg border border-card-edge bg-card">
+      <div className="flex min-h-12 items-center justify-between gap-3 px-3.5">
+        <h2 id={headingId} className="text-md font-bold text-ink">
+          {t.everyone}
+          <span className="ml-1 font-semibold text-muted">· {formatNumber(roster.total, {}, figures)}</span>
+        </h2>
+        {/* The column the tiles answer, for the eye; each tile says it in words. */}
+        <span aria-hidden="true" className="text-sm text-muted">{t.columns.last}</span>
+      </div>
+      {roster.sections.map((section) => (
+        <SectionBlock
+          key={section.key}
+          section={section}
+          open={!closed.has(section.key)}
+          onToggle={() => toggle(section.key)}
+        />
+      ))}
+    </section>
+  );
+}
+
+/** A unit line's words: *Unit Anda*, *Unit AGUS PRASETYO*, *Belum punya leader*. */
+function useUnitLabel() {
+  const t = useMessages(coachingMessages).roster;
+  return (section: Pick<RosterSection, 'kind' | 'leader'>) => (section.kind === 'own'
+    ? t.yourUnit
+    : section.leader === null ? t.unled : t.unitOf({ name: section.leader.name.toUpperCase() }));
+}
+
+/** One unit: its orange line, a toggle, then its people and its team lines. */
+function SectionBlock({ section, open, onToggle }: { section: RosterSection; open: boolean; onToggle: () => void }) {
+  const t = useMessages(coachingMessages).roster;
+  const label = useUnitLabel()(section);
+  const bodyId = useId();
+  return (
+    <section data-roster-section={section.kind} aria-label={label}>
+      <h3>
+        <button
+          type="button"
+          aria-expanded={open}
+          aria-controls={bodyId}
+          onClick={onToggle}
+          className="flex min-h-12 w-full items-center gap-2.5 border-t border-divider bg-primary/[0.12] px-3.5 py-1.5 text-left"
         >
-          <span className="min-w-0 flex-1 pl-12">{t.columns.name}</span>
-          <span className={cn('shrink-0', COL.last)}>{t.columns.last}</span>
-          <span className={cn('shrink-0', COL.coach)}>{t.columns.coachedBy}</span>
-          <span className={cn('shrink-0', COL.status)}>{t.columns.status}</span>
-          <span className="w-5 shrink-0" />
+          {section.leader && <LeaderAvatar leader={section.leader} />}
+          <span data-unit-label="" className="min-w-0 flex-1 truncate text-md font-bold text-ink">{label}</span>
+          <span className="shrink-0 text-sm font-semibold text-muted">{t.people({ n: section.count })}</span>
+          <LineIcon name={open ? 'chevronUp' : 'chevronDown'} className="h-4 w-4 shrink-0 text-signal-grey" />
+        </button>
+      </h3>
+      {open && (
+        <div id={bodyId}>
+          <ul role="list" className="divide-y divide-divider border-t border-divider">
+            {section.rows.map((row) => <li key={row.membershipId}><RosterPerson row={row} /></li>)}
+          </ul>
+          {section.teams.map((team) => {
+            const teamLabel = t.unitOf({ name: team.leader.name.toUpperCase() });
+            return (
+              <div key={team.key} data-roster-team={team.key}>
+                {/* A team line, built like the unit's — never a folder to open (AC-2). */}
+                <h4 className="flex min-h-12 items-center gap-2.5 border-t border-divider bg-primary/[0.12] py-1.5 pl-8 pr-3.5">
+                  <LeaderAvatar leader={team.leader} />
+                  <span className="min-w-0 flex-1 truncate text-base font-bold text-ink">{teamLabel}</span>
+                  <span className="shrink-0 text-sm font-semibold text-muted">{t.people({ n: team.count })}</span>
+                </h4>
+                <ul role="list" aria-label={teamLabel} className="divide-y divide-divider border-t border-divider">
+                  {team.rows.map((row) => <li key={row.membershipId}><RosterPerson row={row} /></li>)}
+                </ul>
+              </div>
+            );
+          })}
         </div>
       )}
-
-      {directAgents.length > 0 && (
-        <section aria-labelledby={directId}>
-          <GroupBand id={directId} label={t.directAgents} count={directAgents.length} />
-          <ul role="list" className="divide-y divide-divider">
-            {directAgents.map((row) => (
-              <li key={row.membershipId}><RosterPerson row={row} badged={badged(row)} tablet={tablet} /></li>
-            ))}
-          </ul>
-        </section>
-      )}
-
-      {units.length > 0 && (
-        <section aria-labelledby={unitsId}>
-          <GroupBand id={unitsId} label={t.aabUnits} />
-          <ul role="list" className="divide-y divide-divider">
-            {units.map((unit) => (
-              <li key={unit.head.membershipId}>
-                <RosterPerson row={unit.head} badged tablet={tablet} />
-                <Branches
-                  branches={branchesOf(unit.members)}
-                  label={t.unitOf({ name: unit.head.name })}
-                  badged={badged}
-                  tablet={tablet}
-                />
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-    </div>
+    </section>
   );
+}
+
+/** The leader's photo on a unit line or a team line, initials without one. */
+function LeaderAvatar({ leader }: { leader: RosterLeader }) {
+  return <Avatar name={leader.name} photoUrl={leader.photoUrl} seed={leader.membershipId} size={28} />;
 }
 
 /**
- * A leader's people, one level in, each with their own beneath them. The line drops from the leader's avatar — 30px in
- * on a head's row (its 12px padding and half the avatar), 18px on a child's, which has no padding — and each child's
- * avatar starts 36px right of its leader's (UI-033).
+ * One person: the row opens their *Coaching Session* where the reader coaches them, *Catatan coaching saya* on the
+ * reader's own row, nothing otherwise. The status tile, *oleh {COACH}* under it, WhatsApp, ›.
  */
-function Branches({
-  branches, label, badged, nested = false, tablet = false,
-}: {
-  branches: readonly Branch[];
-  label: string;
-  badged: (row: RosterRow) => boolean;
-  nested?: boolean;
-  /** A tablet's 40px avatars: the line 2px further in (`TABLET_AVATAR`). */
-  tablet?: boolean;
-}) {
-  const t = useMessages(coachingMessages).roster;
-  if (branches.length === 0) return null;
-  const indent = tablet
-    ? (nested ? 'ml-[19px]' : 'mb-1.5 ml-[31px]')
-    : (nested ? 'ml-[17px]' : 'mb-1.5 ml-[29px]');
-  return (
-    <TreeIndent label={label} className={cn('mt-0 gap-0 pl-[19px]', indent)}>
-      {branches.map(({ row, children }) => (
-        <TreeNode key={row.membershipId} className={ELBOW_60}>
-          <RosterPerson row={row} badged={badged(row)} className="pl-0" tablet={tablet} />
-          <Branches branches={children} label={t.unitOf({ name: row.name })} badged={badged} nested tablet={tablet} />
-        </TreeNode>
-      ))}
-    </TreeIndent>
-  );
-}
-
-/** A group's 36px band, its heading: *Agen langsung Anda · 3*. */
-function GroupBand({ id, label, count }: { id: string; label: string; count?: number }) {
-  return (
-    <h3 id={id} className="flex min-h-9 items-center border-t border-divider bg-hover-row px-3.5 text-base font-bold text-navy">
-      {label}
-      {count !== undefined && <span className="ml-1 font-semibold text-muted">· {count}</span>}
-    </h3>
-  );
-}
-
-/**
- * One person: the row opens their *Coaching Session* (`coachingSessionHref`). Below 768px *Last 1:1* and who held it
- * are the row's line; from 1024px they are its columns; on a tablet the line again, slightly larger, and no columns.
- */
-function RosterPerson({
-  row, badged, className, tablet = false,
-}: { row: RosterRow; badged: boolean; className?: string; tablet?: boolean }) {
-  const language = useLanguage();
-  const t = useMessages(coachingMessages).roster;
-  const last = row.lastOneOnOne;
-  const late = last?.overdue ?? false;
-  const when = lastOneOnOneLine(last, language);
-  const status: ReactNode = <TonePill tone={TONE[row.status]}>{rosterStatusLabel(row.status, language)}</TonePill>;
-  const badge = badged ? <TonePill tone="grey" className="px-1.5 py-0 leading-[18px]">{shortOfRung(row.rung)}</TonePill> : undefined;
-
-  if (tablet) {
-    return (
-      <PersonRow
+function RosterPerson({ row }: { row: RosterRow }) {
+  const u = useMessages(unitDashboardMessages);
+  const isLeader = useIsLeaderRung();
+  const canSavePhone = useCan('member:update_phone');
+  const [saved, setSaved] = useState<string | null>(null);
+  const href = row.isReader ? '/coaching/me' : row.opens ? coachingSessionHref(row.membershipId) : undefined;
+  const name = row.isReader ? u.you({ first: firstName(row.name) }) : row.name;
+  const phone = saved ?? row.phone;
+  const whatsApp = !row.isReader && (canSavePhone || phone) ? (
+    // A 36px circle; its 44px target reaches 4px into the gap either side.
+    <span data-roster-whatsapp="" className="-mx-1 flex">
+      <MemberContactButtons
+        membershipId={row.membershipId}
         name={row.name}
-        photoUrl={row.photoUrl ?? null}
-        seed={row.membershipId}
-        href={coachingSessionHref(row.membershipId)}
-        chevron
-        height={60}
-        avatarSize={TABLET_AVATAR}
-        className={cn('rounded-none', className)}
-        // The full name on one line, never cut (UI-115): no *…*, and room enough at 768px for every name the
-        // seed and staging carry; one longer than the row breaks at a space rather than run under the pill.
-        nameClassName="text-md text-clip whitespace-normal md:max-lg:text-md"
-        badge={badge}
-        meta={(
-          // *17 hari lalu · terlambat · oleh Agus Prasetyo*: only the first half red, and only when late (UI-115).
-          <span data-roster-line="" className="min-w-0 text-base text-signal-grey">
-            <span className={cn(late && 'text-signal-red')}>{when}</span>
-            {last?.coach && <> · {t.by({ name: last.coach.name })}</>}
-          </span>
-        )}
-        trailing={status}
+        phone={phone}
+        channels={['whatsapp']}
+        size={36}
+        onSaved={setSaved}
       />
-    );
-  }
-
+    </span>
+  ) : <span aria-hidden="true" className="w-9 shrink-0" />;
   return (
     <PersonRow
-      name={row.name}
+      name={name}
+      // The reader's row is labelled *Anda (WILSON)*; their initials are their own name's, never *A(*.
+      avatarName={row.name}
       photoUrl={row.photoUrl ?? null}
       seed={row.membershipId}
-      href={coachingSessionHref(row.membershipId)}
-      chevron
+      href={href}
+      chevron={href !== undefined}
       height={60}
-      className={cn('rounded-none', className)}
+      className="rounded-none py-2"
       nameClassName="text-md md:max-lg:text-md"
-      badge={badge}
+      // The orange AB / AAB label before the NAME (the naming rule); an agent's row none (UX-16).
+      tag={isLeader(row.rung) ? <RungTag rung={row.rung} className="mr-1.5" /> : undefined}
       meta={(
-        // The phone's line (UI-033): *1 hari lalu · oleh Agus*, red only when late.
-        <span data-roster-line="" className={cn('truncate md:hidden', late ? 'text-signal-red' : 'text-signal-grey')}>
-          {when}
-          {last?.coach && <> · {t.by({ name: firstName(last.coach.name) })}</>}
+        <span data-roster-line="" className="flex min-w-0 flex-col items-start gap-1">
+          <CoachingStatusTile status={row.coaching.status} days={row.coaching.days} />
+          {row.coaching.coach && (
+            <span className="min-w-0 truncate text-sm text-signal-grey">
+              {u.coachingStatus.by({ name: row.coaching.coach.name.toUpperCase() })}
+            </span>
+          )}
         </span>
       )}
-      trailing={(
-        <>
-          <span className={cn('shrink-0 text-base max-md:hidden', COL.last, late ? 'text-signal-red' : 'text-signal-grey')}>
-            {when}
-          </span>
-          <span className={cn('shrink-0 truncate text-base text-ink max-md:hidden', COL.coach)}>
-            <span className="sr-only">{t.columns.coachedBy}: </span>
-            {last?.coach?.name ?? '—'}
-          </span>
-          <span className={cn('shrink-0', COL.status)}>{status}</span>
-        </>
-      )}
+      trailing={whatsApp}
     />
   );
 }

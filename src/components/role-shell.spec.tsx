@@ -45,36 +45,34 @@ describe('RoleShell', () => {
     renderWithSession(<RoleShell title="Notifications">body</RoleShell>, { me: SUPER_ADMIN });
 
     expect(await screen.findByText('SUPERADMIN')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Manage companies' })).toBeInTheDocument();
+    // *Changed 2026-11-20 (P19.23-T1 AC-1; ADR-0277 §1):* the console's rail of seven, links with no group to open —
+    // *Dashboard · KPM · Anggota · Perusahaan · Persetujuan · Langganan*, *Platform* pinned at its foot.
+    const nav = screen.getByRole('navigation', { name: 'Main' });
+    expect(within(nav).getAllByRole('link').map((a) => a.getAttribute('href'))).toEqual([
+      '/admin', '/admin/tenants', '/admin/members', '/admin/companies', '/admin/approvals', '/admin/billing', '/admin/platform',
+    ]);
+    expect(within(nav).getByRole('link', { name: 'Companies' })).toHaveAttribute('href', '/admin/companies');
     // The failure this exists for: the agent nav has no way back to /admin.
     expect(screen.queryByRole('link', { name: 'Activity management' })).toBeNull();
   });
 
   /*
-   * *Changed 2026-11-05 (P19.2-T1; ADR-0197, ADR-0198):* **one shell, in the tab's view.** An Owner or an Admin on a
-   * shared page wore the office console until then; now the one shell draws *Akun saya*'s menu, or the office view's
-   * when the tab is in it (`lib/views.ts`), and no console tag.
+   * *Changed 2026-11-05 (P19.2-T1; ADR-0197):* **one shell** — an Owner or an Admin on a shared page wore the office
+   * console until then. *Changed 2026-11-20 (P19.17-T3 AC-4; ADR-0269):* **one menu, the role's**, with no view to be in:
+   * the Owner's and an Admin's field menu and their extras, on a shared page as on every other, and no console tag.
    */
-  it('P19.2-T1 AC-6 gives a KPM Owner the one shell in Akun saya: the field menu, no console', async () => {
-    stubFetch({ '/notifications': { body: { items: [], unread: 0 } } });
-    renderWithSession(<RoleShell title="Notifications">body</RoleShell>, {
-      me: member({ isKpmOwner: true }),
-    });
+  it.each([['a KPM Owner', { isKpmOwner: true }], ['an Admin', { isKpmAdmin: true }]] as const)(
+    'P19.17-T3 AC-4 gives %s the one shell and the one menu on a shared page: the field’s, then the extras',
+    async (_who, over) => {
+      stubFetch({ '/notifications': { body: { items: [], unread: 0 } } });
+      renderWithSession(<RoleShell title="Notifications">body</RoleShell>, { me: member(over) });
 
-    expect(await screen.findByRole('link', { name: 'Activity' })).toBeInTheDocument();
-    expect(screen.queryByText('KPM OWNER')).toBeNull();
-    expect(screen.queryByRole('link', { name: 'All members' })).toBeNull();
-  });
-
-  it('P19.2-T1 AC-6 gives an Admin whose tab is in the office view that view’s menu on a shared page', async () => {
-    window.sessionStorage.setItem('ab.view', 'kpm_admin');
-    onTestFinished(() => window.sessionStorage.clear());
-    stubFetch({ '/notifications': { body: { items: [], unread: 0 } } });
-    renderWithSession(<RoleShell title="Notifications">body</RoleShell>, {
-      me: member({ isKpmAdmin: true }),
-    });
-    expect(await screen.findByRole('link', { name: 'All members' })).toBeInTheDocument();
-  });
+      expect(await screen.findByRole('link', { name: 'Activity' })).toBeInTheDocument();
+      expect(screen.queryByText('KPM OWNER')).toBeNull();
+      expect(screen.getByRole('link', { name: 'All members' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'People Owner' })).toHaveAttribute('aria-expanded', 'true');
+    },
+  );
 
   it('gives everybody else the agent application', async () => {
     stubFetch({ '/notifications': { body: { items: [], unread: 0 } } });
@@ -166,11 +164,12 @@ describe('RoleShell', () => {
     expect(router.replace).not.toHaveBeenCalled();
   });
 
-  it('P19.2-T1 AC-4 lands each reader where the one shell’s menu begins: /admin for the platform, Home for a member', () => {
-    // There is no shell to pick any more (ADR-0197): the landing and the menu are both the role's, and the view's.
+  it('P19.17-T3 AC-8 lands each reader: /admin for the platform, the KPM Overview for the office’s, Home for a member', () => {
+    // There is no shell to pick any more (ADR-0197): the landing and the menu are both the role's.
     expect(landingFor(SUPER_ADMIN)).toBe('/admin');
-    expect(landingFor(member({ isKpmOwner: true }))).toBe('/home');
-    expect(landingFor(member({ isKpmAdmin: true }))).toBe('/home');
+    expect(landingFor(member({ isKpmOwner: true }))).toBe('/kpm/overview');
+    expect(landingFor(member({ isKpmAdmin: true }))).toBe('/kpm/overview');
+    expect(landingFor(member({}))).toBe('/home');
     expect(landingFor(null)).toBe('/login');
   });
 

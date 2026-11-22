@@ -34,14 +34,21 @@ const ANSWERS: Record<string, unknown> = {
   '/kpm/config': { activity: [], ratios: [], leadPipelines: [], version: 1 },
   '/kpm/org-levels': [],
   '/notifications': { items: [], unread: 0, total: 0, page: 1, pageSize: 20 },
+  // P19.18-T5 (ADR-0271 §9): the roster grouped by unit.
   '/coaching/coachees': {
     today: '2026-10-02',
     overdueAfterDays: 7,
-    directAgents: [{
-      membershipId: 'mem-rina', name: 'Rina Wijaya', rung: { code: 'AGENT', label: 'Agent' }, depth: 1,
-      lastOneOnOne: null, status: 'no_goal_set',
+    scope: 'unit',
+    scopes: { offered: ['unit'], default: 'unit' },
+    total: 1,
+    sections: [{
+      key: 'own', kind: 'own', leader: null, count: 1, teams: [],
+      rows: [{
+        membershipId: 'mem-rina', name: 'Rina Wijaya', rung: { code: 'AGENT', label: 'Agent' }, depth: 1,
+        lastOneOnOne: null, status: 'no_goal_set', coaching: { status: 'never', days: null, coach: null },
+        phone: null, isReader: false, opens: true,
+      }],
     }],
-    units: [],
   },
 };
 

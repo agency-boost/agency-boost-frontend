@@ -67,16 +67,16 @@ describe('signing out of a gated page (2026-10-11)', () => {
   });
 
   it('lands on plain /login, with no next, from both the hook and the page’s own guard', async () => {
-    window.history.pushState({}, '', '/kpm/analytics/compliance?category=training');
+    window.history.pushState({}, '', '/kpm/data-upload?month=2026-10');
     stubFetch({
       '/auth/refresh': { body: { accessToken: 'fresh' } },
-      '/auth/me': { body: makeMe({ permissions: ['kpm_analytics:read'] }) },
+      '/auth/me': { body: makeMe({ permissions: ['data_upload:read'] }) },
       '/auth/logout': { status: 204, body: undefined },
     });
     replace.mockClear();
     render(
       <SessionProvider>
-        <RequireSession permission="kpm_analytics:read"><Probe /></RequireSession>
+        <RequireSession permission="data_upload:read"><Probe /></RequireSession>
       </SessionProvider>,
     );
 

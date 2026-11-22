@@ -1,201 +1,163 @@
 'use client';
 
-import dynamic from 'next/dynamic';
-import { use, useEffect, useState } from 'react';
+import Link from 'next/link';
+import { use, useEffect, useId, useState, type ReactNode } from 'react';
 import { CompanyFrame, useCompany } from '@/components/kpm-template/company-frame';
-import { DraftBar, useVersionWords } from '@/components/kpm-template/draft-bar';
-import { KindEditor } from '@/components/kpm-template/kind-editor';
-import { useTemplateDrafts } from '@/components/kpm-template/use-template-drafts';
-import { SettingsTabs } from '@/components/settings-tabs';
-import { Dialog } from '@/components/ui/dialog';
+import { EmptyState } from '@/components/ui/empty-state';
 import { Button, ErrorBanner } from '@/components/ui/field';
-import { LeaveGuard } from '@/components/ui/save-state';
+import { LineIcon } from '@/components/ui/line-icon';
 import { SkeletonCards } from '@/components/ui/skeleton';
-import { Toast, useToast } from '@/components/ui/toast';
-import type { ApiError } from '@/lib/api-client';
-import { listMetrics, type MetricDefinition } from '@/lib/tenant-config';
-import { useHashTab } from '@/lib/use-hash-tab';
-import { CAMPAIGN_PARTS } from '@/lib/template-sections';
-import { isTemplateLibrary, type Company } from '@/lib/admin';
+import { listTemplates, readTemplate, type NamedTemplate, type NamedTemplateKind } from '@/lib/admin';
+import { toDisplayError, type ApiError } from '@/lib/api-client';
+import { cn } from '@/lib/cn';
+import { campaignsHref, sectionHref, type SectionSlug } from '@/lib/template-sections';
 import { useMessages } from '@/i18n/language-provider';
-import { adminTemplateMessages } from '@/i18n/messages/admin-template';
-import { adminTemplateCompaniesMessages } from '@/i18n/messages/admin-template-companies';
+import { adminCompaniesConsoleMessages } from '@/i18n/messages/admin-companies-console';
 
-/*
- * **Products load when they are opened** (P18.10-T6, the bundle): the tab reads and writes its own data and draws four
- * card skeletons until it has it, the skeleton below being the one it would draw first anyway.
- */
-const ProductsTab = dynamic(
-  () => import('@/components/products-tab').then((m) => m.ProductsTab),
-  { loading: () => <SkeletonCards count={4} /> },
-);
+/** One row of *Pengaturan template*: its section of the default template (or the company's *Campaigns*), its kinds. */
+type RowKey =
+  | 'activity_types' | 'lead_statuses' | 'activation_checklist' | 'training' | 'capability_mapping' | 'events'
+  | 'campaigns' | 'recruitment_pitch' | 'objection_handling';
+
+const ROWS: Record<RowKey, { section: SectionSlug | null; kinds: (NamedTemplateKind | 'campaign_kinds')[] }> = {
+  activity_types: { section: 'activity', kinds: ['activity_taxonomy', 'ratio_set'] },
+  lead_statuses: { section: 'leads', kinds: ['lead_pipeline'] },
+  activation_checklist: { section: 'activation', kinds: ['activation_checklist'] },
+  training: { section: 'training', kinds: ['training_taxonomy'] },
+  capability_mapping: { section: 'capability', kinds: ['capability_ladder'] },
+  events: { section: 'events', kinds: ['event_types'] },
+  campaigns: { section: null, kinds: ['campaign_kinds'] },
+  // OD-424: the template holds no pitch files; both rows open the recruitment playbook — the pitch words per candidate
+  // type, and the answers to each hesitation.
+  recruitment_pitch: { section: 'recruitment', kinds: ['recruitment_playbook'] },
+  objection_handling: { section: 'recruitment', kinds: ['recruitment_playbook'] },
+};
+
+type GroupKey = 'activity' | 'newAgents' | 'events' | 'products';
+
+/** The owner hub's groups (P19.21-T2), *Tampilan* left out, objection handling under *Produk & rekrut* (AC-4). */
+const GROUPS: Record<GroupKey, RowKey[]> = {
+  activity: ['activity_types', 'lead_statuses'],
+  newAgents: ['activation_checklist', 'training', 'capability_mapping'],
+  events: ['events', 'campaigns'],
+  products: ['recruitment_pitch', 'objection_handling'],
+};
+const COLUMNS: GroupKey[][] = [['activity', 'newAgents'], ['events', 'products']];
 
 /**
- * *Produk · Campaign* (ADR-0210 §3; the 11-03 handover's B1-11): *Rekrutmen* is a template's section since P19.4-T5, so
- * an old link to `#recruitment` here opens *Produk*, and the company's templates hold the playbook.
- */
-const TABS = ['products', 'campaigns'] as const;
-type Tab = (typeof TABS)[number];
-
-/**
- * **A company's page, tab *Pengaturan perusahaan*** (ADR-0185 §2; P18.11-T20 AC-1): what is the company's rather than a
- * template's — its products (ADR-0033) and its carrier rules (ADR-0026) — read live by every office it has, said once:
- * *Berlaku langsung untuk semua KPM perusahaan ini.* The recruitment playbook left for the templates (ADR-0210 §3).
+ * **A company's page, tab *Pengaturan template*** (`/admin/companies/[companyId]/settings`; P19.23-T4 AC-4; ADR-0278 §1,
+ * §5; frame 35): the owner hub's groups — *Aktivitas & leads*, *Agent baru & training*, *Event & campaign*, *Produk &
+ * rekrut* — over the company's **default template**, each row opening its section's editor (the editors are ADR-0185's)
+ * and saying ***Belum diterbitkan*** while a draft of it waits; nothing for a row that is fine. No *Tampilan* group. Under
+ * them: *Sama dengan Pengaturan owner, tapi untuk template: KPM baru menyalin ini*.
  *
- * *Campaign* keeps a draft and a *Terbitkan*, saved as it is made like a template's sections, and asks before it
- * publishes because publishing reaches the offices that exist. *Produk* saves as it always did. **A part once opened
- * stays mounted**, hidden when another is shown, so moving between them never loses an edit.
- *
- * Super Admin only: `company_template:read` to see it.
+ * Replaces *Pengaturan perusahaan* (*Produk · Campaign*): products are *Produk & proposal*'s, and *Campaigns* is a row
+ * here (`…/settings/campaigns`). Super Admin only (`company_template:read`).
  */
-export default function CompanySettingsPage({ params }: { params: Promise<{ companyId: string }> }) {
+export default function TemplateSettingsPage({ params }: { params: Promise<{ companyId: string }> }) {
   const { companyId } = use(params);
-  const words = useMessages(adminTemplateMessages);
-  const t = words.settings;
+  const t = useMessages(adminCompaniesConsoleMessages);
   const company = useCompany(companyId);
-  const [tab, selectTab] = useHashTab(TABS.map((x) => ({ href: `#${x}` })));
-  const current = (TABS.find((x) => `#${x}` === tab) ?? TABS[0]) as Tab;
-  const [opened, setOpened] = useState<ReadonlySet<Tab>>(new Set([TABS[0]]));
+  const [template, setTemplate] = useState<NamedTemplate | null | undefined>(undefined);
+  const [campaignDraft, setCampaignDraft] = useState(false);
+  const [error, setError] = useState<ApiError | null>(null);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
-    setOpened((was) => (was.has(current) ? was : new Set([...was, current])));
-  }, [current]);
+    let live = true;
+    setError(null);
+    void listTemplates(companyId)
+      .then((rows) => { if (live) setTemplate(rows.find((r) => r.isDefault) ?? null); })
+      .catch((err) => { if (live) setError(toDisplayError(err)); });
+    // The carrier rules are the company's, under no template: whether a draft of them waits.
+    void readTemplate(companyId, 'campaign_kinds', null)
+      .then((view) => { if (live) setCampaignDraft(view.status === 'draft' && view.id !== ''); })
+      .catch(() => { if (live) setCampaignDraft(false); });
+    return () => { live = false; };
+  }, [companyId, attempt]);
+
+  const waiting = (row: RowKey) => ROWS[row].kinds.some((kind) => (kind === 'campaign_kinds'
+    ? campaignDraft : Boolean(template?.sections?.[kind]?.hasDraft)));
+  const hrefOf = (row: RowKey) => {
+    const { section } = ROWS[row];
+    return section === null || !template ? campaignsHref(companyId) : sectionHref(companyId, template.id, section);
+  };
+
+  let body: ReactNode;
+  if (error) {
+    body = (
+      <div className="flex flex-col gap-2">
+        <ErrorBanner {...error} />
+        <Button variant="secondary" className="self-start" onClick={() => setAttempt((n) => n + 1)}>{t.retry}</Button>
+      </div>
+    );
+  } else if (template === undefined) {
+    body = (
+      <div className="grid gap-4 lg:grid-cols-2">
+        <SkeletonCards count={2} label={t.frame.settings} />
+        <SkeletonCards count={2} />
+      </div>
+    );
+  } else if (template === null) {
+    body = <div className="rounded-lg border border-card-edge bg-card"><EmptyState title={t.settings.noTemplate} /></div>;
+  } else {
+    body = (
+      <>
+        <div className="grid items-start gap-4 lg:grid-cols-2">
+          {COLUMNS.map((column) => (
+            <div key={column.join()} className="flex flex-col gap-4">
+              {column.map((group) => (
+                <Group key={group} heading={t.settings.groups[group]}>
+                  {GROUPS[group].map((row) => (
+                    <li
+                      key={row}
+                      data-setting-row={row}
+                      className={cn(
+                        'relative flex min-h-12 items-center gap-3 px-4 py-2 lg:hover:bg-hover-row',
+                        'has-[a:focus-visible]:outline has-[a:focus-visible]:outline-2 has-[a:focus-visible]:-outline-offset-2 has-[a:focus-visible]:outline-primary',
+                      )}
+                    >
+                      <Link
+                        href={hrefOf(row)}
+                        className="min-w-0 flex-1 text-md font-bold text-navy after:absolute after:inset-0 after:content-[''] focus-visible:outline-none"
+                      >
+                        {t.settings.names[row]}
+                      </Link>
+                      {waiting(row) && (
+                        <span data-setting-status="unpublished" className="inline-flex items-center gap-1.5 whitespace-nowrap text-sm font-bold text-navy">
+                          <span aria-hidden="true" className="h-2 w-2 shrink-0 rounded-pill bg-signal-amber" />
+                          {t.settings.unpublished}
+                        </span>
+                      )}
+                      <LineIcon name="chevronRight" className="h-5 w-5 shrink-0 text-signal-grey" />
+                    </li>
+                  ))}
+                </Group>
+              ))}
+            </div>
+          ))}
+        </div>
+        <p className="mt-2 text-sm text-muted">{t.settings.note}</p>
+      </>
+    );
+  }
 
   return (
-    <CompanyFrame companyId={companyId} company={company} permission="company_template:read">
-      <p className="mb-4 text-md font-semibold text-navy">{t.line}</p>
-      {company && !isTemplateLibrary(company) && <CompanyFacts company={company} />}
-      {/* 44px below 1024px (P19.2-T2 AC-5; UI-135: *tabs Produk/Campaign/Rekrutmen 25px* → 44px). */}
-      <SettingsTabs
-        variant="subtabs"
-        touch
-        label={words.companyPage.settings}
-        tabs={TABS.map((x) => ({ label: t[x], href: `#${x}` }))}
-        activeHref={`#${current}`}
-        onSelect={selectTab}
-      />
-      {opened.has('products') && (
-        <div hidden={current !== 'products'}><ProductsTab companyId={companyId} /></div>
-      )}
-      {opened.has('campaigns') && (
-        <div hidden={current !== 'campaigns'}><CampaignRules companyId={companyId} /></div>
-      )}
+    <CompanyFrame companyId={companyId} company={company} permission="company_template:read" active="settings">
+      {body}
     </CompanyFrame>
   );
 }
 
-/**
- * **The company's slug, currency and time zone** (P19.2-T2 AC-1; UI-126: *Slug, Mata uang and Zona waktu move to the
- * company page (same for every company in v1)*): the three the companies list showed as columns, read here as one line of
- * labelled values. Read, not edited: the slug is changed from the list's *Ubah*, and v1 has one currency and one time zone
- * (ADR-0016). An insurer's; the built-in templates' company holds no office.
- */
-function CompanyFacts({ company }: { company: Company }) {
-  const t = useMessages(adminTemplateCompaniesMessages);
-  const facts = [
-    [t.columns.slug, company.slug],
-    [t.columns.currency, company.defaultCurrency],
-    [t.columns.timeZone, company.defaultTimezone],
-  ] as const;
+/** One group: its heading in capitals, then its rows on a white card (the owner hub's `HubGroup`). */
+function Group({ heading, children }: { heading: string; children: ReactNode }) {
+  const id = useId();
   return (
-    <dl aria-label={t.facts} data-company-facts="" className="mb-4 flex flex-wrap gap-x-6 gap-y-1 text-md">
-      {facts.map(([label, value]) => (
-        <div key={label} className="flex items-baseline gap-1.5">
-          <dt className="text-muted">{label}</dt>
-          <dd className="font-semibold text-navy">{value}</dd>
-        </div>
-      ))}
-    </dl>
-  );
-}
-
-/**
- * **The company's carrier rules** (`campaign_kinds`, ADR-0026, ADR-0034): production club tiers, Maintenance of Contract
- * and promotion paths, each a pill, through the existing editor. A draft saved as it is made; *Terbitkan* asks first,
- * because it applies at once to every office of the company, including the ones that exist.
- */
-function CampaignRules({ companyId }: { companyId: string }) {
-  const words = useMessages(adminTemplateMessages);
-  const drafts = useTemplateDrafts({ companyId, templateId: null, kinds: ['campaign_kinds'] });
-  const [tab, selectTab] = useState<string>(CAMPAIGN_PARTS[0].key);
-  const part = CAMPAIGN_PARTS.find((p) => p.key === tab) ?? CAMPAIGN_PARTS[0];
-  const draft = drafts.drafts.campaign_kinds;
-  const version = useVersionWords(draft?.view, true);
-  const [metrics, setMetrics] = useState<MetricDefinition[]>([]);
-  const [asking, setAsking] = useState(false);
-  const [publishing, setPublishing] = useState(false);
-  const [publishError, setPublishError] = useState<ApiError | null>(null);
-  const { toast, show } = useToast();
-
-  // A rule editor with no metric list can still edit names and ranks: a failure here does not take it down.
-  useEffect(() => {
-    void listMetrics().then(setMetrics).catch(() => setMetrics([]));
-  }, []);
-
-  async function publish() {
-    setAsking(false);
-    setPublishing(true);
-    setPublishError(null);
-    const done = await drafts.publish();
-    setPublishing(false);
-    setPublishError(done.error);
-    if (done.ok) show(words.editor.published);
-  }
-
-  const state = drafts.saving ? 'saving' : drafts.dirty || drafts.error ? 'unsaved' : 'saved';
-
-  return (
-    <>
-      <SettingsTabs
-        variant="subtabs"
-        touch
-        label={words.editor.parts({ section: words.settings.campaigns })}
-        tabs={CAMPAIGN_PARTS.map((p) => ({ label: words.pills[p.key as keyof typeof words.pills], href: `#${p.key}` }))}
-        activeHref={`#${part.key}`}
-        onSelect={(href) => selectTab(href.slice(1))}
-      />
-      {drafts.loadError && (
-        <div className="mb-4 flex flex-col gap-2">
-          <ErrorBanner {...drafts.loadError} />
-          <Button variant="secondary" className="self-start" onClick={drafts.retryLoad}>{words.editor.retry}</Button>
-        </div>
-      )}
-      {!drafts.loadError && !drafts.ready && <SkeletonCards count={3} label={words.editor.loading} />}
-      {drafts.ready && draft && (
-        <>
-          <DraftBar
-            state={state}
-            version={version}
-            archived={false}
-            publishable={drafts.publishable}
-            publishing={publishing}
-            saveError={drafts.error}
-            publishError={publishError}
-            onRetry={() => void drafts.flush()}
-            onReload={drafts.retryLoad}
-            onPublish={() => setAsking(true)}
-          />
-          <KindEditor
-            kind="campaign_kinds"
-            half={part.half}
-            view={draft.view}
-            payload={draft.payload}
-            onChange={(next) => drafts.change('campaign_kinds', next)}
-            disabled={publishing}
-            metrics={metrics}
-          />
-        </>
-      )}
-      <Dialog
-        open={asking}
-        message={words.settings.campaignQuestion}
-        confirmLabel={words.editor.publish}
-        cancelLabel={words.cancel}
-        onCancel={() => setAsking(false)}
-        onConfirm={() => void publish()}
-      />
-      <LeaveGuard active={Boolean(drafts.error)} />
-      <Toast toast={toast} />
-    </>
+    <section aria-labelledby={id} className="overflow-hidden rounded-lg bg-card">
+      <h2 id={id} className="border-b border-divider px-4 py-2.5 text-xs font-bold uppercase tracking-wide text-muted">
+        {heading}
+      </h2>
+      <ul role="list" className="[&>li+li]:border-t [&>li+li]:border-divider">{children}</ul>
+    </section>
   );
 }

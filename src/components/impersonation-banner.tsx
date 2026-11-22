@@ -7,6 +7,7 @@ import { endImpersonation } from '@/lib/admin';
 import { setAccessToken, setImpersonating, tryRefresh } from '@/lib/api-client';
 import { displayName } from '@/lib/display-name';
 import { useSession } from '@/lib/session';
+import { isViewAsWindow } from '@/lib/view-as';
 
 /**
  * Always visible while a support session is running, above everything else.
@@ -14,6 +15,12 @@ import { useSession } from '@/lib/session';
  * A Super Admin who forgets they are acting as someone else will make changes that read
  * as that person's own. The banner is not decoration — it is the only continuous signal
  * that the identity on screen is borrowed.
+ *
+ * *Changed 2026-11-20 (P19.23-T2 AC-7; ADR-0277; the owner mockups' `?va=` bar):* **the view-as bar** — navy, sticky at
+ * the top, *"Melihat sebagai <b>NAME</b>"* with the name in capitals and the primary's colour, the tag *"Hanya melihat ·
+ * tercatat di audit log"*, and *Selesai*. It was a red strip of three sentences. In a *Lihat sebagai* window
+ * (`/view-as`) *Selesai* ends the session and closes the window; anywhere else — or where the browser keeps the window
+ * open — it gives the Super Admin back their own session, as before.
  */
 export function ImpersonationBanner() {
   const { me, reload } = useSession();
@@ -31,7 +38,9 @@ export function ImpersonationBanner() {
       await endImpersonation().catch(() => undefined);
       setImpersonating(false);
       setAccessToken(null);
-      // The refresh cookie is still the real Super Admin's, so this restores them.
+      // A window opened for this session has nothing else to do: the console is still open in the tab it came from.
+      if (isViewAsWindow()) window.close();
+      // The refresh cookie is still the real Super Admin's, so this restores them — in a window the browser kept open.
       await tryRefresh();
       await reload();
     } finally {
@@ -42,24 +51,22 @@ export function ImpersonationBanner() {
   return (
     <div
       role="status"
-      className="flex flex-wrap items-center justify-between gap-2 bg-alert px-4 py-2 text-md font-semibold text-card"
+      data-view-as-bar=""
+      className="sticky top-0 z-40 flex flex-wrap items-center gap-x-3 gap-y-1.5 bg-secondary px-4 py-2 text-md font-semibold text-secondary-contrast print:hidden"
     >
-      <span>
-        {t.actingAs({ name: displayName(me.user) })}{' '}
-        {/*
-          * The half that matters most to the operator (P4-T10, §3.13): discovering the session is
-          * read-only from a 403 halfway through is the worst moment to find out. **Every session only
-          * looks** (P19.4-T2; ADR-0206), so there is one sentence — the setup session's and the elevated
-          * one's are retired with them.
-          */}
-        {t.lookOnly}{' '}
-        {t.recorded}
+      <span className="min-w-0">
+        {t.viewingAs}{' '}
+        {/* `DESIGN-RULES.md`, *Names*: a person's name in capitals; the primary on the navy, as the mockup draws it. */}
+        <b className="font-bold uppercase text-primary-on-secondary">{displayName(me.user)}</b>
+      </span>
+      <span className="rounded-pill bg-secondary-contrast/[0.14] px-2.5 py-0.5 text-xs font-semibold sm:ml-auto">
+        {t.tag}
       </span>
       <button
         type="button"
         onClick={stop}
         disabled={busy}
-        className="rounded-md border border-card/40 px-3 py-1 text-md font-semibold hover:bg-card/10 disabled:opacity-50"
+        className="ml-auto min-h-10 rounded-pill border border-secondary-contrast/40 px-4 text-md font-semibold hover:bg-secondary-contrast/10 disabled:opacity-50 sm:ml-0"
       >
         {busy ? t.ending : t.stop}
       </button>

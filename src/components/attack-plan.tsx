@@ -158,7 +158,9 @@ export function AttackPlanScreen({ address }: { address: PlanAddress }) {
     // The bands in the reader's figures and words: six monthly, then *Lump-sum*, an option of its own.
     const bands = budgetChoices(figures, language);
     return (
-      <div className="mx-auto max-w-[980px]">
+      // P19.13-T1 AC-2 (UI-192, UI-198): from 1024px the brief is a form, at most 720px on the frame's left edge, where it
+      // was 980px centred. Below 1024px as it was.
+      <div className="mx-auto max-w-[980px] lg:mx-0 lg:max-w-form">
         <StepPills label={p.steps} steps={steps} current={0} />
         {shelfEmpty ? <EmptyShelf /> : (
           <>
@@ -194,7 +196,8 @@ export function AttackPlanScreen({ address }: { address: PlanAddress }) {
   }
 
   return (
-    <div className="mx-auto max-w-[980px]">
+    // P19.13-T1 AC-2 (UI-192): from 1024px the plan takes the frame's width, on its left edge, where it was 980px centred.
+    <div className="mx-auto max-w-[980px] lg:mx-0 lg:max-w-none">
       <StepPills label={p.steps} steps={steps} current={1} onStep={backToBrief} />
       {/* Not on a phone: *Ubah*, beside the answers, goes back there (UI-107). */}
       {!phone && (

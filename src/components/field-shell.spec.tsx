@@ -251,29 +251,41 @@ describe('UI-004 the field shell from 1024px: the sidebar, regrouped as the shee
     expect(screen.getByRole('navigation', { name: 'Main' })).toBeInTheDocument();
   });
 
-  it('UI-004 at 1280px lists the sidebar regrouped as the sheet, in its order', () => {
+  /*
+   * *Changed 2026-11-20 (P19.17-T3 AC-4, AC-5; ADR-0269; part E, `sidebar-icons-laptop`):* the top section is **Home ·
+   * Activity · Calendar · Unit Dashboard**, *Search agent* the field under the logo (P19.13-T2), **every group open**, a
+   * core leader's extras — KPM · People — after *Program*, and **Pengaturan pinned** last, below the groups.
+   */
+  it('P19.17-T3 AC-4, AC-5 at 1280px lists the sidebar: the top section, every group open in part E’s order, Pengaturan last', () => {
     atWidth(1280);
     renderWithSession(screenWith(), { me: CORE_LEADER });
     const nav = screen.getByRole('navigation', { name: 'Main' });
-    const order = Array.from(nav.querySelectorAll('[aria-controls^="nav-group"], li > a, li > button'))
-      .map((el) => (el.textContent ?? '').trim());
-    // P19-T4 AC-1 (UI-159 item 1, *same order in the desktop sidebar*): Unit Dashboard heads My team, listed once.
+    const headings = () => Array.from(nav.querySelectorAll('[aria-controls^="nav-group"]'));
+    expect(headings().map((h) => [h.querySelector('span.truncate')?.textContent, h.getAttribute('aria-expanded')])).toEqual([
+      ['Me', 'true'], ['Activities', 'true'], ['My team', 'true'], ['Programs', 'true'], ['KPM', 'true'], ['People', 'true'],
+    ]);
+    const order = Array.from(nav.querySelectorAll('[aria-controls^="nav-group"] span.truncate, li > a, li > button, [data-sidebar-pinned] a'))
+      .map((el) => (el.querySelector('span.truncate')?.textContent ?? el.textContent ?? '').trim());
+    // Unit Dashboard heads the sidebar's top section and is listed once; the sheet keeps it as *My team*'s first.
     expect(order).toEqual([
-      'Home', 'Activity', 'Calendar', 'Search agent',
+      'Home', 'Activity', 'Calendar', 'Unit Dashboard',
       'Me', 'Leads', 'Goal Setting', 'Personal Summary', 'Training', 'Surveys',
       'Activities', 'Sales', 'Recruitment',
-      'My team', 'Unit Dashboard', 'Coaching', 'New Hires', 'User Management', 'Group Tree',
+      'My team', 'Coaching', 'New Hires', 'User Management', 'Group Tree',
       'Programs', 'Campaign', 'Event',
-      'KPM', 'Strategic Leader Forum', 'KPM Analytics', 'Advanced analytics',
+      'KPM', 'Overview', 'Advanced analytics', 'Strategic Leader Forum', 'Data upload',
+      'People', 'All members', 'Import people', 'Org tree',
+      'Settings',
     ]);
   });
 
-  it('UI-004 writes the group headings 12px grey in sentence case — no UNIT TOOLS', () => {
+  it('P19.17-T3 AC-5 writes the group names in small grey capitals with a chevron, no icon; no UNIT TOOLS', () => {
     atWidth(1280);
     renderWithSession(screenWith(), { me: AB });
     const heading = screen.getByRole('button', { name: 'My team' });
-    expect(heading).toHaveClass('text-xs', 'text-secondary-contrast/65');
-    expect(heading).not.toHaveClass('uppercase');
+    expect(heading).toHaveClass('uppercase', 'text-xs', 'font-bold', 'text-secondary-muted');
+    expect(heading).toHaveAttribute('aria-expanded', 'true');
+    expect(Array.from(heading.querySelectorAll('svg')).map((svg) => svg.getAttribute('data-icon'))).toEqual(['ti-chevron-down']);
     expect(screen.queryByText(/unit tools/i)).not.toBeInTheDocument();
   });
 
@@ -292,10 +304,15 @@ describe('UI-004 the field shell from 1024px: the sidebar, regrouped as the shee
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Search agent' })).not.toBeInTheDocument());
   });
 
-  it('UI-004 Search agent sits after Unit Dashboard, for a leader only', () => {
+  it('P19.13-T2 AC-3 Search agent is a 40px field under the logo, for a leader only', () => {
     atWidth(1280);
     const leader = renderWithSession(screenWith(), { me: AB });
-    expect(screen.getByText('Search agent')).toBeInTheDocument();
+    const field = screen.getByRole('button', { name: 'Search agent' });
+    expect(field).toHaveAttribute('data-search-agent');
+    expect(field).toHaveClass('h-10', 'rounded-xl', 'bg-secondary-contrast/[0.08]');
+    // Under the logo row, above the nav.
+    expect(field.compareDocumentPosition(screen.getByRole('navigation', { name: 'Main' }))).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(within(screen.getByRole('navigation', { name: 'Main' })).queryByText('Search agent')).not.toBeInTheDocument();
     leader.unmount();
     renderWithSession(screenWith(), { me: AGENT });
     expect(screen.queryByText('Search agent')).not.toBeInTheDocument();
@@ -310,9 +327,11 @@ describe('UI-004 the Lainnya sheet', () => {
     await userEvent.click(within(tabBar()!).getByRole('button', { name: 'More' }));
     return screen.findByRole('dialog', { name: 'More' });
   }
-  const groupsOf = (sheet: HTMLElement) => within(sheet).getAllByRole('heading', { level: 2 }).map((h) => h.textContent);
+  /** A group's heading by its name, before the extras' tag (P19.17-T3 AC-7), which is its own element. */
+  const nameOf = (h: HTMLElement) => h.querySelector('[data-group-name]')?.textContent;
+  const groupsOf = (sheet: HTMLElement) => within(sheet).getAllByRole('heading', { level: 2 }).map(nameOf);
   const tilesOf = (sheet: HTMLElement, group: string) => within(
-    within(sheet).getByRole('heading', { level: 2, name: group }).closest('section')!,
+    within(sheet).getAllByRole('heading', { level: 2 }).find((h) => nameOf(h) === group)!.closest('section')!,
   ).getAllByRole('listitem').map((li) => (li.textContent ?? '').trim());
 
   it('UI-004 opens from More: the account row on top, then the groups as 4-column tiles, then Sign out last', async () => {
@@ -331,12 +350,40 @@ describe('UI-004 the Lainnya sheet', () => {
     expect(buttons[buttons.length - 1]).toHaveClass('text-pill-red-ink');
   });
 
-  it('UI-004, P19.5-T3 AC-1 gives a Core Leader the KPM group, Advanced analytics a link to the page', async () => {
+  it('P19.17-T3 AC-7 gives a core leader the sidebar’s groups in its order — KPM, People, Pengaturan — tagged Core leader, orange', async () => {
     const sheet = await openSheet(CORE_LEADER);
-    expect(groupsOf(sheet)).toEqual(['Me', 'Activities', 'My team', 'Programs', 'KPM']);
-    expect(tilesOf(sheet, 'KPM')).toEqual(['Leader Forum', 'KPM Analytics', 'Advanced analytics']);
+    expect(groupsOf(sheet)).toEqual(['Me', 'Activities', 'My team', 'Programs', 'KPM', 'People', 'Settings']);
+    expect(tilesOf(sheet, 'KPM')).toEqual(['Overview', 'Advanced analytics', 'Strategic Leader Forum', 'Data upload']);
+    expect(tilesOf(sheet, 'People')).toEqual(['All members', 'Import people', 'Org tree']);
+    expect(tilesOf(sheet, 'Settings')).toEqual(['KPM settings']);
+    expect(tilesOf(sheet, 'My team')).toContain('Group Tree');
+    for (const group of ['KPM', 'People', 'Settings']) {
+      const heading = within(sheet).getAllByRole('heading', { level: 2 }).find((h) => nameOf(h) === group)!;
+      expect(heading.querySelector('[data-sheet-tag]')).toHaveTextContent('Core leader');
+    }
     expect(within(sheet).getByRole('link', { name: 'Advanced analytics' })).toHaveAttribute('href', '/kpm/advanced-analytics');
-    expect(within(sheet).getByRole('link', { name: 'Leader Forum' })).toHaveAttribute('href', '/leader-meetings');
+    expect(within(sheet).getByRole('link', { name: 'KPM settings' })).toHaveAttribute('href', '/kpm/settings');
+    // The extras' tiles are the orange tint; the field's the grey (`lainnya-owner-mobile`).
+    expect(within(sheet).getByRole('link', { name: 'Overview' }).querySelector('[aria-hidden]')).toHaveClass('bg-primary-50');
+    expect(within(sheet).getByRole('link', { name: 'Leads' }).querySelector('[aria-hidden]')).toHaveClass('bg-pill-grey');
+  });
+
+  it('P19.17-T3 AC-7 gives the Owner the same groups, tagged KPM Owner, KPM admins in People and no Group Tree', async () => {
+    const sheet = await openSheet(member({ directCount: 3, isKpmOwner: true }, { permissions: ['member:read_profile'] }));
+    expect(groupsOf(sheet)).toEqual(['Me', 'Activities', 'My team', 'Programs', 'KPM', 'People', 'Settings']);
+    expect(tilesOf(sheet, 'People')).toEqual(['All members', 'Import people', 'Org tree', 'KPM admins']);
+    expect(tilesOf(sheet, 'My team')).toEqual(['Unit Dashboard', 'Coaching', 'New Hires', 'User Mgmt']);
+    expect(sheet.querySelector('[data-sheet-tag]')).toHaveTextContent('KPM Owner');
+    expect(sheet.textContent).not.toMatch(/KPM Analytics|Core leaders & groups|Guide|Panduan/);
+    // Keluar, an outlined pill, after the last group.
+    const signOut = within(sheet).getByRole('button', { name: 'Sign out' });
+    expect(signOut).toHaveClass('rounded-pill', 'border');
+  });
+
+  it('P19.17-T3 AC-7 a normal AB: Saya · Aktivitas · Tim saya · Program only', async () => {
+    const sheet = await openSheet(AB);
+    expect(groupsOf(sheet)).toEqual(['Me', 'Activities', 'My team', 'Programs']);
+    expect(sheet.querySelector('[data-sheet-tag]')).toBeNull();
   });
 
   it('UI-004 hides from an Agent what they may not open: no KPM group, and Tim saya holds User Mgmt alone', async () => {
@@ -344,7 +391,7 @@ describe('UI-004 the Lainnya sheet', () => {
     expect(groupsOf(sheet)).toEqual(['Me', 'Activities', 'My team', 'Programs']);
     expect(tilesOf(sheet, 'My team')).toEqual(['User Mgmt']);
     expect(within(sheet).getByRole('link', { name: 'User Mgmt' })).toHaveAttribute('href', '/user-management/kpm');
-    for (const name of ['Coaching', 'Group Tree', 'New Hires', 'Leader Forum']) {
+    for (const name of ['Coaching', 'Group Tree', 'New Hires', 'Strategic Leader Forum']) {
       expect(within(sheet).queryByRole('link', { name })).not.toBeInTheDocument();
     }
   });
@@ -432,7 +479,8 @@ describe('UI-004 the Lainnya sheet', () => {
     expect(screen.getByRole('main').querySelector('[data-language-switch]')).toBeNull();
     await userEvent.click(within(tabBar()!).getByRole('button', { name: 'Lainnya' }));
     const sheet = await screen.findByRole('dialog', { name: 'Lainnya' });
-    expect(groupsOf(sheet)).toEqual(['Saya', 'Aktivitas', 'Tim saya', 'Program', 'KPM']);
+    expect(groupsOf(sheet)).toEqual(['Saya', 'Aktivitas', 'Tim saya', 'Program', 'KPM', 'People', 'Pengaturan']);
+    expect(within(sheet).getByRole('link', { name: 'Pengaturan KPM' })).toHaveAttribute('href', '/kpm/settings');
     expect(within(sheet).getByRole('link', { name: /Ubah foto/ })).toBeInTheDocument();
     expect(within(sheet).getByRole('group', { name: 'Bahasa' })).toBeInTheDocument();
     expect(within(sheet).getByRole('button', { name: 'Keluar' })).toBeInTheDocument();

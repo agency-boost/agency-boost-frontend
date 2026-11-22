@@ -1,12 +1,12 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { PublishBar } from '@/components/publish-bar';
 import { PdfUploadNotice, usePdfUpload } from '@/components/recruitment/pdf-upload';
 import { useSandboxedDocument } from '@/components/sandboxed-document';
 import { SettingsScreen } from '@/components/settings-screen';
 import { SettingsReviewed } from '@/components/settings-reviewed';
-import { BelowDesktopTip } from '@/components/ui/below-desktop-tip';
 import { ConfigBadge } from '@/components/ui/config-badge';
 import { EmptyState } from '@/components/ui/empty-state';
 import {
@@ -17,8 +17,8 @@ import { FilterChips, ListCard, ListRow, SearchPill } from '@/components/ui/list
 import { CONTROL_PHONE } from '@/components/ui/phone';
 import { LazyResponsiveSheet } from '@/components/ui/lazy-responsive-sheet';
 import { SkeletonCards } from '@/components/ui/skeleton';
-import { SHOWN_FROM_DESKTOP } from '@/components/ui/tablet';
-import { TonePill, type PillTone } from '@/components/ui/tone-pill';
+import { LineIcon } from '@/components/ui/line-icon';
+import { TonePill } from '@/components/ui/tone-pill';
 import { useLanguage, useMessages } from '@/i18n/language-provider';
 import { settingsMessages } from '@/i18n/messages/settings';
 import { settingsProductsMessages } from '@/i18n/messages/settings-products';
@@ -29,7 +29,6 @@ import { isHtmlDocument } from '@/lib/html-document';
 import { useCan } from '@/lib/session';
 import { useHashTab } from '@/lib/use-hash-tab';
 import { categoryLabel, channelLabel } from '@/lib/product-catalog';
-import { usePhone } from '@/lib/use-phone';
 import {
   approveScript, kpmProductDocumentUrl, listKpmProducts, listScriptReviews, readBranchInfo,
   readEffectiveScript, rejectScript, requestProductUpload, resetKpmProductDocument,
@@ -77,15 +76,7 @@ function parsed<T>(text: string | undefined, fallback: T): T {
 /** A review's badge tone; its words are the catalogue's (`review`). */
 const REVIEW_TONE: Record<string, 'won' | 'open'> = { pending: 'open', approved: 'won', rejected: 'open' };
 
-/**
- * **A phone's row pill: the review's state, in its colour** (P19.2-T3 AC-3; UI-141: *one status pill only when there is
- * one — Disetujui / Menunggu persetujuan / Dikembalikan*), the badge's words in the report's tones.
- */
-const ROW_TONE: Record<Exclude<KpmProductRow['reviewState'], 'none'>, PillTone> = {
-  approved: 'green', pending: 'amber', rejected: 'red',
-};
-
-/** The phone's chips (UI-141: *chips for what needs the owner*): every product, or those whose script waits on them. */
+/** The shelf's chips (UI-141; frame 21's *Semua · Menunggu Anda · Dikembalikan*): every product, or those waiting. */
 type ShelfChip = 'all' | 'pending' | 'rejected';
 
 /** A field's value as the review reads it: a list one per line, and each objection card *“…” — …* (ADR-0209 §9). */
@@ -204,6 +195,8 @@ const TABS = [
   { label: settingsProductsMessages.en.tabs.products, href: '#products' },
   { label: settingsProductsMessages.en.tabs.approvals, href: '#approvals' },
 ];
+/** *Data produk* (P19.15-T4, ADR-0260 §5) as the third tab (P19.21-T3 AC-5, ADR-0274): a route of its own. */
+const PRODUCT_DATA = '/kpm/data-produk';
 
 export default function KpmProductsPage() {
   const t = useMessages(settingsProductsMessages);
@@ -220,6 +213,8 @@ export default function KpmProductsPage() {
    * approve it the day that grant moves.
    */
   const canApprove = useCan('sales_script:approve');
+  const canReadProductData = useCan('product_data:read');
+  const router = useRouter();
   const [tab, setTab] = useHashTab(TABS);
   /**
    * The product whose *Review* was chosen on the shelf (P18.9-T4 AC-7, ADR-0176 §7; UI-028): its card on *Script
@@ -253,13 +248,7 @@ export default function KpmProductsPage() {
   /** What agents are reading **right now**, per product — the comparison a decision needs. */
   const [served, setServed] = useState<Record<string, { source: 'kpm' | 'company' }>>({});
   const inline = useInlineSave();
-  /*
-   * **Below 768px the shelf is one line per product, and a product's controls are in its sheet** (P19.2-T3 AC-3; UI-141:
-   * *products with "Agent menjualnya" switch and "Sesuaikan" on every row*, 6.1 screens at 375; `kpm-owner-mobile` 7).
-   * Asked where the screen mounts, so a phone never draws the cards first. From 768px the shelf is as it was.
-   */
-  const phone = usePhone();
-  /** The product whose sheet is open, on a phone. */
+  /** The product whose sheet is open (its ⋯, at every width since P19.21-T3 AC-5). */
   const [sheetFor, setSheetFor] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [chip, setChip] = useState<ShelfChip>('all');
@@ -268,8 +257,8 @@ export default function KpmProductsPage() {
    * top of the page with the button that had it (WCAG 2.4.3).
    */
   useEffect(() => {
-    if (phone && open !== null && open === sheetFor) document.getElementById(`name-${open}`)?.focus();
-  }, [phone, open, sheetFor]);
+    if (open !== null && open === sheetFor) document.getElementById(`name-${open}`)?.focus();
+  }, [open, sheetFor]);
 
   const load = useCallback(async () => {
     try {
@@ -343,70 +332,13 @@ export default function KpmProductsPage() {
       );
     }
 
-    // A rider is not a product of the shelf: it sits under its bases (P19.4-T4 AC-8, ADR-0209 §6).
-    const shelf = rows.filter((p) => p.kind !== 'rider');
-    const selling = shelf.filter((p) => p.sellable && p.active.value).length;
-    const countCard = (
-      <Card>
-        <p className={cn('text-md text-muted', SHOWN_FROM_DESKTOP)}>{t.shelfNote}</p>
-        {/*
-          * Counted from what is actually sellable. The prototype's header reads "6 active" over
-          * seven toggles, because it counts a list it no longer matches (P5-T5 AC-8). Below 1024px it is the card's
-          * first line, and the sentence above it is the ⓘ after it (P18.9-T4 AC-6).
-          */}
-        <p className="text-sm text-muted lg:mt-2">
-          {t.shelfCount({
-            n: shelf.length,
-            selling: <strong>{selling}</strong>,
-            withdrawn: shelf.some((p) => !p.sellable) ? shelf.filter((p) => !p.sellable).length : null,
-            company,
-          })}
-          <BelowDesktopTip text={t.shelfNote} className="ml-1" />
-        </p>
-      </Card>
-    );
     const refusal = error && (
       <div role="alert" className="rounded-md border border-primary bg-card p-4">
         <p className="text-md text-navy">{error.message}</p>
       </div>
     );
 
-    if (phone) return phoneShelf(countCard, refusal);
-
-    return (
-      <div className="flex flex-col gap-4">
-        {countCard}
-
-        {refusal}
-
-        <ul className="flex flex-col gap-3">
-          {shelf.map((product) => (
-            <li key={product.productId}>
-              <Card className="p-0">
-                <div className="flex flex-wrap items-center gap-3 px-4 py-3 sm:px-5">
-                  <div className="min-w-0 flex-1">
-                    <h2 className="text-md font-semibold text-navy">
-                      {product.displayName.value}
-                    </h2>
-                    {product.displayName.overridden && (
-                      <p className="mt-0.5 text-sm text-muted">
-                        {t.callsIt({ company, name: product.companyName })}
-                      </p>
-                    )}
-                    {badges(product)}
-                    {ridersUnder(product)}
-                  </div>
-
-                  {rowControls(product)}
-                </div>
-
-                {open === product.productId && panel(product)}
-              </Card>
-            </li>
-          ))}
-        </ul>
-      </div>
-    );
+    return shelfList(refusal);
   }
 
   /**
@@ -532,15 +464,19 @@ export default function KpmProductsPage() {
   }
 
   /**
-   * **The shelf on a phone** (P19.2-T3 AC-3; UI-141, `kpm-owner-mobile` 7): *Cari produk*, the chips for what waits on
-   * the owner, the count line, then one 56px row per product — its name, *category · channel*, one pill only when there
-   * is one (withdrawn, or the script's review), › — which opens the product's sheet. Everything a card held is in the
-   * sheet: the badges and *Review*, *Agents sell it*, *Customize* and the product's own words.
+   * **The shelf as one list, at every width** (P19.21-T3 AC-5, ADR-0274; frame 21; it was a phone's alone, P19.2-T3
+   * AC-3): *Semua n · Menunggu Anda n · Dikembalikan n* and *Cari produk*, then one row per product — its name,
+   * *category · channel*, **one pill** (the script's review, else whether agents sell it), **Tinjau** right on the row
+   * for a script waiting on the reader, and ⋯, which opens the product's sheet: its badges and riders, *Agent
+   * menjualnya*, *Sesuaikan* and its documents — everything the cards held. Under it *"Perubahan hanya berlaku untuk
+   * KPM ini · n dari N produk dijual agent"*.
    */
-  function phoneShelf(countCard: ReactNode, refusal: ReactNode) {
+  function shelfList(refusal: ReactNode) {
+    // A rider is not a product of the shelf: it sits under its bases (P19.4-T4 AC-8, ADR-0209 §6).
     const all = (rows ?? []).filter((p) => p.kind !== 'rider');
     const pending = all.filter((p) => p.reviewState === 'pending').length;
     const rejected = all.filter((p) => p.reviewState === 'rejected').length;
+    const selling = all.filter((p) => p.sellable && p.active.value).length;
     const term = search.trim().toLocaleLowerCase();
     const shown = all
       .filter((p) => chip === 'all' || p.reviewState === chip)
@@ -548,14 +484,15 @@ export default function KpmProductsPage() {
         || [p.displayName.value, p.companyName, p.code].some((v) => v.toLocaleLowerCase().includes(term)));
     const chips = [
       { key: 'all' as const, label: t.chips.all, count: all.length },
-      ...(pending > 0 ? [{ key: 'pending' as const, label: t.chips.pending, count: pending }] : []),
-      ...(rejected > 0 ? [{ key: 'rejected' as const, label: t.chips.rejected, count: rejected }] : []),
+      { key: 'pending' as const, label: t.chips.pending, count: pending },
+      { key: 'rejected' as const, label: t.chips.rejected, count: rejected },
     ];
     return (
-      <div className="flex flex-col gap-2.5">
-        <SearchPill label={t.search} value={search} onChange={setSearch} />
-        {chips.length > 1 && <FilterChips label={t.chips.label} chips={chips} active={chip} onSelect={setChip} />}
-        {countCard}
+      <div className="flex flex-col gap-2.5" data-products-list="">
+        <div className="flex flex-wrap items-center gap-2.5">
+          <FilterChips label={t.chips.label} chips={chips} active={chip} onSelect={setChip} className="min-w-0" />
+          <SearchPill label={t.search} value={search} onChange={setSearch} className="ml-auto min-w-48" />
+        </div>
         {refusal}
         {shown.length === 0 ? (
           <p className="px-1 py-3 text-md text-muted">{t.noMatch}</p>
@@ -568,29 +505,64 @@ export default function KpmProductsPage() {
                 title={product.displayName.value}
                 meta={`${categoryLabel(product.category, language) ?? product.category} · ${
                   channelLabel(product.channel === 'syariah' ? 'syariah' : 'conventional', language)}`}
-                trailing={rowPill(product)}
-                haspopup
-                onSelect={() => { setSheetFor(product.productId); setOpen(null); setDraft({}); }}
+                trailing={(
+                  <>
+                    {rowPill(product)}
+                    {product.reviewState === 'pending' && canApprove && (
+                      <Button
+                        className="h-9 rounded-pill px-3.5 max-lg:h-11"
+                        aria-label={t.reviewName({ name: product.displayName.value })}
+                        onClick={() => { setReviewing(product.productId); setSheetFor(null); setTab('#approvals'); }}
+                      >
+                        {t.reviewButton}
+                      </Button>
+                    )}
+                    <button
+                      type="button"
+                      aria-label={t.moreFor({ name: product.displayName.value })}
+                      aria-haspopup="dialog"
+                      onClick={() => { setSheetFor(product.productId); setOpen(null); setDraft({}); }}
+                      className="flex h-9 w-9 items-center justify-center rounded-pill text-muted hover:bg-hover-row hover:text-navy max-lg:h-11 max-lg:w-11"
+                    >
+                      <LineIcon name="more" className="h-5 w-5" />
+                    </button>
+                  </>
+                )}
               />
             ))}
           </ListCard>
         )}
+        <p className="m-0 flex flex-wrap gap-x-4 gap-y-1 px-1 text-sm text-muted">
+          <span>{t.shelfNote}</span>
+          <span>{t.footSelling({ selling, n: all.length })}</span>
+        </p>
       </div>
     );
   }
 
-  /** The one pill a phone's row wears, when there is one: withdrawn first — nobody can sell it — then the review. */
+  /**
+   * **A row's one pill** (P19.21-T3 AC-5; frame 21): withdrawn first — nobody can sell it — then the script's review
+   * (*Menunggu Anda* red, *Dikembalikan* amber, *Disetujui* green), else whether agents sell it (*Dijual agent* navy,
+   * *Tidak dijual* grey).
+   */
   function rowPill(product: KpmProductRow) {
     if (!product.sellable) return <TonePill tone="grey">{t.withdrawnBy({ company })}</TonePill>;
-    if (product.reviewState === 'none') return null;
-    return <TonePill tone={ROW_TONE[product.reviewState]}>{t.review[product.reviewState]}</TonePill>;
+    if (product.reviewState === 'pending') {
+      return <TonePill tone="red">{canApprove ? t.pill.pending : t.review.pending}</TonePill>;
+    }
+    if (product.reviewState === 'rejected') return <TonePill tone="amber">{t.pill.rejected}</TonePill>;
+    if (product.reviewState === 'approved') return <TonePill tone="green">{t.pill.approved}</TonePill>;
+    return product.active.value
+      ? <TonePill tone="blue">{t.pill.selling}</TonePill>
+      : <TonePill tone="grey">{t.pill.notSelling}</TonePill>;
   }
 
-  /** The product opened from its row, on a phone: what its card held, and its words under *Customize*. */
+  /** The product opened from its ⋯, at every width: what its card held, and its words under *Customize*. */
   function productSheet() {
     const product = sheetFor === null ? null : rows?.find((p) => p.productId === sheetFor) ?? null;
     return (
       <LazyResponsiveSheet
+        side
         open={product !== null}
         title={product?.displayName.value ?? ''}
         onClose={() => { setSheetFor(null); setOpen(null); setDraft({}); }}
@@ -1117,15 +1089,23 @@ export default function KpmProductsPage() {
        * (the Phase 14 exit review). A field member reads the approved words on `/product-catalog`.
        */
       permission="product_settings:read"
-      tabs={TABS.map((tab, i) => ({ ...tab, label: [t.tabs.products, t.tabs.approvals][i] }))}
+      tabs={[
+        { label: t.tabs.products, href: TABS[0].href },
+        { label: t.tabs.approvals, href: TABS[1].href },
+        /*
+         * ***Data produk*** (P19.21-T3 AC-5, ADR-0274; OD): the insurers' proposal data, the page P19.15-T4 built — read
+         * only by those `product_data:read` lets in, which the API decides again. It replaced *Lihat data proposal*.
+         */
+        ...(canReadProductData ? [{ label: t.tabs.productData, href: PRODUCT_DATA }] : []),
+      ]}
       tabsLabel={t.tabsLabel}
       activeHref={tab}
-      onSelectTab={setTab}
+      onSelectTab={(href) => (href.startsWith('#') ? setTab(href) : router.push(href))}
       error={rows === null ? error : null}
       bars={<PublishBar />}
     >
       {tab === '#approvals' ? approvalsTab() : body()}
-      {phone && tab !== '#approvals' && productSheet()}
+      {tab !== '#approvals' && productSheet()}
     </SettingsScreen>
   );
 }

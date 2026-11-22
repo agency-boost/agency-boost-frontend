@@ -4,41 +4,35 @@ import { useCallback, useEffect, useState } from 'react';
 import { SettingsScreen } from '@/components/settings-screen';
 import { SettingsReviewed } from '@/components/settings-reviewed';
 import { ActionMenu, type ActionMenuItem } from '@/components/ui/action-menu';
-import { AutoMarker } from '@/components/ui/auto-marker';
-import { BelowDesktopTip } from '@/components/ui/below-desktop-tip';
-import { DRAG_HANDLE_CLASS, DragHandle } from '@/components/ui/drag-handle';
-import { ConfigBadge } from '@/components/ui/config-badge';
+import { DragHandle } from '@/components/ui/drag-handle';
 import { EmptyState } from '@/components/ui/empty-state';
 import {
   Button, Card, CodeField, Field, FieldRow, Select, TextInput,
 } from '@/components/ui/field';
-import { FLOATING_BAR_BUTTON, FLOATING_BAR_ROOM, FloatingBar } from '@/components/ui/floating-bar';
 import { LineIcon } from '@/components/ui/line-icon';
-import { ListRow } from '@/components/ui/list-rows';
-import { CONTROL_PHONE, TAP_TARGET } from '@/components/ui/phone';
+import { CONTROL_PHONE } from '@/components/ui/phone';
 import { ReorderArrows } from '@/components/ui/reorder-arrows';
 import { ResponsiveSheet } from '@/components/ui/responsive-sheet';
 import { SkeletonCards } from '@/components/ui/skeleton';
-import { SHOWN_FROM_DESKTOP } from '@/components/ui/tablet';
 import { TippedGlyph } from '@/components/ui/tipped-glyph';
 import { kept } from '@/i18n/kept';
 import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
 import { settingsMessages } from '@/i18n/messages/settings';
 import { checklistMessages } from '@/i18n/messages/settings-checklist';
 import { uiMessages } from '@/i18n/messages/ui';
-import { autoBadge, byHandBadge, fromDataWords } from '@/lib/activation';
+import { aspectTitle, autoBadge, byHandBadge, fromDataWords } from '@/lib/activation';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
 import { suggestCode } from '@/lib/config-code';
 import { formatNumber } from '@/lib/format';
 import { useCan } from '@/lib/session';
-import { useMediaQuery } from '@/lib/use-media-query';
 import { usePhone } from '@/lib/use-phone';
 import {
-  listTraining, publishActivationChecklist, readActivationChecklist, saveActivationDraft,
+  listTraining, publishActivationChecklist, publishConfig, readActivationChecklist, saveActivationDraft,
   type ActivationChecklist, type ActivationDraft, type ActivationLink, type ActivationVersion,
   type TrainingCategoryRow,
 } from '@/lib/tenant-config';
+import { HANDLE_TOUCH, TEXT_BUTTON_TOUCH } from '../settings-touch';
 
 /** The link options the prototype's select offers, plus the office's own published modules: §A.2's titles, kept. */
 const FEATURE_LINKS = [
@@ -46,6 +40,13 @@ const FEATURE_LINKS = [
   { value: 'feature:leads', label: kept('Leads Management') },
   { value: 'feature:activity', label: kept('Activity Management') },
 ];
+
+/** What an item's line names as its source, as the 19 November card names it (mockup f16): the feature's menu name. */
+const FEATURE_SOURCE: Record<string, string> = {
+  'feature:goals': kept('Goal Setting'),
+  'feature:leads': kept('Leads'),
+  'feature:activity': kept('Activity'),
+};
 
 type DraftAspect = ActivationDraft['aspects'][number];
 type DraftItem = DraftAspect['items'][number];
@@ -62,9 +63,8 @@ const toDraft = (version: ActivationVersion): ActivationDraft => ({
 });
 
 /**
- * What the server resolved each link to — its words and **whether it works** (`live`) — by kind, from
- * every item it answered with, the published version's and the draft's. A link chosen here and not saved
- * yet is in neither, and stays unresolved until **Save draft** answers with it.
+ * What the server resolved each link to — its words and **whether it works** (`live`) — by kind, from every item it
+ * answered with. A link chosen here and not saved yet is in neither, and stays unresolved until *Simpan draf* answers.
  */
 function resolvedLinks(server: ActivationChecklist | null): Map<string, ActivationLink> {
   const links = new Map<string, ActivationLink>();
@@ -77,11 +77,8 @@ function resolvedLinks(server: ActivationChecklist | null): Map<string, Activati
 }
 
 /**
- * **The three data-backed items, by code** (P18.8-T7 G2; ADR-0171 §3): *Close first case independently*, *Reach
- * Independent Agent milestone* and *Weekly 1-on-1 check-in* store no link — their kind is bound by their code — and
- * the server serves each its kind as `link`, a data kind's carrying its `form`. Read from every version it answered
- * with, so an item the draft keeps keeps its kind; one that stores a link of its own reads that link, as the field
- * does (`effectiveAutoLink`). Nothing here knows which codes are bound (invariant §7).
+ * **The data-backed items, by code** (P18.8-T7 G2; ADR-0171 §3): they store no link — their kind is bound by their
+ * code — and the server serves each its kind as `link`, carrying its `form`. Nothing here knows which codes are bound.
  */
 function boundLinks(server: ActivationChecklist | null): Map<string, ActivationLink> {
   const bound = new Map<string, ActivationLink>();
@@ -97,11 +94,9 @@ function boundLinks(server: ActivationChecklist | null): Map<string, ActivationL
 const BADGE_FACE = 'h-auto w-auto whitespace-nowrap rounded-pill px-2 py-0.5 text-2xs font-bold uppercase tracking-wide';
 
 /**
- * The row's badge (`.checklist-auto-badge`, `KPM_Owner.html:1532-1560`), saying **whether** the link
- * completes the item and never when (P13-T3 AC-1, ADR-0062 §3; parity I-80). *Auto* only for a link that
- * works, with the registry's sentence as its tooltip and in its name, as on the hire's page; for one that
- * does not, *Ticked by hand*, and its tooltip says who ticks it. A link not yet resolved claims neither. Its words are
- * the hire's activation's (`autoBadge`, `byHandBadge`; P18.10-T4), in the reader's language.
+ * The badge saying **whether** a link completes the item (P13-T3 AC-1, ADR-0062 §3; parity I-80): *Auto* for a link
+ * that works, *Ticked by hand* for one that does not — never when. Since P19.21 it stands in the item's sheet, and on
+ * the card only beside a link that does not work, so the line *"Selesai otomatis dari: …"* never claims what is not so.
  */
 function LinkBadge({ link }: { link: ActivationLink }) {
   const language = useLanguage();
@@ -133,34 +128,40 @@ const move = <T,>(rows: T[], from: number, to: number): T[] => {
   return next;
 };
 
-/**
- * The office's 90-day activation checklist (P5-T3, `KPM_Owner.html:1524-1560`).
- *
- * **Draft, then publish, and the publish is this screen's own.** Every other settings screen edits
- * rows the office publishes as one snapshot; a checklist is a document whose versions a hire's
- * activation pins, so it publishes separately (ADR-0031). The office-wide *Publish to agents* bar is
- * deliberately absent here — it would say nothing true about this screen.
- *
- * **A published version is never edited.** Editing writes a draft; publishing turns that draft into
- * the next version, which is given to hires who start after it. Somebody halfway through their
- * ninety days keeps the checklist they started on.
- */
-/*
- * **The checklist's two grey sentences, in the client's words, each with its verdict per size** (P18.9-T4 AC-6,
- * ADR-0176 §6; the grey-text table of 2026-10-27, UI-027). From 1024px both are shown; at 768–1023px both are behind
- * an ⓘ beside their subject; below 768px the first is behind its ⓘ and the second is removed. *New versions* was 32
- * words, *Linked items* the prototype's 27-word toolbar sentence. Their words are the catalogue's (`newVersions`,
- * `linkedItems`, `messages/settings-checklist.ts`), and the verdicts hold in both languages.
- */
+/** The orange *+ Tambah item* line at a card's foot (mockup f16), 44px tall below 1024px. */
+const ADD_LINE = cn(
+  'inline-flex items-center gap-1.5 text-md font-bold text-primary-ink hover:underline disabled:opacity-40',
+  TEXT_BUTTON_TOUCH,
+);
 
+/**
+ * The office's 90-day activation checklist (P5-T3) — **drawn as the client's 19 November card** (P19.21-T3 AC-3;
+ * mockup `data-upload-pengaturan-*` f16, ADR-0274).
+ *
+ * - **The note** under *‹ Pengaturan*: *"New hire mendapat versi 1 · 90 hari. Perubahan menjadi versi baru, hanya untuk
+ *   new hire berikutnya."* — the published version and the office's window, read from the server.
+ * - **The aspects as white cards**, two side by side from 768px: *"1. Introduction"*, *"4 item"*, a ⋯ (*Ganti nama ·
+ *   Naikkan · Turunkan · Hapus*); each item ⠿, its name and *"Selesai otomatis dari: …"* — a feature, a module, the
+ *   office's data, or *manual*; *+ Tambah item* at the foot. An item opens its sheet: its code read-only, its name,
+ *   *Diselesaikan dari* (the select), its badge, ↑ ↓ and *Hapus*.
+ * - **The orange bar only while there is a draft** (the frame's bar; *"Draf. Agent masih memakai versi n."* with
+ *   *Simpan draf* and *Terbitkan ke agent*). **The checklist publishes on its own** (ADR-0031): a version is what a
+ *   hire's activation pins, so this bar is the activation module's draft, not the office's snapshot.
+ *
+ * **A published version is never edited.** Editing writes a draft; publishing turns that draft into the next version,
+ * given to hires who start after it. Somebody halfway through their ninety days keeps the checklist they started on.
+ */
 export default function ActivationChecklistPage() {
   const t = useMessages(checklistMessages);
   const language = useLanguage();
   const s = useMessages(settingsMessages);
+  const u = useMessages(uiMessages);
   const figures = useFigureLanguage();
   const canWrite = useCan('tenant_config:write');
   // The screen's own gate (P18.2-T3): a field member meets the refusal, and nothing is asked for them.
   const canRead = useCan('activation_settings:read');
+  /** On a phone a drag never starts: ↑ ↓ beside an aspect's ⠿ (P18.9-T7 AC-6). */
+  const phone = usePhone();
   const [server, setServer] = useState<ActivationChecklist | null>(null);
   const [draft, setDraft] = useState<ActivationDraft | null>(null);
   const [dirty, setDirty] = useState(false);
@@ -168,35 +169,11 @@ export default function ActivationChecklistPage() {
   const [error, setError] = useState<ApiError | null>(null);
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [editing, setEditing] = useState<string | null>(null);
-  const [editLabel, setEditLabel] = useState('');
-  const [addingTo, setAddingTo] = useState<string | null>(null);
   const [addingAspect, setAddingAspect] = useState(false);
   const [entry, setEntry] = useState({ label: '', code: '', codeTouched: false, first: '' });
-  /*
-   * Native HTML5 drag, as the other settings screens do it, and the ↑/↓ on the same handle for
-   * the keyboard and for a phone, where drag never fires (parity I-71). An item moves within its
-   * aspect; an aspect moves among aspects.
-   */
   const [dragging, setDragging] = useState<{ aspect: string; item?: string } | null>(null);
   const [over, setOver] = useState<string | null>(null);
-  /*
-   * **On a phone, ↑ and ↓ beside each handle** (P18.9-T7 AC-6, ADR-0178 §5; UI-040): a drag never starts on a touch
-   * screen and its handle's keys need a keyboard, so the list could not be reordered there at all. They move a row
-   * through the same `move` the handle's keys do; and below 768px every control here is a 44 × 44px target.
-   */
-  const phone = usePhone();
-  /*
-   * **Below 1024px the checklist is an accordion of one-line items, and an item's controls are in its sheet**
-   * (P19.2-T3 AC-3; UI-141: *16 native "Diselesaikan dari" selects open in the checklist with uppercase "OTOMATIS — SELESAI
-   * SAAT …" lines*, 5.1 screens at 375; `kpm-owner-mobile` 6 — the one settings page whose ticket names the tablet too).
-   * From 1024px the cards are as they were.
-   */
-  const compact = useMediaQuery(['phone', 'tablet']);
-  const u = useMessages(uiMessages);
-  /** The one aspect open (D-25: *only one open*); `undefined` until chosen, which opens the first. */
-  const [openAspect, setOpenAspect] = useState<string | null | undefined>(undefined);
-  /** The item, the aspect, or the new item a sheet holds, with what it edits until *Save*. */
+  /** The item, the aspect, or the new item a sheet holds, with what it edits until *Simpan*. */
   const [itemSheet, setItemSheet] = useState<{ aspect: string; code: string; label: string; autoLink: string | null } | null>(null);
   const [aspectSheet, setAspectSheet] = useState<{ code: string; label: string } | null>(null);
   const [addSheet, setAddSheet] = useState<string | null>(null);
@@ -205,9 +182,7 @@ export default function ActivationChecklistPage() {
     try {
       const [checklist, tree] = await Promise.all([readActivationChecklist(), listTraining()]);
       setServer(checklist);
-      // Never assumed: an office whose database has not had the checklist seeded answers with
-      // neither, and dereferencing that threw — which `toDisplayError` then reported as
-      // "Could not reach the server", sending the reader to check their connection over a bug.
+      // Never assumed: an office whose database has not had the checklist seeded answers with neither.
       const current = checklist.draft ?? checklist.published;
       setDraft(current ? toDraft(current) : { aspects: [] });
       setDirty(false);
@@ -223,7 +198,7 @@ export default function ActivationChecklistPage() {
   const bound = boundLinks(server);
 
   /** Every module agents are offered, which is the only kind an item may wait for. */
-  const offered = modules.flatMap((c) => c.skills.flatMap((s) => s.modules))
+  const offered = modules.flatMap((c) => c.skills.flatMap((sk) => sk.modules))
     .filter((m) => m.status === 'active' && m.publishState === 'published');
 
   function change(next: ActivationDraft) {
@@ -279,8 +254,7 @@ export default function ActivationChecklistPage() {
       return;
     }
 
-    // An item stays in its own aspect: moving it elsewhere is a different decision, and the
-    // heading and the item would otherwise disagree about where it lives.
+    // An item stays in its own aspect: moving it elsewhere is a different decision.
     if (held.aspect !== target.aspect) return;
     const items = draft.aspects.find((a) => a.code === held.aspect)!.items;
     const from = items.findIndex((i) => i.code === held.item);
@@ -289,18 +263,58 @@ export default function ActivationChecklistPage() {
     patchAspect(held.aspect, { items: move(items, from, to) });
   }
 
+  /** Where an item completes from, as its line names it (mockup f16): the office's data, a feature, a module, *manual*. */
+  function sourceOf(item: DraftItem): { words: string; link: ActivationLink | null } {
+    if (item.autoLink === null) {
+      const data = bound.get(item.code);
+      return data ? { words: data.label, link: data } : { words: t.manual, link: null };
+    }
+    const link = links.get(item.autoLink) ?? null;
+    if (item.autoLink.startsWith('feature:')) {
+      return { words: FEATURE_SOURCE[item.autoLink] ?? link?.label ?? item.autoLink, link };
+    }
+    if (item.autoLink.startsWith('training:')) {
+      const code = item.autoLink.slice('training:'.length);
+      const title = offered.find((m) => m.code === code)?.title ?? link?.label ?? code;
+      return { words: `${kept('Training')} › ${title}`, link };
+    }
+    return { words: link?.label ?? item.autoLink, link };
+  }
+
   function aspectCard(aspect: DraftAspect, at: number) {
+    const aspects = draft!.aspects;
+    const menu: ActionMenuItem[] = [
+      { label: s.rename, onSelect: () => setAspectSheet({ code: aspect.code, label: aspect.label }) },
+      {
+        label: u.moveUp({ label: aspect.label }),
+        disabled: busy || at === 0,
+        onSelect: () => change({ aspects: move(aspects, at, at - 1) }),
+      },
+      {
+        label: u.moveDown({ label: aspect.label }),
+        disabled: busy || at === aspects.length - 1,
+        onSelect: () => change({ aspects: move(aspects, at, at + 1) }),
+      },
+      {
+        label: s.remove,
+        tone: 'alert',
+        disabled: busy || aspects.length === 1,
+        reason: aspects.length === 1 ? t.oneAspect : undefined,
+        hint: aspects.length === 1 ? undefined : t.removesAspect({ name: aspect.label, n: aspect.items.length }),
+        onSelect: () => change({ aspects: aspects.filter((a) => a.code !== aspect.code) }),
+      },
+    ];
     return (
-      <Card
+      <section
         key={aspect.code}
-        /* As on Activity types: without `data-row` the drag image is the handle button, not the
-           section — `DragHandle` looks for `closest('li, [data-row]')` and finds neither here. */
+        aria-labelledby={`aspect-${aspect.code}`}
+        // `DragHandle` lifts the closest `li, [data-row]` as the drag image.
         data-row={aspect.code}
-        className={[
-          'p-0',
-          over === aspect.code ? 'ring-2 ring-primary' : '',
-          dragging?.aspect === aspect.code && dragging.item === undefined ? 'opacity-40' : '',
-        ].filter(Boolean).join(' ')}
+        className={cn(
+          'overflow-hidden rounded-lg border border-card-edge bg-card',
+          over === aspect.code && 'ring-2 ring-primary',
+          dragging?.aspect === aspect.code && dragging.item === undefined && 'opacity-40',
+        )}
         onDragOver={(e) => {
           if (!dragging || dragging.item !== undefined) return;
           e.preventDefault();
@@ -309,124 +323,46 @@ export default function ActivationChecklistPage() {
         onDragLeave={() => setOver((now) => (now === aspect.code ? null : now))}
         onDrop={(e) => { e.preventDefault(); drop({ aspect: aspect.code }); }}
       >
-        {/* `checklist-section-head`: the heading left, its add control right. */}
-        <div className="flex flex-wrap items-center gap-3 border-b border-hairline px-4 py-3 sm:px-5">
+        <div className="flex items-center gap-2 border-b border-divider px-4 py-3">
           {canWrite && (
             <DragHandle
               label={aspect.label}
               disabled={busy}
-              className={cn(DRAG_HANDLE_CLASS, TAP_TARGET)}
+              className={HANDLE_TOUCH}
               onPick={() => setDragging({ aspect: aspect.code })}
               onDrop={() => { setDragging(null); setOver(null); }}
-              onMove={(by) => change({ aspects: move(draft!.aspects, at, at + by) })}
+              onMove={(by) => change({ aspects: move(aspects, at, at + by) })}
             />
           )}
-          {/* Not while its name is being edited: the field takes the line, and a name is not an order. */}
-          {canWrite && phone && editing !== `aspect-${aspect.code}` && (
+          <h2 id={`aspect-${aspect.code}`} className="min-w-0 flex-1 font-display text-md font-bold text-navy">
+            {/* The position, then the name: a label typed with its own number keeps one (`aspectTitle`). */}
+            {`${formatNumber(at + 1, {}, figures)}. ${aspectTitle(aspect.label)}`}
+          </h2>
+          <span className="shrink-0 text-sm text-muted">{s.items({ n: aspect.items.length })}</span>
+          {canWrite && phone && (
             <ReorderArrows
               label={aspect.label}
               index={at}
-              count={draft!.aspects.length}
+              count={aspects.length}
               disabled={busy}
-              onMove={(by) => change({ aspects: move(draft!.aspects, at, at + by) })}
+              onMove={(by) => change({ aspects: move(aspects, at, at + by) })}
             />
           )}
-          {editing === `aspect-${aspect.code}` ? (
-            /* Renameable, which it was not: a typo in an aspect's name could only be fixed by
-               removing the aspect and every item under it. */
-            <FieldRow className="min-w-0 flex-1">
-              <CodeField
-                id={`code-aspect-${aspect.code}`}
-                value={aspect.code}
-                reason={t.aspectReason}
-                inputClassName={CONTROL_PHONE}
-              />
-              <Field label={s.name} htmlFor={`aspect-name-${aspect.code}`} className="min-w-60 flex-1">
-                <TextInput
-                  id={`aspect-name-${aspect.code}`}
-                  value={editLabel}
-                  disabled={busy}
-                  onChange={(e) => setEditLabel(e.target.value)}
-                  className={CONTROL_PHONE}
-                />
-              </Field>
-              <FieldRow.Actions>
-                <Button
-                  disabled={busy || !editLabel.trim()}
-                  className={CONTROL_PHONE}
-                  onClick={() => {
-                    patchAspect(aspect.code, { label: editLabel.trim() });
-                    setEditing(null);
-                  }}
-                >
-                  {s.save}
-                </Button>
-                <Button variant="secondary" disabled={busy} className={CONTROL_PHONE} onClick={() => setEditing(null)}>
-                  {s.cancel}
-                </Button>
-              </FieldRow.Actions>
-            </FieldRow>
-          ) : (
-            <h2 className="font-display text-lg font-bold text-navy">{aspect.label}</h2>
-          )}
-          <span className="ml-auto flex flex-wrap items-center gap-2">
-            <ConfigBadge tone={aspect.items.length > 0 ? 'won' : 'open'}>
-              {s.items({ n: aspect.items.length })}
-            </ConfigBadge>
-            {canWrite && editing !== `aspect-${aspect.code}` && (
-              <>
-                <Button
-                  variant="inline"
-                  onClick={() => {
-                    setEditing(`aspect-${aspect.code}`);
-                    setEditLabel(aspect.label);
-                  }}
-                >
-                  {s.rename}
-                </Button>
-                <Button
-                  variant="secondary"
-                  className={CONTROL_PHONE}
-                  onClick={() => {
-                    setAddingAspect(false);
-                    setAddingTo(aspect.code);
-                    setEntry({ label: '', code: '', codeTouched: false, first: '' });
-                  }}
-                >
-                  {t.addItem}
-                </Button>
-{/*
-                  * One rule, on both screens: an aspect is removed **with** its items. An aspect
-                  * holding none cannot be saved — the checker refuses it — so "empty it first"
-                  * would be a path that dead-ends, which is what it did when it was tried.
-                  */}
-                <Button
-                  variant="inlineDanger"
-                  disabled={busy || draft!.aspects.length === 1}
-                  title={draft!.aspects.length === 1
-                    ? t.oneAspect
-                    : t.removesAspect({ name: aspect.label, n: aspect.items.length })}
-                  onClick={() => change({
-                    aspects: draft!.aspects.filter((a) => a.code !== aspect.code),
-                  })}
-                >
-                  {s.remove}
-                </Button>
-              </>
-            )}
-          </span>
+          {canWrite && <ActionMenu glyph="⋯" label={s.actionsFor({ name: aspect.label })} items={menu} />}
         </div>
 
-        <ul className="flex flex-col divide-y divide-hairline">
+        <ul className="flex flex-col">
           {aspect.items.map((item, index) => {
-            // P18.8-T7 G2: completes from the office's data, by its code — drawn so, and not re-linked here.
-            const data = item.autoLink === null ? bound.get(item.code) : undefined;
+            const source = sourceOf(item);
             return (
               <li
                 key={item.code}
-                className={`flex flex-wrap items-center gap-3 px-4 py-3 sm:px-5 ${
-                  over === item.code ? 'bg-base' : ''
-                } ${dragging?.item === item.code ? 'opacity-40' : ''}`}
+                data-item={item.code}
+                className={cn(
+                  'flex items-center gap-2 border-b border-divider px-4 py-2',
+                  over === item.code && 'bg-base',
+                  dragging?.item === item.code && 'opacity-40',
+                )}
                 onDragOver={(e) => {
                   if (!dragging || dragging.item === undefined) return;
                   e.preventDefault();
@@ -443,290 +379,57 @@ export default function ActivationChecklistPage() {
                   <DragHandle
                     label={item.label}
                     disabled={busy}
-                    className={cn(DRAG_HANDLE_CLASS, TAP_TARGET)}
+                    className={HANDLE_TOUCH}
                     onPick={() => setDragging({ aspect: aspect.code, item: item.code })}
                     onDrop={() => { setDragging(null); setOver(null); }}
-                    onMove={(by) => patchAspect(aspect.code, {
-                      items: move(aspect.items, index, index + by),
-                    })}
+                    onMove={(by) => patchAspect(aspect.code, { items: move(aspect.items, index, index + by) })}
                   />
                 )}
-                {canWrite && phone && editing !== item.code && (
-                  <ReorderArrows
-                    label={item.label}
-                    index={index}
-                    count={aspect.items.length}
-                    disabled={busy}
-                    onMove={(by) => patchAspect(aspect.code, {
-                      items: move(aspect.items, index, index + by),
-                    })}
-                  />
-                )}
-
-                <div className="min-w-0 flex-1">
-                  {editing === item.code ? (
-                    <div className="flex flex-col gap-2">
-                      <CodeField
-                        id={`code-item-code-${item.code}`}
-                        value={item.code}
-                        reason={t.itemReason}
-                        inputClassName={CONTROL_PHONE}
-                      />
-                      <FieldRow>
-                        <Field label={s.item} htmlFor={`label-${item.code}`} className="min-w-60 flex-1">
-                          <TextInput
-                            id={`label-${item.code}`}
-                            value={editLabel}
-                            onChange={(e) => setEditLabel(e.target.value)}
-                            className={CONTROL_PHONE}
-                          />
-                        </Field>
-                        <FieldRow.Actions>
-                          <Button
-                            disabled={!editLabel.trim()}
-                            className={CONTROL_PHONE}
-                            onClick={() => {
-                              patchItem(aspect.code, item.code, { label: editLabel.trim() });
-                              setEditing(null);
-                            }}
-                          >
-                            {s.save}
-                          </Button>
-                          <Button variant="secondary" className={CONTROL_PHONE} onClick={() => setEditing(null)}>{s.cancel}</Button>
-                        </FieldRow.Actions>
-                      </FieldRow>
-                    </div>
-                  ) : (
-                    /* The item and nothing under it, as the prototype draws the row
-                       (`KPM_Owner.html:1530-1560`): the badge says whether its link works, and the
-                       select beside it what it completes from. The sub-line that was here said when
-                       the link would start working, by phase number (P10.1-T2 AC-13). */
-                    <p className="text-md text-navy">{item.label}</p>
-                  )}
-                </div>
-
-                {data && <LinkBadge link={data} />}
-                {item.autoLink !== null && links.has(item.autoLink) && (
-                  <LinkBadge link={links.get(item.autoLink)!} />
-                )}
-
-                {canWrite && editing !== item.code && (
-                  /* Wraps rather than holding its width: the select alone is wider than half a
-                     phone, and a row that cannot shrink pushes the whole page sideways. */
-                  <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
-                    <Field label={t.completesFrom} htmlFor={`link-${item.code}`} className="min-w-44 flex-1">
-                      {data ? (
-                        /* The same select, holding the one thing it completes from and offering nothing else: the
-                           Owner reads it as data-backed, where *No link (manual)* said a leader ticks it (G2). */
-                        <Select id={`link-${item.code}`} value={data.kind} disabled onChange={() => undefined} className={CONTROL_PHONE}>
-                          <option value={data.kind}>{fromDataWords(data.label, language)}</option>
-                        </Select>
-                      ) : (
-                        <Select
-                          id={`link-${item.code}`}
-                          value={item.autoLink ?? ''}
-                          disabled={busy}
-                          className={CONTROL_PHONE}
-                          onChange={(e) => patchItem(aspect.code, item.code, {
-                            autoLink: e.target.value === '' ? null : e.target.value,
-                          })}
-                        >
-                          <option value="">{t.noLink}</option>
-                          <optgroup label={t.feature}>
-                            {FEATURE_LINKS.map((f) => (
-                              <option key={f.value} value={f.value}>{f.label}</option>
-                            ))}
-                          </optgroup>
-                          <optgroup label={t.trainingModule}>
-                            {offered.map((m) => (
-                              <option key={m.code} value={`training:${m.code}`}>{m.title}</option>
-                            ))}
-                          </optgroup>
-                        </Select>
-                      )}
-                    </Field>
-                    <Button
-                      variant="inline"
-                      onClick={() => { setEditing(item.code); setEditLabel(item.label); }}
-                    >
-                      {s.edit}
-                    </Button>
-                    <Button
-                      variant="inlineDanger"
-                      disabled={busy || aspect.items.length === 1}
-                      title={aspect.items.length === 1 ? t.oneItem : undefined}
-                      onClick={() => patchAspect(aspect.code, {
-                        items: aspect.items.filter((i) => i.code !== item.code),
-                      })}
-                    >
-                      {s.remove}
-                    </Button>
-                  </div>
-                )}
+                <button
+                  type="button"
+                  aria-haspopup="dialog"
+                  className="flex min-h-11 min-w-0 flex-1 flex-col items-start justify-center text-left"
+                  onClick={() => setItemSheet({
+                    aspect: aspect.code, code: item.code, label: item.label, autoLink: item.autoLink,
+                  })}
+                >
+                  <span className="text-md font-semibold text-navy">{item.label}</span>
+                  <span className="text-sm text-muted">{t.completesFromLine({ source: source.words })}</span>
+                </button>
+                {/* Data honesty: a link that does not work says *Dicentang manual*, beside the line naming it. */}
+                {source.link && !source.link.live && <LinkBadge link={source.link} />}
               </li>
             );
           })}
         </ul>
 
-        {canWrite && addingTo === aspect.code && (
-          <FieldRow className="border-t border-hairline px-4 py-3 sm:px-5">
-            <Field label={s.item} htmlFor="new-item-label" className="min-w-60 flex-1">
-              <TextInput
-                id="new-item-label"
-                className={CONTROL_PHONE}
-                value={entry.label}
-                onChange={(e) => setEntry((d) => ({
-                  ...d, label: e.target.value, code: d.codeTouched ? d.code : suggestCode(e.target.value),
-                }))}
-              />
-            </Field>
-            <Field
-              label={s.code}
-              htmlFor="new-item-code"
-              hint={t.itemCodeHint}
-              className="min-w-48"
+        {canWrite && (
+          <div className="px-4 py-2.5">
+            <button
+              type="button"
+              aria-haspopup="dialog"
+              aria-label={t.addItemTo({ name: aspect.label })}
+              className={ADD_LINE}
+              onClick={() => {
+                setAddSheet(aspect.code);
+                setEntry({ label: '', code: '', codeTouched: false, first: '' });
+              }}
             >
-              <TextInput
-                id="new-item-code"
-                className={CONTROL_PHONE}
-                value={entry.code}
-                onChange={(e) => setEntry((d) => ({
-                  ...d, code: e.target.value.toUpperCase(), codeTouched: e.target.value !== '',
-                }))}
-              />
-            </Field>
-            <FieldRow.Actions>
-              <Button
-                disabled={!entry.label.trim() || !entry.code.trim()}
-                className={CONTROL_PHONE}
-                onClick={() => {
-                  patchAspect(aspect.code, {
-                    items: [...aspect.items, {
-                      code: entry.code.trim(), label: entry.label.trim(), autoLink: null,
-                    }],
-                  });
-                  setAddingTo(null);
-                }}
-              >
-                {s.add}
-              </Button>
-              <Button variant="secondary" className={CONTROL_PHONE} onClick={() => setAddingTo(null)}>{s.cancel}</Button>
-            </FieldRow.Actions>
-          </FieldRow>
+              <LineIcon name="plus" className="h-4 w-4" />
+              {t.addItem.replace(/^\+\s*/, '')}
+            </button>
+          </div>
         )}
-      </Card>
-    );
-  }
-
-  /** Whether an item completes by itself: bound to the office's data, or linked to something that works (D-25's ⚡). */
-  const automatic = (item: DraftItem) => (item.autoLink === null
-    ? bound.has(item.code)
-    : links.get(item.autoLink)?.live === true);
-
-  /**
-   * **The aspects as an accordion** (P19.2-T3 AC-3; UI-141, D-25): each a 48px heading — its number, its name, *n item*,
-   * ⌄ — one open at a time; its items one line each, ⚡ on one that completes by itself, › to its sheet; *+ Add item* the
-   * open aspect's last line. An aspect's own actions — rename, ↑ ↓, remove — are behind its ⋮.
-   */
-  function compactAspects() {
-    const aspects = draft!.aspects;
-    const current = openAspect === undefined ? aspects[0]?.code ?? null : openAspect;
-    return (
-      // The room the pinned bar needs under the last line (`FLOATING_BAR_ROOM`).
-      <div className={canWrite ? FLOATING_BAR_ROOM : undefined}>
-      <ul role="list" aria-label={t.aspects} className="overflow-hidden rounded-lg bg-card">
-        {aspects.map((aspect, at) => {
-          const isOpen = aspect.code === current;
-          const panelId = `aspect-items-${aspect.code}`;
-          const menu: ActionMenuItem[] = [
-            {
-              label: s.rename,
-              onSelect: () => setAspectSheet({ code: aspect.code, label: aspect.label }),
-            },
-            {
-              label: u.moveUp({ label: aspect.label }),
-              disabled: busy || at === 0,
-              onSelect: () => change({ aspects: move(aspects, at, at - 1) }),
-            },
-            {
-              label: u.moveDown({ label: aspect.label }),
-              disabled: busy || at === aspects.length - 1,
-              onSelect: () => change({ aspects: move(aspects, at, at + 1) }),
-            },
-            {
-              label: s.remove,
-              tone: 'alert',
-              disabled: busy || aspects.length === 1,
-              reason: aspects.length === 1 ? t.oneAspect : undefined,
-              hint: aspects.length === 1 ? undefined : t.removesAspect({ name: aspect.label, n: aspect.items.length }),
-              onSelect: () => change({ aspects: aspects.filter((a) => a.code !== aspect.code) }),
-            },
-          ];
-          return (
-            <li key={aspect.code} data-row={aspect.code} className="border-t border-divider first:border-t-0">
-              <div className="flex min-h-12 items-center pr-1">
-                <button
-                  type="button"
-                  aria-expanded={isOpen}
-                  aria-controls={panelId}
-                  onClick={() => setOpenAspect(isOpen ? null : aspect.code)}
-                  className="flex min-h-12 min-w-0 flex-1 items-center gap-2.5 pl-3 text-left"
-                >
-                  <span aria-hidden="true" className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-secondary text-xs font-bold text-secondary-contrast">
-                    {formatNumber(at + 1, {}, figures)}
-                  </span>
-                  <span className="min-w-0 flex-1 truncate font-display text-md font-bold text-navy">{aspect.label}</span>
-                  <span className="shrink-0 text-sm font-semibold text-muted">{s.items({ n: aspect.items.length })}</span>
-                  <LineIcon name={isOpen ? 'chevronUp' : 'chevronDown'} className="mr-1 h-5 w-5 shrink-0 text-signal-grey" />
-                </button>
-                {canWrite && <ActionMenu label={s.actionsFor({ name: aspect.label })} items={menu} />}
-              </div>
-              {isOpen && (
-                <ul id={panelId} role="list" aria-label={aspect.label} className="[&>li]:border-t [&>li]:border-divider [&>li]:pl-11">
-                  {aspect.items.map((item) => (
-                    <ListRow
-                      key={item.code}
-                      data-row={item.code}
-                      title={<span className="font-normal">{item.label}</span>}
-                      ariaLabel={item.label}
-                      trailing={automatic(item) ? <AutoMarker name={item.label} /> : undefined}
-                      haspopup
-                      onSelect={() => setItemSheet({
-                        aspect: aspect.code, code: item.code, label: item.label, autoLink: item.autoLink,
-                      })}
-                    />
-                  ))}
-                  {canWrite && (
-                    <li>
-                      <button
-                        type="button"
-                        aria-haspopup="dialog"
-                        onClick={() => {
-                          setAddSheet(aspect.code);
-                          setEntry({ label: '', code: '', codeTouched: false, first: '' });
-                        }}
-                        className="flex min-h-12 w-full items-center text-left text-md font-semibold text-primary-ink"
-                      >
-                        {t.addItem}
-                      </button>
-                    </li>
-                  )}
-                </ul>
-              )}
-            </li>
-          );
-        })}
-      </ul>
-      </div>
+      </section>
     );
   }
 
   /**
-   * **The sheets below 1024px** (P19.2-T3 AC-3): an item's — its code, its name, *Completes from* (the select appears only
-   * here), its badge, ↑ ↓ and *Remove* last, *Save* pinned; an aspect's name; a new item. Each changes the draft, as the
-   * cards' editors do, and *Save draft* below saves it.
+   * **The sheets** (P19.2-T3 AC-3, at every width since P19.21): an item's — its badge, its code, its name, *Diselesaikan
+   * dari* (the select), ↑ ↓ and *Hapus*, *Simpan* pinned; an aspect's name; a new item. Each changes the draft, and the
+   * bar's *Simpan draf* saves it.
    */
-  function compactSheets() {
+  function sheets() {
     const aspects = draft!.aspects;
     const sheetAspect = itemSheet ? aspects.find((a) => a.code === itemSheet.aspect) ?? null : null;
     const index = sheetAspect && itemSheet ? sheetAspect.items.findIndex((i) => i.code === itemSheet.code) : -1;
@@ -768,6 +471,7 @@ export default function ActivationChecklistPage() {
               </Field>
               <Field label={t.completesFrom} htmlFor={`link-${sheetItem.code}`}>
                 {data ? (
+                  /* The one thing it completes from, offering nothing else: data-backed, never *manual* (G2). */
                   <Select id={`link-${sheetItem.code}`} value={data.kind} disabled onChange={() => undefined}>
                     <option value={data.kind}>{fromDataWords(data.label, language)}</option>
                   </Select>
@@ -894,138 +598,100 @@ export default function ActivationChecklistPage() {
     );
   }
 
+  const undo = () => {
+    const current = server!.draft ?? server!.published;
+    setDraft(current ? toDraft(current) : { aspects: [] });
+    setDirty(false);
+  };
+
+  /**
+   * **The orange bar, only while a draft waits** (P19.21-T2 AC-3 for this page; mockup f12's *pubBar*): what agents are
+   * still on, then *Simpan draf* while there are edits, *Terbitkan ke agent* once the draft is saved. The starting point
+   * an office has never saved is a draft too: saving it is what gives the office a checklist at all.
+   */
+  const draftBar = server !== null && draft !== null && canWrite && (dirty || hasDraft || server.published === null) ? (
+    <div
+      role="status"
+      data-draft-bar=""
+      className="mb-4 flex flex-wrap items-center gap-3 rounded-lg bg-primary-50 p-3"
+    >
+      <LineIcon name="alert" className="h-5 w-5 shrink-0 text-primary-ink" />
+      <p className="min-w-0 flex-1 text-md text-navy">
+        <strong>{t.draftWord}</strong>{' '}
+        {server.published ? t.stillOn({ version: server.published.version }) : t.noneYet}
+      </p>
+      {dirty && (
+        <Button variant="inline" disabled={busy} className={TEXT_BUTTON_TOUCH} onClick={undo}>{t.undoEdits}</Button>
+      )}
+      {saved && !dirty && <span className="text-md font-semibold text-success">{s.saved}</span>}
+      <Button
+        variant="secondary"
+        className={CONTROL_PHONE}
+        disabled={busy || draft.aspects.length === 0 || (!dirty && (hasDraft || server.published !== null))}
+        onClick={() => void run(() => saveActivationDraft(draft))}
+      >
+        {busy ? s.saving : t.saveDraft}
+      </Button>
+      <Button
+        className={CONTROL_PHONE}
+        disabled={busy || dirty || !hasDraft}
+        title={dirty ? t.saveDraftFirst : t.publishVersion({ n: version })}
+        // P19.21-T2 (ADR-0274 §5): the version first, then the snapshot's checklist section, so the hub's
+        // *Belum diterbitkan* clears with one press — the second call publishes no draft, there is none left.
+        onClick={() => void run(async () => {
+          const published = await publishActivationChecklist();
+          await publishConfig(['activation_checklist']);
+          return published;
+        })}
+      >
+        {t.publishToAgents}
+      </Button>
+    </div>
+  ) : null;
+
   return (
     <SettingsScreen
       title={kept('Activation checklist')}
-      subtitle={t.subtitle}
       // P19.3-T2 AC-5 (UI-149, Overview case 0b): *Sudah sesuai*, step 3 of the KPM setup card — the checklist unchanged.
       actions={<SettingsReviewed page="activation-checklist" />}
-      // The office's administration's own read since P18.2-T3 (as `training_settings:read`): a field member typing
-      // the address meets the permission-denied state rather than a page of failed reads.
+      // The office's administration's own read since P18.2-T3 (as `training_settings:read`).
       permission="activation_settings:read"
       error={error}
-      toolbar={{
-        /* The prototype's own sentence, the whole explanation of the AUTO badge, in the client's words: shown from
-           1024px, an ⓘ in its place at 768–1023px, and nothing on a phone — each AUTO badge says what it waits for. */
-        hint: (
-          <>
-            <span className={SHOWN_FROM_DESKTOP}>{t.linkedItems}</span>
-            <BelowDesktopTip text={t.linkedItems} onPhone="remove" />
-          </>
-        ),
+      bars={draftBar}
+      toolbar={canWrite && draft && !addingAspect ? {
         actions: (
-          <>
-            {canWrite && draft && !addingAspect && (
-              <Button className={CONTROL_PHONE} onClick={() => {
-                setAddingTo(null);
-                setAddingAspect(true);
-                setEntry({ label: '', code: '', codeTouched: false, first: '' });
-              }}
-              >
-                {t.addAspect}
-              </Button>
-            )}
-          </>
+          <Button
+            variant="secondary"
+            className={CONTROL_PHONE}
+            onClick={() => {
+              setAddingAspect(true);
+              setEntry({ label: '', code: '', codeTouched: false, first: '' });
+            }}
+          >
+            <LineIcon name="plus" className="h-4 w-4" />
+            {t.addAspect.replace(/^\+\s*/, '')}
+          </Button>
         ),
-      }}
+      } : undefined}
     >
       {server === null || draft === null ? (
-        error ? null : <SkeletonCards count={3} />
+        error ? null : <SkeletonCards count={2} />
       ) : (
-        <div className="flex flex-col gap-4">
-          <Card>
-            <p className="text-md text-navy">
-              {server.published ? (
-                t.published({
-                  version: <strong>{t.version({ n: server.published.version })}</strong>,
-                  draft: hasDraft ? version : null,
-                })
-              ) : hasDraft ? (
-                t.draftOnly({ version: <strong>{t.version({ n: version })}</strong> })
-              ) : server.draft === null ? (
-                /*
-                 * Neither a version nor a starting point: an office started from a source that held
-                 * no checklist (ADR-0115 §8). Its Owner authors the first aspect from nothing; until
-                 * a version is published nobody has an activation.
-                 */
-                t.fromNothing({ version: <strong>{t.version({ n: 1 })}</strong> })
-              ) : (
-                t.fromStandard({ standard: <strong>{t.standardChecklist}</strong> })
-              )}
-              {/* Below 1024px the sentence under this one is its ⓘ, beside the version it is about (P18.9-T4 AC-6). */}
-              <BelowDesktopTip text={t.newVersions} className="ml-1" />
-            </p>
-            <p className={cn('mt-2 text-md text-muted', SHOWN_FROM_DESKTOP)}>{t.newVersions}</p>
-            {/* The one setting this screen shows and does not own. It used to end "— change it in
-                Branch info", linking there; Branch info has no window field and no screen edits
-                the window, so the sentence states the fact and points nowhere (X-45). */}
-            <p className="mt-2 text-sm text-muted">
-              {t.window({
-                days: <strong className="text-navy">{t.days({ n: formatNumber(server.windowDays, {}, figures) })}</strong>,
-              })}
-            </p>
-
-            {canWrite && compact && (dirty || (saved && !dirty)) && (
-              <div className="mt-2 flex flex-wrap items-center gap-3">
-                {dirty && (
-                  <Button
-                    variant="inline"
-                    disabled={busy}
-                    onClick={() => {
-                      const current = server.draft ?? server.published;
-                      setDraft(current ? toDraft(current) : { aspects: [] });
-                      setDirty(false);
-                    }}
-                  >
-                    {t.undoEdits}
-                  </Button>
-                )}
-                {saved && !dirty && (
-                  <p role="status" className="text-md font-semibold text-success">{s.saved}</p>
-                )}
-              </div>
+        <div className="flex flex-col gap-3">
+          {/* The note (mockup f16), from the server: the version hires are given and the window, or how to begin. */}
+          <p data-version-note="" className="text-sm text-muted">
+            {server.published ? (
+              t.note({ version: server.published.version, days: formatNumber(server.windowDays, {}, figures) })
+            ) : (
+              <>
+                {hasDraft ? t.draftOnly({ version: <strong>{t.version({ n: version })}</strong> })
+                  : server.draft === null ? t.fromNothing({ version: <strong>{t.version({ n: 1 })}</strong> })
+                    : t.fromStandard({ standard: <strong>{t.standardChecklist}</strong> })}
+                {' '}
+                {t.window({ days: <strong className="text-navy">{t.days({ n: formatNumber(server.windowDays, {}, figures) })}</strong> })}
+              </>
             )}
-            {canWrite && !compact && (
-              <div className="mt-3 flex flex-wrap items-center gap-3">
-                {/* The starting point is savable as it stands: saving it is what makes the office
-                    have a checklist at all. */}
-                <Button
-                  className={CONTROL_PHONE}
-                  disabled={busy || draft.aspects.length === 0
-                    || (!dirty && (hasDraft || server.published !== null))}
-                  onClick={() => void run(() => saveActivationDraft(draft))}
-                >
-                  {busy ? s.saving : t.saveDraft}
-                </Button>
-                <Button
-                  variant="secondary"
-                  className={CONTROL_PHONE}
-                  disabled={busy || dirty || !hasDraft}
-                  title={dirty ? t.saveDraftFirst : undefined}
-                  onClick={() => void run(publishActivationChecklist)}
-                >
-                  {t.publishVersion({ n: version })}
-                </Button>
-                {dirty && (
-                  <Button
-                    variant="secondary"
-                    className={CONTROL_PHONE}
-                    disabled={busy}
-                    onClick={() => {
-                      const current = server.draft ?? server.published;
-                      setDraft(current ? toDraft(current) : { aspects: [] });
-                      setDirty(false);
-                    }}
-                  >
-                    {t.undoEdits}
-                  </Button>
-                )}
-                {saved && !dirty && (
-                  <p role="status" className="text-md font-semibold text-success">{s.saved}</p>
-                )}
-              </div>
-            )}
-          </Card>
+          </p>
 
           {canWrite && addingAspect && (
             <Card>
@@ -1038,18 +704,11 @@ export default function ActivationChecklistPage() {
                     className={CONTROL_PHONE}
                     value={entry.label}
                     onChange={(e) => setEntry((d) => ({
-                      ...d,
-                      label: e.target.value,
-                      code: d.codeTouched ? d.code : suggestCode(e.target.value),
+                      ...d, label: e.target.value, code: d.codeTouched ? d.code : suggestCode(e.target.value),
                     }))}
                   />
                 </Field>
-                <Field
-                  label={s.code}
-                  htmlFor="new-aspect-code"
-                  hint={t.aspectCodeHint}
-                  className="min-w-48"
-                >
+                <Field label={s.code} htmlFor="new-aspect-code" hint={t.aspectCodeHint} className="min-w-48">
                   <TextInput
                     id="new-aspect-code"
                     className={CONTROL_PHONE}
@@ -1094,37 +753,16 @@ export default function ActivationChecklistPage() {
             </Card>
           )}
 
-          {draft.aspects.length === 0 && !addingAspect && (
-            <Card>
-              <EmptyState title={t.none} />
-            </Card>
+          {draft.aspects.length === 0 && !addingAspect ? (
+            <Card><EmptyState title={t.none} /></Card>
+          ) : (
+            <div className="grid grid-cols-1 items-start gap-3 md:grid-cols-2">
+              {draft.aspects.map((aspect, at) => aspectCard(aspect, at))}
+            </div>
           )}
-          {compact ? compactAspects() : draft.aspects.map((aspect, at) => aspectCard(aspect, at))}
         </div>
       )}
-      {compact && server !== null && draft !== null && compactSheets()}
-      {/* The draft's two actions, pinned at the foot below 1024px (UI-141: *pinned Simpan draf / Terbitkan versi n*). */}
-      {compact && canWrite && server !== null && draft !== null && (
-        <FloatingBar pillClassName="justify-end pl-1.5">
-          <button
-            type="button"
-            className={cn(FLOATING_BAR_BUTTON, 'flex-1 bg-hover-row hover:bg-divider')}
-            disabled={busy || draft.aspects.length === 0 || (!dirty && (hasDraft || server.published !== null))}
-            onClick={() => void run(() => saveActivationDraft(draft))}
-          >
-            {busy ? s.saving : t.saveDraft}
-          </button>
-          <button
-            type="button"
-            className={cn(FLOATING_BAR_BUTTON, 'flex-1')}
-            disabled={busy || dirty || !hasDraft}
-            title={dirty ? t.saveDraftFirst : undefined}
-            onClick={() => void run(publishActivationChecklist)}
-          >
-            {t.publishVersion({ n: version })}
-          </button>
-        </FloatingBar>
-      )}
+      {server !== null && draft !== null && sheets()}
     </SettingsScreen>
   );
 }

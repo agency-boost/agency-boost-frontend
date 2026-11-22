@@ -35,7 +35,7 @@ const en = {
   label: 'Label',
   labelSyariah: 'Label on a Syariah proposal',
   type: 'Type',
-  types: { chips: 'Choices', money: 'Amount', fixed: 'Fixed text' },
+  types: { chips: 'Choices', money: 'Amount', fixed: 'Fixed text', derived: 'Automatic' },
   options: 'Options',
   optionLabel: ({ n }: { n: number }) => `Option ${n}`,
   years: ({ n }: { n: number }) => `Years paid, option ${n}`,
@@ -106,6 +106,51 @@ const en = {
   removeBlock: ({ name }: { name: string }) => `Remove block ${name}`,
   /** A rider's editor has no *Proposal* section (ADR-0209 §3): it is never offered alone. */
   riderHasNone: 'A rider is never offered alone, so it has no proposal fields.',
+  /**
+   * **A derived field** (P19.14-T2; ADR-0255 §3): worked out by the product's plan rule, shown here and never edited —
+   * the same words the agent's card reads (*otomatis*).
+   */
+  derivedFrom: ({ n }: { n: number }) => `Worked out from the other fields by ${n} ${n === 1 ? 'rule' : 'rules'}.`,
+  derivedValues: 'Possible values',
+  /**
+   * ***Perhitungan*** (P19.14-T2 AC-5; ADR-0255 §5, §10): the catalogue's calculation fields, read only here — the 11 Nov
+   * import fills them; no product calculates yet, so the agent types every premium.
+   */
+  calc: {
+    title: 'Calculation',
+    lead: 'Read only here. The product’s import fills these; until a premium table is loaded the agent types the premium.',
+    calcType: 'Calculation type',
+    calcTypes: {
+      up_premium: 'Sum assured ↔ premium', goal: 'Goal amount → premium', premium_benefit: 'Premium → benefit',
+      plan_priced: 'Priced by plan', manual: 'Typed by the agent',
+    },
+    rateTable: 'Premium table',
+    noRateTable: 'None yet — the agent types the premium',
+    hasRateTable: 'Set — its versions are on the company’s Proposal tab',
+    entryAge: 'Entry age',
+    noLimit: 'No limit',
+    ageRange: ({ min, max }: { min: number; max: number }) => `${min}–${max}`,
+    payTerms: 'Payment terms',
+    payTerm: ({ label, max, isDefault }: { label: string; max: number | null; isDefault: boolean }) =>
+      `${label}${max !== null ? ` (to age ${max})` : ''}${isDefault ? ' ★' : ''}`,
+    frequencies: 'Payment frequency',
+    frequencyNames: { monthly: 'Monthly', quarterly: 'Quarterly', semiannual: 'Half-yearly', annual: 'Annually', single: 'Single payment' },
+    allPeriodic: 'Monthly · Quarterly · Half-yearly · Annually',
+    smoker: 'Smoker',
+    smokerRated: 'Priced differently for smokers',
+    smokerNot: 'Not asked',
+    planRule: 'Plan rule',
+    planRuleOf: ({ n, field }: { n: number; field: string }) => `${n} ${n === 1 ? 'rule' : 'rules'} for ${field}`,
+    limits: 'Limits',
+    limitUp: ({ min, max }: { min: string; max: string }) => `Sum assured ${min} – ${max}`,
+    limitStep: ({ step }: { step: string }) => `sum assured in steps of ${step}`,
+    limitPremium: ({ min, max }: { min: string; max: string }) => `premium ${min} – ${max}`,
+    need: 'Need ticked',
+    needs: {
+      HOSPITAL: 'Hospital costs', CRITICAL_INCOME: 'Income during critical illness', FAMILY: 'Family benefit',
+      EDUCATION: 'Education fund', FUTURE: 'Future / retirement fund',
+    },
+  },
 };
 
 const id: MessagesOf<typeof en> = {
@@ -131,7 +176,7 @@ const id: MessagesOf<typeof en> = {
   label: 'Label',
   labelSyariah: 'Label di proposal Syariah',
   type: 'Jenis',
-  types: { chips: 'Pilihan', money: 'Nominal', fixed: 'Teks tetap' },
+  types: { chips: 'Pilihan', money: 'Nominal', fixed: 'Teks tetap', derived: 'Otomatis' },
   options: 'Pilihan',
   optionLabel: ({ n }) => `Pilihan ${n}`,
   years: ({ n }) => `Lama bayar (tahun), pilihan ${n}`,
@@ -201,6 +246,42 @@ const id: MessagesOf<typeof en> = {
   addBlock: '+ Tambah blok',
   removeBlock: ({ name }) => `Hapus blok ${name}`,
   riderHasNone: `${kept('Rider')} tidak pernah ditawarkan sendiri, jadi tidak punya kolom proposal.`,
+  derivedFrom: ({ n }) => `Dihitung dari kolom lain dengan ${n} aturan.`,
+  derivedValues: 'Nilai yang mungkin',
+  calc: {
+    title: 'Perhitungan',
+    lead: 'Hanya dibaca di sini. Impor produk mengisinya; selama tabel tarif belum dimuat, agen mengetik preminya.',
+    calcType: 'Cara hitung',
+    calcTypes: {
+      up_premium: 'UP ↔ premi', goal: 'Target dana → premi', premium_benefit: 'Premi → manfaat',
+      plan_priced: 'Harga dari plan', manual: 'Diketik agen',
+    },
+    rateTable: 'Tabel tarif',
+    noRateTable: 'Belum ada — agen mengetik premi',
+    hasRateTable: 'Ada — versinya di tab Proposal perusahaan',
+    entryAge: 'Usia masuk',
+    noLimit: 'Tidak dibatasi',
+    ageRange: ({ min, max }) => `${min}–${max}`,
+    payTerms: 'Masa bayar',
+    payTerm: ({ label, max, isDefault }) => `${label}${max !== null ? ` (maks. usia ${max})` : ''}${isDefault ? ' ★' : ''}`,
+    frequencies: 'Cara bayar',
+    frequencyNames: { monthly: 'Bulanan', quarterly: 'Kuartalan', semiannual: 'Semesteran', annual: 'Tahunan', single: 'Sekali bayar' },
+    allPeriodic: 'Bulanan · Kuartalan · Semesteran · Tahunan',
+    smoker: 'Merokok',
+    smokerRated: 'Premi dibedakan untuk perokok',
+    smokerNot: 'Tidak ditanyakan',
+    planRule: 'Aturan plan',
+    planRuleOf: ({ n, field }) => `${n} aturan untuk ${field}`,
+    limits: 'Batas',
+    limitUp: ({ min, max }) => `UP ${min} – ${max}`,
+    limitStep: ({ step }) => `UP kelipatan ${step}`,
+    limitPremium: ({ min, max }) => `premi ${min} – ${max}`,
+    need: 'Kebutuhan',
+    needs: {
+      HOSPITAL: 'Biaya rumah sakit', CRITICAL_INCOME: 'Penghasilan saat sakit kritis', FAMILY: 'Santunan keluarga',
+      EDUCATION: 'Dana pendidikan', FUTURE: 'Dana masa depan / pensiun',
+    },
+  },
 };
 
 export const adminProductProposalMessages = defineMessages({ en, id });

@@ -2,7 +2,7 @@ import { screen, within } from '@testing-library/react';
 import { objectionCardsMessages } from '@/i18n/messages/objection-cards';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { atWidth, makeMe, renderInIndonesian, stubFetch, wears } from '@test/harness';
+import { atWidth, makeMe, renderInIndonesian, stubFetch } from '@test/harness';
 import { englishOnly, englishShown } from '@test/english-left';
 import { settingsMessages } from '@/i18n/messages/settings';
 import { settingsProductsMessages } from '@/i18n/messages/settings-products';
@@ -80,7 +80,13 @@ const noEnglishLeft = () => expect(englishShown(document.body, PRODUCTS_ENGLISH)
 describe('P18.10-T4 Settings › Products in Indonesian', () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it('AC-2 the shelf: its line, the count, the badges and the switch in Indonesian, the company and products as typed', async () => {
+  /** A product's sheet, from its ⋯ (P19.21-T3 AC-5). */
+  const sheetOf = async (name: string) => {
+    await userEvent.click(await screen.findByRole('button', { name: `Lainnya untuk ${name}` }));
+    return screen.findByRole('dialog', { name });
+  };
+
+  it('P19.21-T3 AC-5 the list in Indonesian as frame 21 writes it: Produk | Persetujuan script, the chips, the pills, Tinjau, the foot', async () => {
     atWidth(1280);
     render(SHELF);
     await screen.findByText('Syariah Kami');
@@ -88,34 +94,38 @@ describe('P18.10-T4 Settings › Products in Indonesian', () => {
     expect(screen.getByText('Yang dijual KPM Anda dari katalog Allianz Life, dan kata-kata yang Anda pakai untuk menjualnya.'))
       .toBeInTheDocument();
     const tabs = screen.getByRole('navigation', { name: 'Bagian produk' });
-    expect(within(tabs).getAllByRole('link').map((l) => l.textContent)).toEqual(['Products', 'Script approvals']);
-    const count = screen.getByText(/^3 produk · /);
-    expect(count).toHaveTextContent('3 produk · 2 dapat dijual agent Anda · 1 ditarik oleh Allianz Life');
-    expect(within(count).getByText('2').tagName).toBe('STRONG');
-    expect(screen.getAllByText('Perubahan Anda hanya berlaku untuk KPM ini.').find((el) => el.tagName === 'P'))
-      .toBeInTheDocument();
-    expect(screen.getAllByText('Konvensional')).toHaveLength(2);
-    expect(screen.getByText('Syariah')).toBeInTheDocument();
-    expect(screen.getByText('Allianz Life menyebutnya PRUSyariah')).toBeInTheDocument();
+    expect(within(tabs).getAllByRole('link').map((l) => l.textContent)).toEqual(['Produk', 'Persetujuan script']);
+    const chips = screen.getByRole('group', { name: 'Saring produk' });
+    expect(within(chips).getAllByRole('button').map((b) => b.textContent)).toEqual(['Semua3', 'Menunggu Anda1', 'Dikembalikan0']);
+    expect(screen.getByRole('searchbox', { name: 'Cari produk' })).toBeInTheDocument();
+    expect(screen.getAllByText(/· Konvensional$/)).toHaveLength(2);
+    expect(screen.getByText(/· Syariah$/)).toBeInTheDocument();
+    expect(screen.getByText('Dijual agent')).toBeInTheDocument();
     expect(screen.getByText('Ditarik oleh Allianz Life')).toBeInTheDocument();
-    expect(screen.getByText('Menunggu persetujuan Anda')).toBeInTheDocument();
+    expect(screen.getAllByText('Menunggu Anda').some((el) => el.hasAttribute('data-tone'))).toBe(true);
     expect(screen.getByRole('button', { name: 'Tinjau Syariah Kami' })).toHaveTextContent(/^Tinjau$/);
-    expect(screen.getAllByRole('switch', { name: 'Agent menjualnya' })).toHaveLength(2);
-    expect(screen.getAllByRole('button', { name: 'Sesuaikan' })).toHaveLength(3);
+    expect(screen.getByText('Perubahan hanya berlaku untuk KPM ini')).toBeInTheDocument();
+    expect(screen.getByText('2 dari 3 produk dijual agent')).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: /^Lainnya untuk / })).toHaveLength(3);
     noEnglishLeft();
   });
 
-  it('AC-1 the grey sentence keeps its verdict per size in Indonesian: behind its ⓘ below 1024px', async () => {
-    atWidth(768);
+  it('P19.21-T3 AC-5 a product’s sheet in Indonesian: its badges, Agent menjualnya and Sesuaikan', async () => {
     render(SHELF);
-    const tip = await screen.findByRole('button', { name: 'Perubahan Anda hanya berlaku untuk KPM ini.' });
-    expect(wears(tip.parentElement!, 768).split(' ')).not.toContain('hidden');
+    await screen.findByText('Syariah Kami');
+    const sheet = await sheetOf('Syariah Kami');
+    expect(within(sheet).getByText('Allianz Life menyebutnya PRUSyariah')).toBeInTheDocument();
+    expect(within(sheet).getByText('Menunggu persetujuan Anda')).toBeInTheDocument();
+    expect(within(sheet).getByRole('switch', { name: 'Agent menjualnya' })).toBeInTheDocument();
+    expect(within(sheet).getByRole('button', { name: 'Sesuaikan' })).toBeInTheDocument();
+    noEnglishLeft();
   });
 
   it('AC-2 a product opened: its name, description, the plan’s seven fields and its documents in Indonesian', async () => {
     render(SHELF);
-    await userEvent.click((await screen.findAllByRole('button', { name: 'Sesuaikan' }))[0]);
-    expect(screen.getByRole('button', { name: 'Tutup' })).toBeInTheDocument();
+    await sheetOf('PRUMapan');
+    await userEvent.click(await screen.findByRole('button', { name: 'Sesuaikan' }));
+    expect(screen.getAllByRole('button', { name: 'Tutup' }).length).toBeGreaterThan(0);
     expect(screen.getByLabelText('Kode')).toHaveAccessibleDescription(
       'Milik perusahaan Anda. Setiap KPM di Allianz Life memakai kode yang sama.',
     );
@@ -147,7 +157,8 @@ describe('P18.10-T4 Settings › Products in Indonesian', () => {
 
   it('AC-1 a renamed product says whose its name is, and offers the company’s back, in Indonesian', async () => {
     render(SHELF);
-    await userEvent.click((await screen.findAllByRole('button', { name: 'Sesuaikan' }))[1]);
+    await sheetOf('Syariah Kami');
+    await userEvent.click(await screen.findByRole('button', { name: 'Sesuaikan' }));
     expect(screen.getByLabelText('Nama yang dipakai KPM Anda'))
       .toHaveAccessibleDescription('Milik Anda. Allianz Life menyebutnya PRUSyariah.');
     expect(screen.getByRole('button', { name: 'Gunakan nama dari Allianz Life' })).toBeInTheDocument();
@@ -160,7 +171,7 @@ describe('P18.10-T4 Settings › Products in Indonesian', () => {
       product({ productId: 'p4', code: 'PRUTERM', displayName: field('PRUterm'), reviewState: 'rejected', rejectionReason: 'Terlalu kuat.' }),
     ]);
     await screen.findByText('Syariah Kami');
-    await userEvent.click(screen.getByRole('link', { name: 'Script approvals' }));
+    await userEvent.click(screen.getByRole('link', { name: 'Persetujuan script' }));
     expect(await screen.findByText('Ini pemeriksaan KPM Anda sendiri, bukan tinjauan oleh pihak lain.')).toBeInTheDocument();
     expect(screen.getByText(/^Tidak ada seorang pun di Allianz Life maupun di platform/)).toBeInTheDocument();
     expect(screen.getByText(/atau kata-kata Allianz Life sendiri\. Setiap baris di bawah menyebutkan yang mana\.$/))
@@ -179,7 +190,7 @@ describe('P18.10-T4 Settings › Products in Indonesian', () => {
   it('AC-1 nothing waiting, and no product on the catalog, say so in Indonesian', async () => {
     render([]);
     expect(await screen.findByText('Allianz Life belum punya produk di katalognya.')).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('link', { name: 'Script approvals' }));
+    await userEvent.click(screen.getByRole('link', { name: 'Persetujuan script' }));
     expect(await screen.findByText(/^Tidak ada yang menunggu Anda\./)).toBeInTheDocument();
     noEnglishLeft();
   });

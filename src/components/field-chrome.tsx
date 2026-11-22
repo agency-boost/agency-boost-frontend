@@ -1,8 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { createContext, useContext, useEffect, useRef, useState } from 'react';
+import { createContext, useContext } from 'react';
 import { UnreadBadge, withUnread } from '@/components/unread-badge';
 import { NavIcon } from '@/components/ui/nav-icon';
 import { kept } from '@/i18n/kept';
@@ -10,11 +9,10 @@ import { useLanguage, useMessages } from '@/i18n/language-provider';
 import { shellMessages } from '@/i18n/messages/shell';
 import { cn } from '@/lib/cn';
 import type { FieldNav } from '@/lib/field-nav';
-import type { ViewKind } from '@/lib/views';
 
 /**
  * **The field shell's chrome as a page's title row reads it** (UI V1, UI-004; ADR-0180, ADR-0197): the context the shell
- * provides, the title row's avatar, its view menu and Home's bell. Kept apart from the tab bar and the *Lainnya* sheet
+ * provides, the title row's avatar and Home's bell. Kept apart from the tab bar and the *Lainnya* sheet
  * (`field-nav.tsx`) and from the shell itself (`app-shell.tsx`) because **every page's header draws it**: a page that
  * imported one export of the shell's module loaded the whole shell — the sidebar, the bell's popover, the account menu,
  * the surveys' dot — as part of its own first load (the bundle, 2026-11-06; `performance-and-scale.md`). This module
@@ -32,62 +30,6 @@ export interface FieldAccount {
   readonly profileHref: string;
   readonly onSignOut: () => void;
   readonly signingOut?: boolean;
-  /**
-   * **The view switcher** (P19.2-T1 AC-5; UI-169 items 2, 3; ADR-0198 §3), for a person with more than one view — an
-   * Owner or an Admin, or anybody with a linked login (AC-8, ADR-0199 §3) — or with *Tambah akun* to offer. Absent for
-   * everybody else, who sees no switcher and nothing added to the header. It replaced ADR-0114's *Open Owner view* /
-   * *Open Admin view* link.
-   */
-  readonly views?: ViewSwitcher;
-  /**
-   * ***📘 Panduan*** (P19.6-T5 AC-1, AC-2; ADR-0219 §5): the reader's own guide, by view and role (`panduanHref`) — the
-   * *Lainnya* sheet's line above *Keluar*, opened in a new tab. Absent outside a session.
-   */
-  readonly guideHref?: string;
-}
-
-/** One entry of the view switcher (ADR-0198 §3), in its order: *Akun saya* · the office entry · *Superadmin*. */
-export interface ViewEntry {
-  /** Unique in the list: the kind, and for a linked login's view its login as well (ADR-0199 §3; P19.2-T1 AC-8). */
-  readonly key: string;
-  readonly kind: ViewKind;
-  /** The menu's words: *Akun saya*, *KPM Owner · <nama KPM>*, *KPM Admin · <nama KPM>*, *Superadmin*. */
-  readonly label: string;
-  /** The header's, beside the avatar: *Akun saya*, *KPM Owner*, *KPM Admin*, *Superadmin*. */
-  readonly short: string;
-  /** The view this page is in: ticked, and said (`aria-current`). */
-  readonly active: boolean;
-  /** One tap switches: the shell remembers it, clears the cached reads and goes to the view's landing. */
-  readonly onSelect: () => void;
-}
-
-/**
- * **A row after the views** — the extension point for ***Tambah akun*** (ADR-0199 §1, §5; P19.2-T1 AC-8, UI-169 item 5),
- * which the shell adds to `ViewSwitcher.actions` for whoever is offered it and has no link yet. Drawn under the views in
- * both menus — the title row's avatar and the sidebar's foot — as a 44px row of its own.
- */
-export interface ViewMenuAction {
-  readonly key: string;
-  readonly label: string;
-  readonly onSelect: () => void;
-}
-
-export interface ViewSwitcher {
-  /** The person's views, every login's (ADR-0199 §3), in the switcher's order. */
-  readonly entries: readonly ViewEntry[];
-  /** After the views (`ViewMenuAction`): *Tambah akun*, for whoever is offered it and has no link (P19.2-T1 AC-8). */
-  readonly actions?: readonly ViewMenuAction[];
-}
-
-/** Whether a switcher is drawn at all: more than one view, or something to do after them (*Tambah akun*). */
-export function hasViewMenu(views: ViewSwitcher | undefined): views is ViewSwitcher {
-  return Boolean(views && (views.entries.length > 1 || (views.actions?.length ?? 0) > 0));
-}
-
-/** The view the header names: only for a person with more than one (ADR-0198 §3), so one view adds nothing. */
-export function namedView(views: ViewSwitcher | undefined): ViewEntry | null {
-  if (!views || views.entries.length < 2) return null;
-  return views.entries.find((entry) => entry.active) ?? null;
 }
 
 export interface FieldChrome {
@@ -156,16 +98,14 @@ export function FieldAvatar({ account, className }: { account: Pick<FieldAccount
  * circle centred in it, its edge on the page's 16px gutter (`-mr-1`).
  *
  * *Changed 2026-11-04 (P19.1-T1 AC-1, ADR-0196; UI-112: the title row at every size, the avatar on its right):* **at
- * every size** — it was below 1024px only, the sidebar's foot standing in for it on a desktop. The foot keeps the
- * account menu; this is the way to *Profil saya*, as on a phone.
+ * every size** — it was below 1024px only. The sidebar's foot keeps the account menu; this is the way to *Profil saya*.
  *
- * *Changed 2026-11-05 (P19.2-T1 AC-5; UI-169 item 2; ADR-0198 §3):* **for a person with more than one view it is the
- * account menu** — the active view's short name beside the circle, at every size, and in the control's name; it opens
- * the switcher (`ViewMenu`). For a person with one view nothing changes: the same link, drawn as before.
+ * *Changed 2026-11-20 (P19.17-T3 AC-2; ADR-0269 §2; the brief's gap 4, *one title row for everyone*):* **the same for
+ * everybody** — page title, the page's control, this avatar. The Owner's and the Admin's *Akun saya* / *KPM Owner* beside
+ * the circle and the view menu behind it (P19.2-T1, ADR-0198 §3) are gone with the views; no role text.
  */
 export function TitleAvatar({ chrome }: { chrome: FieldChrome }) {
   const t = useMessages(shellMessages);
-  if (hasViewMenu(chrome.account.views)) return <AvatarViewMenu chrome={chrome} views={chrome.account.views} />;
   return (
     <Link
       href={chrome.account.profileHref}
@@ -176,170 +116,6 @@ export function TitleAvatar({ chrome }: { chrome: FieldChrome }) {
     >
       <FieldAvatar account={chrome.account} className="h-9 w-9 text-base" />
     </Link>
-  );
-}
-
-/** What Tab can land on inside the avatar's menu. */
-const MENU_FOCUSABLE = 'a[href], button:not([disabled])';
-
-/**
- * **The avatar's menu, for a person with more than one view** (P19.2-T1 AC-5; ADR-0198 §3). A disclosure, as the
- * sidebar's account menu is — a button with `aria-expanded` over ordinary buttons and a link, reached with Tab, so it
- * promises no arrow keys it does not have. It hangs under the avatar at the row's right edge.
- *
- * - **The trigger**: the active view's short name, 12px navy, then the 36px circle; 44px tall; named *Akun Anda: KPM
- *   Owner*, so what is announced says where the reader is (UI-169: *named in the header so it's always clear*).
- * - **The panel**: the views (`ViewMenu`) — one tap switches, the active one ticked — then *Profil saya*, where the avatar
- *   always went, then whatever comes after the views (*Tambah akun*, AC-8). Escape closes it and gives the focus back;
- *   so does a click outside it, or choosing anything in it.
- *
- * *Changed 2026-11-10 (P19.11-T6 AC-1; UX-8, UXQ5):* **_Keluar_ is its last row**, under *Profil saya* with a divider
- * above it, red as *Lainnya*'s, `aria-busy` and *Sedang keluar…* while it runs. One tap, no confirmation, as *Lainnya*:
- * the account's `onSignOut` (`useSignOut`) — `POST /auth/logout` ends both sessions this browser holds, the active login
- * and a linked one parked here (ADR-0199 §4, *leaving is leaving*), the token, `me`, the tab's view and the cached reads
- * go (`session-provider.tsx`), and `/login` replaces the page. The panel stays open while it runs, so the busy row is
- * seen; the shell unmounts with the session. A single-view account has no panel: its avatar stays the link to *Profil*
- * (UI-004), and *Keluar* stays in *Lainnya*, the sidebar's menu and *Profil*.
- */
-function AvatarViewMenu({ chrome, views }: { chrome: FieldChrome; views: ViewSwitcher }) {
-  const t = useMessages(shellMessages);
-  const [open, setOpen] = useState(false);
-  const box = useRef<HTMLDivElement>(null);
-  const trigger = useRef<HTMLButtonElement>(null);
-  const panel = useRef<HTMLDivElement>(null);
-  const named = namedView(views);
-  const pathname = usePathname();
-
-  useEffect(() => {
-    setOpen(false);
-  }, [pathname]);
-
-  useEffect(() => {
-    if (!open) return;
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key !== 'Escape') return;
-      setOpen(false);
-      trigger.current?.focus();
-    }
-    function onPointerDown(event: MouseEvent) {
-      if (!box.current?.contains(event.target as Node)) setOpen(false);
-    }
-    document.addEventListener('keydown', onKeyDown);
-    document.addEventListener('mousedown', onPointerDown, true);
-    panel.current?.querySelector<HTMLElement>(MENU_FOCUSABLE)?.focus();
-    return () => {
-      document.removeEventListener('keydown', onKeyDown);
-      document.removeEventListener('mousedown', onPointerDown, true);
-    };
-  }, [open]);
-
-  const close = () => setOpen(false);
-  return (
-    <div ref={box} className="relative -mr-1 shrink-0">
-      <button
-        ref={trigger}
-        type="button"
-        aria-expanded={open}
-        aria-controls={VIEW_MENU_ID}
-        aria-label={named ? t.viewMenu({ view: named.short }) : t.account}
-        title={chrome.account.name}
-        data-title-avatar=""
-        onClick={() => setOpen((was) => !was)}
-        className="flex h-11 min-w-11 items-center justify-end gap-1.5 rounded-full pl-1"
-      >
-        {named && (
-          <span data-active-view="" className="max-w-24 truncate text-xs font-semibold text-navy">{named.short}</span>
-        )}
-        <FieldAvatar account={chrome.account} className="h-9 w-9 text-base" />
-      </button>
-      {open && (
-        <div
-          ref={panel}
-          id={VIEW_MENU_ID}
-          data-view-menu=""
-          className="absolute right-0 top-full z-30 mt-1 w-64 max-w-[calc(100vw-2rem)] rounded-card bg-card p-1.5 shadow-modal"
-        >
-          <ViewMenu views={views} tone="card" onChosen={close} />
-          <Link
-            href={chrome.account.profileHref}
-            onClick={close}
-            className="mt-1 flex min-h-11 items-center border-t border-divider px-2.5 pt-1 text-md font-semibold text-navy"
-          >
-            {t.yourProfile}
-          </Link>
-          <button
-            type="button"
-            data-sign-out=""
-            onClick={chrome.account.onSignOut}
-            disabled={chrome.account.signingOut}
-            aria-busy={chrome.account.signingOut || undefined}
-            className="mt-1 flex min-h-11 w-full items-center border-t border-divider px-2.5 pt-1 text-left text-md font-semibold text-pill-red-ink disabled:opacity-60"
-          >
-            {chrome.account.signingOut ? t.signingOut : t.signOut}
-          </button>
-        </div>
-      )}
-    </div>
-  );
-}
-
-/** The avatar's menu, as its trigger names it in `aria-controls`. */
-const VIEW_MENU_ID = 'title-view-menu';
-
-/**
- * **The views, and what comes after them** (P19.2-T1 AC-5; ADR-0198 §3): one list, drawn by the title row's avatar menu
- * (`tone="card"`, white) and the sidebar's account menu (`tone="navy"`), so the two cannot differ. Each entry a 44px
- * button; the active one ticked ✓ and `aria-current`; one tap switches. Then `actions` — *Tambah akun* (AC-8) — each a
- * 44px row of its own.
- */
-export function ViewMenu({ views, tone, onChosen }: { views: ViewSwitcher; tone: 'card' | 'navy'; onChosen?: () => void }) {
-  const t = useMessages(shellMessages);
-  const row = tone === 'card'
-    ? 'flex min-h-11 w-full items-center gap-2 rounded-row px-2.5 text-left text-md text-ink hover:bg-hover-row'
-    : 'flex min-h-11 w-full items-center gap-2 rounded-md px-2 text-left text-md text-secondary-contrast/[0.78] hover:bg-secondary-contrast/[0.06] hover:text-secondary-contrast';
-  const tick = tone === 'card' ? 'text-navy' : 'text-primary-on-secondary';
-  return (
-    <div data-views="">
-      {views.entries.length > 1 && (
-        <ul aria-label={t.views} className="flex flex-col">
-          {views.entries.map((entry) => (
-            <li key={entry.key}>
-              <button
-                type="button"
-                aria-current={entry.active ? 'true' : undefined}
-                data-view={entry.kind}
-                onClick={() => {
-                  onChosen?.();
-                  entry.onSelect();
-                }}
-                className={cn(row, entry.active && 'font-semibold')}
-              >
-                <span className="min-w-0 flex-1 truncate">{entry.label}</span>
-                {entry.active && (
-                  <svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.6" className={cn('shrink-0', tick)}>
-                    <path d="M5 13l4 4L19 7" />
-                  </svg>
-                )}
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-      {views.actions?.map((action) => (
-        <button
-          key={action.key}
-          type="button"
-          data-view-action={action.key}
-          onClick={() => {
-            onChosen?.();
-            action.onSelect();
-          }}
-          className={row}
-        >
-          {action.label}
-        </button>
-      ))}
-    </div>
   );
 }
 

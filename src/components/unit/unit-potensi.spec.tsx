@@ -26,6 +26,10 @@ vi.mock('next/navigation', () => ({
  *
  * *Rewritten 2026-11-07:* P19.1-T6's AC-3 order (units first, *Langsung ke AB* last), AC-4's pills and sorting, AC-9's
  * one row per unit in an earlier month and AC-10's empty card gave way to ADR-0229; their tests went with them.
+ *
+ * *Changed 2026-11-20 (P19.18-T3; ADR-0271 §8):* the ✓ is *Active Agent* from the upload and the Rekrut view's green mark a
+ * number (the new hires a person registered who joined this month); a card's *Active Agent* header counts **people** with a
+ * potensi, its *Rekrut* header reads *n rekrut · potensi m*; the leader's photo on every header; the level label orange.
  */
 const LEADER = makeMe({
   ...AGUS_ME,
@@ -45,7 +49,8 @@ const person = (name: string, code: string, over: Partial<PotensiPerson> = {}): 
 });
 const totalsOf = (people: PotensiPerson[]) => ({
   aa: {
-    potensi: people.reduce((s, p) => s + p.aa.potensi, 0), aa: people.filter((p) => p.aa.aa).length,
+    // The server's since P19.18-T3 AC-1 (ADR-0271 §8): the people with a sales potensi — never the sum of their leads.
+    potensi: people.filter((p) => p.aa.potensi > 0).length, aa: people.filter((p) => p.aa.aa).length,
     switchedPeople: people.filter((p) => p.aa.switched > 0).length,
     switchedPeopleAa: people.filter((p) => p.aa.switched > 0 && p.aa.aa).length,
   },
@@ -203,13 +208,16 @@ describe('P19.1-T6, P19.8-T4 the Potensi tab', () => {
       expect(calls.length).toBe(before);
     });
 
-    it('P19.8-T4 AC-9 MOB UI-186 the legend under the tiles: ✓ Active Agent · ① potensi, and ① potensi rekrut on Rekrut', async () => {
+    it('P19.18-T3 AC-2 the legend: ① potensi · ✓ Active Agent, and ① potensi rekrut (kandidat) · ① jumlah berhasil rekrut on Rekrut', async () => {
       render(potensi(), { language: 'id' });
       await screen.findByRole('radiogroup', { name: 'Active Agent atau Rekrut' });
+      // The orange number first, then the green mark — the rows' order.
       const legend = document.querySelector('[data-potensi-legend]')!;
-      expect(legend.textContent).toBe('Active Agent1potensi');
+      expect(legend.textContent).toBe('1potensiActive Agent');
       await userEvent.click(screen.getAllByRole('radio')[1]);
-      expect(document.querySelector('[data-potensi-legend]')!.textContent).toBe('1potensi rekrut');
+      const rekrut = document.querySelector('[data-potensi-legend]')!;
+      expect(rekrut.textContent).toBe('1potensi rekrut (kandidat)1jumlah berhasil rekrut');
+      expect(rekrut.querySelector('[data-recruited]')).toHaveClass('bg-pill-green', 'text-pill-green-ink');
     });
 
     it('P19.8-T4 AC-9 MOB UI-186 a person’s mark: the orange number, the green ✓, both, or the grey ✕ — per tile', async () => {
@@ -232,15 +240,15 @@ describe('P19.1-T6, P19.8-T4 the Potensi tab', () => {
       // No yellow pill and no green AA ✓ pill any more.
       expect(document.querySelector('.bg-potensi')).toBeNull();
       expect(document.body.textContent).not.toContain('AA ✓');
-      // On Rekrut: Rina's recruit potensi and her rekrut, Yosef's recruit potensi alone.
+      // On Rekrut: Rina's recruit potensi and the one she recruited, Yosef's recruit potensi alone.
       await userEvent.click(screen.getAllByRole('radio')[1]);
-      expect(rows(cards()[1])[3].querySelector('.sr-only')).toHaveTextContent('1 potensi, rekrut ✓');
+      expect(rows(cards()[1])[3].querySelector('.sr-only')).toHaveTextContent('1 potensi, 1 recruited this month');
       expect(rows(cards()[0])[2].querySelector('.sr-only')).toHaveTextContent('1 potensi');
     });
   });
 
   describe('P19.8-T4 AC-4 MOB UI-179 one group order and name, as the Overview', () => {
-    it('P19.8-T4 AC-4 MOB UI-179 Unit Anda first, then Unit Sari Puspita, in sentence case; each leader first with the navy role tag', async () => {
+    it('P19.8-T4 AC-4 MOB UI-179 Unit Anda first, then Unit Sari Puspita, in sentence case; each leader first with the orange level label', async () => {
       render(potensi(), { language: 'id' });
       await screen.findByRole('radiogroup', { name: 'Active Agent atau Rekrut' });
       const [agus, sari] = cards();
@@ -250,7 +258,10 @@ describe('P19.1-T6, P19.8-T4 the Potensi tab', () => {
       expect(within(sari).getByRole('heading', { name: 'Unit Sari Puspita' })).toHaveClass('text-md', 'font-bold');
       const firstRow = within(sari).getAllByRole('listitem')[0];
       expect(firstRow.querySelector('[data-potensi-name]')!.textContent).toBe('AABSari Puspita');
-      expect(firstRow.querySelector('.bg-secondary')).toHaveTextContent('AAB');
+      // P19.18-T3 AC-3 (ADR-0266 §3): small bold orange text, never the navy tag.
+      expect(firstRow.querySelector('[data-rung-tag]')).toHaveTextContent('AAB');
+      expect(firstRow.querySelector('[data-rung-tag]')).toHaveClass('text-primary-ink');
+      expect(firstRow.querySelector('.bg-secondary')).toBeNull();
     });
 
     it('P19.11-T6 AC-4 one rule with the roster: the tag is a leader’s rung’s — AB, AAB — never an Agent’s, even at a card’s head', async () => {
@@ -281,7 +292,7 @@ describe('P19.1-T6, P19.8-T4 the Potensi tab', () => {
       expect(onAa).toEqual(['AABSari Puspita', 'Andi Nugroho', 'Lina Marlina', 'Rina Wijaya', 'Budi Santoso']);
       await userEvent.click(screen.getAllByRole('radio')[1]);
       expect(names()).toEqual(onAa);
-      expect(within(cards()[1]).getByText('1 potensi · 1 rekrut')).toBeInTheDocument();
+      expect(within(cards()[1]).getByText('1 rekrut · potensi 1')).toBeInTheDocument();
     });
   });
 
@@ -324,6 +335,83 @@ describe('P19.1-T6, P19.8-T4 the Potensi tab', () => {
       await userEvent.click(screen.getByRole('button', { name: /^Open Rina Wijaya/ }));
       expect(await screen.findByRole('dialog', { name: 'Agent Rina Wijaya · 2 potensi' })).toBeInTheDocument();
       expect(calls.some((c) => c.url.endsWith('/unit/dashboard/potensi/m-rina?month=2026-10'))).toBe(true);
+    });
+  });
+
+  describe('P19.18-T3 the counts, the marks and the cards (ADR-0271 §8)', () => {
+    /** Indah 3 potensi, Lukman 1 (the brief's example), Lukman 2 recruited and 2 kandidat, Indah 1 recruited, Budi 1 kandidat. */
+    const EXAMPLE = unit('direct', [
+      person('Agus Prasetyo', 'AB', { isLeader: true, isReader: true, photoUrl: 'https://cdn.test/agus.jpg' }),
+      // An AAB with no team of her own sits in Unit Anda, after the AB (the server's placing).
+      person('Dewi Lestari', 'AAB', { aa: { potensi: 0, aa: true, switched: 0 } }),
+      person('Indah Permatasari', 'AGENT', { aa: { potensi: 3, aa: false, switched: 3 }, rekrut: { potensi: 0, rekrut: 1, switched: 0 } }),
+      person('Lukman Hakim', 'AGENT', { aa: { potensi: 1, aa: true, switched: 1 }, rekrut: { potensi: 2, rekrut: 2, switched: 2 } }),
+      person('Budi Santoso', 'AGENT', { rekrut: { potensi: 1, rekrut: 0, switched: 1 } }),
+      person('Yanti Kusuma', 'AGENT'),
+    ]);
+    const example = () => potensi({ units: [EXAMPLE], tiles: { aa: 2, rekrut: 3, potensi: { aa: 2, rekrut: 3 } } });
+
+    it('P19.18-T3 AC-1 the Active Agent header and tile count people who can become Active Agent: Indah 3 + Lukman 1 → 2 potensi', async () => {
+      render(example());
+      const group = await tiles();
+      expect(within(cards()[0]).getByText('2 potensi · 2 AA')).toBeInTheDocument();
+      expect(within(group).getAllByRole('radio')[0]).toHaveTextContent(/^Active Agent2potensi 2$/);
+      // A person's orange number is still their own count: Indah 3.
+      const indah = within(cards()[0]).getAllByRole('listitem')[2];
+      expect(indah.querySelector('[data-potensi-marks] .bg-primary-50')).toHaveTextContent('3');
+    });
+
+    it('P19.18-T3 AC-2 the Rekrut view: the orange number first, then the green number — n recruited — or the grey ✕; the header and the tile sums', async () => {
+      render(example());
+      await userEvent.click(within(await tiles()).getAllByRole('radio')[1]);
+      const rows = within(cards()[0]).getAllByRole('listitem');
+      const marks = (li: HTMLElement) => Array.from(li.querySelector('[data-potensi-marks]')!.children)
+        .filter((el) => el.getAttribute('aria-hidden') === 'true');
+      // Lukman: 2 kandidat, then 2 recruited — orange, then green.
+      const [orange, green] = marks(rows[3]);
+      expect(orange).toHaveTextContent('2');
+      expect(orange).toHaveClass('bg-primary-50', 'text-primary-deep');
+      expect(green).toHaveTextContent('2');
+      expect(green).toHaveAttribute('data-recruited', '2');
+      expect(green).toHaveClass('bg-pill-green', 'text-pill-green-ink');
+      // Indah: recruited 1, no kandidat — the green number alone; Budi: a kandidat alone; Yanti: neither, the grey ✕.
+      expect(marks(rows[2]).map((el) => el.getAttribute('data-recruited'))).toEqual(['1']);
+      expect(marks(rows[4])).toHaveLength(1);
+      expect(marks(rows[4])[0]).toHaveClass('bg-primary-50');
+      expect(rows[5].getAttribute('data-potensi-row')).toBe('none');
+      expect(rows[5].querySelector('[data-potensi-marks] .text-signal-grey')).not.toBeNull();
+      // Never a ✓ on Rekrut: one person can recruit several.
+      expect(cards()[0].querySelector('[data-potensi-marks] svg.lucide-check, [data-potensi-marks] [data-icon="check"]')).toBeNull();
+      // The header: *n rekrut · potensi m*, both sums; the tile *Rekrut n · potensi m*.
+      expect(within(cards()[0]).getByText('3 rekrut · potensi 3')).toBeInTheDocument();
+      expect(within(screen.getByRole('radiogroup')).getAllByRole('radio')[1]).toHaveTextContent(/^Rekrut3potensi 3$/);
+    });
+
+    it('P19.18-T3 AC-3 every header carries its leader’s photo — initials without one — and every person theirs; an AAB in Unit Anda keeps her label', async () => {
+      render(potensi({ units: [EXAMPLE, SARI_UNIT] }));
+      await tiles();
+      const [own, sari] = cards();
+      expect(own.querySelector('[data-potensi-leader-photo] img')).toHaveAttribute('src', 'https://cdn.test/agus.jpg');
+      // Sari has no photo: her initials in the header's avatar.
+      expect(sari.querySelector('[data-potensi-leader-photo] img')).toBeNull();
+      expect(sari.querySelector('[data-potensi-leader-photo]')).toHaveTextContent('SP');
+      expect(within(own).getAllByRole('listitem')[0].querySelector('img')).toHaveAttribute('src', 'https://cdn.test/agus.jpg');
+      // Dewi, an AAB with no team, sits after the AB with her orange label — though she leads no card.
+      const dewi = within(own).getAllByRole('listitem')[1];
+      expect(dewi.querySelector('[data-potensi-name]')!.textContent).toBe('AABDewi Lestari');
+      expect(dewi.querySelector('[data-rung-tag]')).toHaveClass('text-primary-ink');
+    });
+
+    it('P19.18-T3 AC-3 from 768px three people a row under a header across the card, on the orange tint; one card under another', async () => {
+      atWidth(1024);
+      render(potensi({ units: [EXAMPLE, SARI_UNIT] }));
+      await tiles();
+      const [own] = cards();
+      expect(own.parentElement).not.toHaveClass('md:grid-cols-2');
+      expect(own.querySelector('ul')).toHaveClass('md:grid', 'md:grid-cols-3');
+      expect(own.querySelector('header')).toHaveClass('md:bg-primary/[0.12]');
+      // Each person but the third of a row is ruled on its right.
+      expect(within(own).getAllByRole('listitem')[0]).toHaveClass('md:[&:not(:nth-child(3n))]:border-r');
     });
   });
 

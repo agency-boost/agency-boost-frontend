@@ -173,10 +173,86 @@ describe('P19.7-T1 AC-3 the Proposal section', () => {
     expect(sheet.querySelector('[data-proposal-editor]')).toBeNull();
   });
 
-  it('P19.7-T1 AC-7 offers no premium calculation and no rate table', async () => {
+  it('P19.7-T1 AC-7 offers no premium calculation: no Hitung, and the premium table read as none', async () => {
     mount();
     const section = await open();
-    expect(section.queryByText(/Hitung premi|rate table|tabel tarif/i)).not.toBeInTheDocument();
+    expect(section.queryByText(/Hitung premi/i)).not.toBeInTheDocument();
+    expect(section.queryByRole('button', { name: /calculate|hitung/i })).not.toBeInTheDocument();
+    expect(section.getByText('None yet — the agent types the premium')).toBeInTheDocument();
+  });
+
+  it('P19.14-T2 AC-5 reads the catalogue’s calculation fields, read only: type, entry age, pay terms, Cara bayar, smoker, rule, limits, need', async () => {
+    mount([product({
+      calcType: 'up_premium', entryAge: { min: 1, max: 60 }, smokerRated: true, frequencies: ['monthly', 'annual'],
+      payTerms: [
+        { key: 'y5', label: '5 tahun', years: 5, toAge: null, single: false, maxEntryAge: 60, default: false },
+        { key: 'y10', label: '10 tahun', years: 10, toAge: null, single: false, maxEntryAge: 60, default: true },
+      ],
+      planRule: null, upStep: 1_000_000_00, upMin: 100_000_000_00, upMax: null, premiumMin: null, premiumMax: null,
+      rateTableId: null, needTag: 'CRITICAL_INCOME',
+    })]);
+    const section = await open();
+    const calc = within(section.getByRole('region', { name: 'Calculation' }));
+    const rows = Object.fromEntries(calc.getAllByRole('term').map((dt) => [dt.textContent, dt.nextElementSibling?.textContent]));
+    expect(rows).toEqual({
+      'Calculation type': 'Sum assured ↔ premium',
+      'Premium table': 'None yet — the agent types the premium',
+      'Entry age': '1–60',
+      'Payment terms': '5 tahun (to age 60) · 10 tahun (to age 60) ★',
+      'Payment frequency': 'Monthly · Annually',
+      Smoker: 'Priced differently for smokers',
+      'Plan rule': '—',
+      Limits: 'Sum assured IDR 100M – … · sum assured in steps of IDR 1M',
+      'Need ticked': 'Income during critical illness',
+    });
+    // Read only: no control in it.
+    expect(calc.queryAllByRole('button')).toEqual([]);
+    expect(calc.queryAllByRole('textbox')).toEqual([]);
+  });
+
+  it('P19.15-T1 a product with a premium table says where its versions are, never the table’s id', async () => {
+    mount([product({ calcType: 'up_premium', rateTableId: 'rt-6a1f' })]);
+    const calc = within((await open()).getByRole('region', { name: 'Calculation' }));
+    expect(calc.getByText('Set — its versions are on the company’s Proposal tab')).toBeInTheDocument();
+    expect(calc.queryByText(/rt-6a1f/)).not.toBeInTheDocument();
+  });
+
+  it('P19.14-T2 AC-5 a product nobody filled reads manual, no limit, the four periodic frequencies', async () => {
+    mount();
+    const calc = within((await open()).getByRole('region', { name: 'Calculation' }));
+    expect(calc.getByText('Typed by the agent')).toBeInTheDocument();
+    expect(calc.getByText('No limit')).toBeInTheDocument();
+    expect(calc.getByText('Monthly · Quarterly · Half-yearly · Annually')).toBeInTheDocument();
+  });
+
+  it('P19.14-T2 AC-3 a derived field is shown, marked automatic, with its values and its rule, never edited', async () => {
+    const derived = field({
+      key: 'plan', label: 'Plan', type: 'derived', plan: true,
+      options: ['Bronze A', 'Gold'].map((label) => ({ label, years: null, currency: null })),
+    });
+    const wilayah = field({ key: 'wilayah', label: 'Wilayah', options: [{ label: 'Indonesia', years: null, currency: null }], default: 'Indonesia' });
+    mount([product({
+      proposalFields: [wilayah, derived], planOptions: [],
+      planRule: { field: 'plan', rules: [{ when: { wilayah: 'Indonesia' }, value: 'Bronze A' }] },
+    })]);
+    const section = await open();
+    const item = section.getAllByRole('listitem').find((li) => li.hasAttribute('data-derived'))!;
+    expect(item).toHaveTextContent('Automatic');
+    expect(item).toHaveTextContent('Worked out from the other fields by 1 rule.');
+    expect(item).toHaveTextContent('Possible values: Bronze A · Gold');
+    expect(within(item).queryByRole('textbox')).not.toBeInTheDocument();
+    expect(within(item).queryByRole('button', { name: /Remove/ })).not.toBeInTheDocument();
+    expect(within(section.getByRole('region', { name: 'Calculation' })).getByText('1 rule for plan')).toBeInTheDocument();
+  });
+
+  it('P19.14-T2 AC-5 the calculation block in Indonesian: Perhitungan, Cara hitung, Tabel tarif, Usia masuk, Masa bayar', async () => {
+    mount([product({ payTerms: [{ key: 'y5', label: '5 tahun', years: 5, toAge: null, single: false, maxEntryAge: 60, default: true }] })], true);
+    const calc = within((await open()).getByRole('region', { name: 'Perhitungan' }));
+    for (const label of ['Cara hitung', 'Tabel tarif', 'Usia masuk', 'Masa bayar', 'Cara bayar', 'Merokok', 'Aturan plan', 'Batas', 'Kebutuhan']) {
+      expect(calc.getByText(label)).toBeInTheDocument();
+    }
+    expect(calc.getByText('5 tahun (maks. usia 60) ★')).toBeInTheDocument();
+    expect(calc.getByText('Belum ada — agen mengetik premi')).toBeInTheDocument();
   });
 
   it('P19.7-T1 AC-3 speaks Indonesian: Perlu dicek, Tanya-jawab, the syariah sentence', async () => {

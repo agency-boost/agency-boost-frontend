@@ -3,6 +3,7 @@
 import { LANGUAGE_UNCHOSEN, type Language } from '@/i18n/language';
 import { uiMessages } from '@/i18n/messages/ui';
 import { ApiConfigError, apiUrl } from './api';
+import { kpmHeaderFor } from './super-admin-kpm';
 
 /**
  * The API client.
@@ -211,6 +212,8 @@ async function raw(path: string, options: RequestOptions = {}): Promise<Response
       ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
       // The screen's language (AC-6). CORS-safelisted for these two values: the API's allowed headers need not name it.
       'Accept-Language': requestLanguage,
+      // ADR-0268 §3: the KPM a Super Admin is working inside, as its Owner — never on a platform route (`super-admin-kpm.ts`).
+      ...kpmHeaderFor(path),
     },
     // Sends and receives the httpOnly refresh cookie.
     credentials: 'include',

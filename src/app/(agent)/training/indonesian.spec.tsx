@@ -52,7 +52,7 @@ const modulePageAt = (routes: Routes = {}, me: Me = LEARNER) => inIndonesian(
   me,
 );
 
-const title = () => screen.findByRole('heading', { level: 1, name: 'Training Modules' });
+const title = () => screen.findByRole('heading', { level: 1, name: 'Training' });
 
 /**
  * **P18.10-T4, Training in ID mode** (ADR-0179 §3–§5): the learner's list, a module's page and the coaching *Training*
@@ -131,7 +131,7 @@ describe('P18.10-T4 Training in Indonesian', () => {
     modulePageAt();
     await screen.findByRole('heading', { level: 1, name: 'Closing Techniques That Work' });
     expect(screen.queryByText(/Modul pelatihan terstruktur|Diunggah oleh admin|Sumber eksternal/)).not.toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Kembali ke Training Modules' })).toHaveAttribute('href', '/training/SALES');
+    expect(screen.getByRole('link', { name: 'Kembali ke Training' })).toHaveAttribute('href', '/training/SALES');
     expect(screen.getByText('Skill: Closing')).toBeInTheDocument();
     expect(screen.getByText('Modul 1 dari 1')).toHaveClass('sr-only');
     const file = screen.getByText('closing-techniques.pdf').closest('li')!;

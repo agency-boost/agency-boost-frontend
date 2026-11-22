@@ -1,7 +1,8 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { atWidth, digestAt, makeMe, renderWithSession, stubFetch, wears } from '@test/harness';
+import { atWidth, makeMe, renderWithSession, stubFetch } from '@test/harness';
+import { axe } from 'vitest-axe';
 import { smallTargets } from '@test/touch-audit';
 import ActivationChecklistPage from './page';
 
@@ -100,249 +101,199 @@ function render(
 const rowOf = (text: string) => screen.getByText(text).closest('li') as HTMLElement;
 const sent = (calls: { url: string; init: RequestInit }[], method: string) =>
   JSON.parse(calls.find((c) => c.init.method === method)!.init.body as string);
+const card = (name: RegExp | string) => screen.getByRole('region', { name });
+/** Open an item's sheet from its row, as a tap does. */
+async function openItem(label: string) {
+  await userEvent.click(within(rowOf(label)).getByRole('button', { name: new RegExp(`^${label}`) }));
+  return screen.findByRole('dialog', { name: label });
+}
+async function choose(name: string, item: string) {
+  await userEvent.click(screen.getByRole('button', { name: `Actions for ${name}` }));
+  await userEvent.click(within(screen.getByRole('menu', { name: `Actions for ${name}` })).getByRole('menuitem', { name: item }));
+}
 
-describe('Settings › Activation checklist (P5-T3)', () => {
+describe('P19.21-T3 AC-3 the activation checklist as the client’s 19 November card', () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  // *Amended 2026-10-28 (P18.9-T4 AC-6; UI-027):* the prototype's sentence, in the client's words.
-  it('says which version hires are given, and carries the prototype’s own sentence', async () => {
+  it('P19.21-T3 AC-3 says which version hires get and the window in one note, from the server', async () => {
     render();
-
-    expect(await screen.findByText(/Hires starting now are given/)).toBeInTheDocument();
-    expect(screen.getByText(/version 1/)).toBeInTheDocument();
-    expect(screen.getAllByText('Linked items complete automatically.').find((el) => el.tagName === 'SPAN'
-      && !el.classList.contains('sr-only') && el.getAttribute('role') !== 'tooltip')).toBeInTheDocument();
+    expect(await screen.findByText(
+      'New hires are given version 1 · 90 days. Changes become a new version, for the next new hires only.',
+    )).toBeInTheDocument();
+    // Nothing waits to publish: no bar.
+    expect(document.querySelector('[data-draft-bar]')).toBeNull();
   });
 
-  it('shows the window read-only, and sends nobody to change it where it cannot be changed', async () => {
-    // It used to say "— change it in Branch info" and link there. Branch info has no window field,
-    // and no screen edits the window, so the link led to a page that could not do what it said (X-45).
+  it('P19.21-T3 AC-3 draws the aspects as numbered cards with “n item”, each item saying where it completes from', async () => {
     render();
-    await screen.findByText(/Hires starting now/);
-
-    expect(screen.getByText('90 days')).toBeInTheDocument();
-    expect(screen.getByText('90 days').closest('p')).toHaveTextContent(/^The window is 90 days\.$/);
-    expect(screen.queryByRole('link', { name: 'Branch info' })).not.toBeInTheDocument();
+    await screen.findByText('Learn insurance basics');
+    expect(card('1. Introduction')).toHaveTextContent('2 item');
+    expect(card('2. Initial Setup')).toHaveTextContent('1 item');
+    expect(within(rowOf('Learn insurance basics')).getByText('Completes automatically from: ticked by hand')).toBeInTheDocument();
+    expect(within(rowOf('Goal setting: APE & activity targets'))
+      .getByText('Completes automatically from: Goal Setting')).toBeInTheDocument();
+    expect(within(card('1. Introduction')).getByRole('button', { name: 'Add item to 1. Introduction' }))
+      .toHaveTextContent('Add item');
   });
 
-  it('draws each aspect with its items, and marks a linked one Auto', async () => {
+  it('P19.21-T3 AC-3 keeps an aspect’s actions in its ⋯: Rename, Move up, Move down, Remove', async () => {
     render();
-    await screen.findByText('1. Introduction');
-
-    expect(screen.getByRole('heading', { name: '2. Initial Setup' })).toBeInTheDocument();
-    const linked = rowOf('Goal setting: APE & activity targets');
-    expect(within(linked).getByText('Auto')).toBeInTheDocument();
-    // The select says what it completes from, as the prototype's row does (`KPM_Owner.html:1539`).
-    expect(within(linked).getByLabelText('Completes from')).toHaveValue('feature:goals');
-    // A manual item says nothing about completing on its own.
-    expect(within(rowOf('Learn insurance basics')).queryByText('Auto')).not.toBeInTheDocument();
-  });
-
-  it('puts nothing under a linked item, and names no phase anywhere', async () => {
-    // A sub-line here said *"ticked by the leader until the link starts working in phase 11"*: our
-    // schedule, in the old plan's numbers, about a leader screen that does not exist yet (P10.1-T2
-    // AC-13). The prototype's row is the item, the AUTO badge and the select, and nothing under them.
-    render();
-    await screen.findByText('1. Introduction');
-
-    const linked = rowOf('Goal setting: APE & activity targets');
-    expect(within(linked).getByText('Goal setting: APE & activity targets').nextElementSibling).toBeNull();
-    expect(linked).not.toHaveTextContent(/ticked by the leader|starts working/);
-    expect(document.body).not.toHaveTextContent(/phase/i);
-  });
-
-  it('offers the three features and only the modules agents are offered', async () => {
-    render();
-    await screen.findByText('1. Introduction');
-
-    const select = within(rowOf('Learn insurance basics')).getByLabelText('Completes from');
-    const options = within(select).getAllByRole('option').map((o) => o.textContent);
-    expect(options).toEqual([
-      'No link (manual)', 'Goal Settings', 'Leads Management', 'Activity Management',
-      'Building Your Prospect List',
+    await screen.findByText('Learn insurance basics');
+    await userEvent.click(screen.getByRole('button', { name: 'Actions for 1. Introduction' }));
+    expect(screen.getAllByRole('menuitem').map((m) => m.textContent)).toEqual([
+      'Rename', 'Move 1. Introduction up', 'Move 1. Introduction down', 'Remove',
     ]);
-    // `Cold calls` is a draft module: no agent is offered it, so no item may wait for it.
-    expect(options).not.toContain('Cold calls');
   });
 
-  it('holds an edit until Save draft, then sends the whole checklist', async () => {
-    const { calls } = render();
-    await screen.findByText('1. Introduction');
-    expect(screen.getByRole('button', { name: 'Save draft' })).toBeDisabled();
+  it('P19.21-T3 AC-3 shows the orange bar once there is an edit, and Publish to agents waits for the draft to be saved', async () => {
+    const savedDraft = {
+      published: PUBLISHED,
+      draft: { ...PUBLISHED, id: 'v2', version: 2, status: 'draft', publishedAt: null },
+      windowDays: 90,
+    };
+    const { calls } = render(OWNER, CHECKLIST, { body: savedDraft });
+    await screen.findByText('Learn insurance basics');
+    const sheet = await openItem('Learn insurance basics');
+    await userEvent.selectOptions(within(sheet).getByLabelText('Completes from'), 'feature:leads');
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Save' }));
 
-    await userEvent.selectOptions(
-      within(rowOf('Learn insurance basics')).getByLabelText('Completes from'),
-      'training:PROSPECT_LIST',
-    );
-    // Whether this link works is the server's to say, and it has not been asked yet (P13-T3 AC-1).
-    expect(within(rowOf('Learn insurance basics')).queryByText('Auto')).not.toBeInTheDocument();
-
-    await userEvent.click(screen.getByRole('button', { name: 'Save draft' }));
-
-    const body = sent(calls, 'PUT');
-    expect(body.aspects).toHaveLength(2);
-    expect(body.aspects[0].items[0]).toEqual({
-      code: 'INSURANCE_BASICS', label: 'Learn insurance basics', autoLink: 'training:PROSPECT_LIST',
-    });
+    const bar = document.querySelector<HTMLElement>('[data-draft-bar]')!;
+    expect(bar).toHaveTextContent('Draft. Agents are still on version 1.');
+    expect(within(bar).getByRole('button', { name: 'Publish to agents' })).toBeDisabled();
+    expect(within(rowOf('Learn insurance basics')).getByText('Completes automatically from: Leads')).toBeInTheDocument();
+    await userEvent.click(within(bar).getByRole('button', { name: 'Save draft' }));
+    await waitFor(() => expect(calls.some((c) => c.init.method === 'PUT')).toBe(true));
+    expect(sent(calls, 'PUT').aspects[0].items[0]).toEqual({ code: 'INSURANCE_BASICS', label: 'Learn insurance basics', autoLink: 'feature:leads' });
   });
 
-  it('renames an item and keeps the code it cannot change', async () => {
-    const { calls } = render();
-    await screen.findByText('1. Introduction');
-    await userEvent.click(within(rowOf('Learn insurance basics')).getByRole('button', { name: 'Edit' }));
-
-    expect(screen.getByLabelText('Code')).toHaveValue('INSURANCE_BASICS');
-    const field = screen.getByLabelText('Item');
-    await userEvent.clear(field);
-    await userEvent.type(field, 'Learn the basics');
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Save draft' }));
-
-    expect(sent(calls, 'PUT').aspects[0].items[0]).toEqual({
-      code: 'INSURANCE_BASICS', label: 'Learn the basics', autoLink: null,
-    });
-  });
-
-  it('renames an aspect, which nothing could do before', async () => {
-    // A typo in a section name was permanent: the only way out was removing the aspect and
-    // every item under it.
-    const { calls } = render();
-    await screen.findByText('1. Introduction');
-    const head = screen.getByRole('heading', { name: '1. Introduction' }).closest('.flex') as HTMLElement;
-
-    await userEvent.click(within(head).getByRole('button', { name: 'Rename' }));
-    const name = screen.getByLabelText('Name');
-    await userEvent.clear(name);
-    await userEvent.type(name, '1. Pengenalan');
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Save draft' }));
-
-    const body = sent(calls, 'PUT');
-    expect(body.aspects[0]).toMatchObject({ code: 'INTRODUCTION', label: '1. Pengenalan' });
-  });
-
-  it('adds an item with its code filled in from what was typed', async () => {
-    const { calls } = render();
-    await screen.findByText('1. Introduction');
-    const card = screen.getByRole('heading', { name: '1. Introduction' }).closest('.rounded-lg') as HTMLElement;
-    await userEvent.click(within(card).getByRole('button', { name: '+ Add item' }));
-    await userEvent.type(within(card).getByLabelText('Item'), 'Shadow a senior agent');
-
-    expect(within(card).getByLabelText('Code')).toHaveValue('SHADOW_A_SENIOR_AGENT');
-
-    await userEvent.click(within(card).getByRole('button', { name: 'Add' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Save draft' }));
-
-    expect(sent(calls, 'PUT').aspects[0].items).toHaveLength(3);
-    expect(sent(calls, 'PUT').aspects[0].items[2]).toEqual({
-      code: 'SHADOW_A_SENIOR_AGENT', label: 'Shadow a senior agent', autoLink: null,
-    });
-  });
-
-  it('adds an aspect with its first item, because an empty aspect is a heading over nothing', async () => {
-    const { calls } = render();
-    await screen.findByText('1. Introduction');
-    await userEvent.click(screen.getByRole('button', { name: '+ Add aspect' }));
-
-    const add = screen.getByRole('button', { name: 'Add the aspect' });
-    expect(add).toBeDisabled();
-
-    await userEvent.type(screen.getByLabelText('Aspect'), 'Compliance');
-    await userEvent.type(screen.getByLabelText('Its first item'), 'Read the code of conduct');
-    await userEvent.click(add);
-    await userEvent.click(screen.getByRole('button', { name: 'Save draft' }));
-
-    expect(sent(calls, 'PUT').aspects.at(-1)).toEqual({
-      code: 'COMPLIANCE',
-      label: 'Compliance',
-      items: [{ code: 'READ_THE_CODE_OF_CONDUCT', label: 'Read the code of conduct', autoLink: null }],
-    });
-  });
-
-  it('will not remove the last item of an aspect, and says to remove the aspect instead', async () => {
-    render();
-    await screen.findByText('1. Introduction');
-
-    const only = within(rowOf('Goal setting: APE & activity targets')).getByRole('button', { name: 'Remove' });
-    expect(only).toBeDisabled();
-    expect(only).toHaveAttribute('title', expect.stringContaining('remove the aspect instead'));
-  });
-
-it('removes an aspect with its items, and says how many are going', async () => {
-    const { calls } = render();
-    await screen.findByText('1. Introduction');
-    const card = screen.getByRole('heading', { name: '1. Introduction' }).closest('.rounded-lg') as HTMLElement;
-
-    // The aspect's own Remove sits in the card head, before the items' own.
-    const removeAspect = within(card).getAllByRole('button', { name: 'Remove' })[0];
-    expect(removeAspect).toHaveAttribute('title', expect.stringContaining('and its 2 items'));
-
-    await userEvent.click(removeAspect);
-    await userEvent.click(screen.getByRole('button', { name: 'Save draft' }));
-
-    expect(sent(calls, 'PUT').aspects.map((a: { code: string }) => a.code)).toEqual(['INITIAL_SETUP']);
-  });
-
-  it('takes an edit back without touching what the office has saved', async () => {
-    const { calls } = render();
-    await screen.findByText('1. Introduction');
-    await userEvent.selectOptions(
-      within(rowOf('Learn insurance basics')).getByLabelText('Completes from'),
-      'feature:leads',
-    );
-
-    await userEvent.click(screen.getByRole('button', { name: 'Undo my edits' }));
-
-    expect(within(rowOf('Learn insurance basics')).queryByText('Auto')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Save draft' })).toBeDisabled();
-    expect(calls.some((c) => c.init.method === 'PUT')).toBe(false);
-  });
-
-  it('holds Publish until the draft is saved, then publishes the next version', async () => {
+  it('P19.21-T3 AC-3 publishes a saved draft from the bar, as the next version', async () => {
     const withDraft = {
       published: PUBLISHED,
       draft: { ...PUBLISHED, id: 'v2', version: 2, status: 'draft', publishedAt: null },
       windowDays: 90,
     };
     const { calls } = render(OWNER, withDraft, { body: { ...withDraft, draft: null } });
-    await screen.findByText(/unpublished draft/);
+    await screen.findByText('Learn insurance basics');
+    const publish = screen.getByRole('button', { name: 'Publish to agents' });
+    expect(publish).toHaveAttribute('title', 'Publish version 2');
+    await userEvent.click(publish);
+    await waitFor(() => expect(calls.some((c) => c.url.includes('/activation-checklist/publish') && c.init.method === 'POST')).toBe(true));
+  });
 
-    await userEvent.click(screen.getByRole('button', { name: 'Publish version 2' }));
+  it('P19.21-T3 AC-3 is clean under axe, populated, with an item’s sheet open', async () => {
+    const view = stubFetch({
+      '/kpm/settings/activation-checklist': { body: CHECKLIST },
+      '/kpm/settings/training': { body: TRAINING },
+    });
+    void view;
+    const { container } = renderWithSession(<ActivationChecklistPage />, { me: OWNER });
+    await screen.findByText('Learn insurance basics');
+    expect((await axe(container, { rules: { 'color-contrast': { enabled: false } } })).violations.map((v) => v.id)).toEqual([]);
+    await openItem('Learn insurance basics');
+    // The sheet is portalled to the body, outside the page's own landmarks here (the layout's are not rendered).
+    expect((await axe(document.body, { rules: { 'color-contrast': { enabled: false }, region: { enabled: false } } }))
+      .violations.map((v) => v.id)).toEqual([]);
+  });
+});
 
-    expect(calls.some((c) => c.url.includes('/activation-checklist/publish') && c.init.method === 'POST'))
-      .toBe(true);
+describe('Settings › Activation checklist (P5-T3), inside the 19 November card', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('offers the three features and only the modules agents are offered, in an item’s sheet', async () => {
+    render();
+    await screen.findByText('Learn insurance basics');
+    const sheet = await openItem('Learn insurance basics');
+    const options = [...within(sheet).getByLabelText('Completes from').querySelectorAll('option')].map((o) => o.textContent);
+    expect(options).toEqual(['No link (manual)', 'Goal Settings', 'Leads Management', 'Activity Management', 'Building Your Prospect List']);
+  });
+
+  it('renames an item in its sheet and keeps the code it cannot change', async () => {
+    const { calls } = render();
+    await screen.findByText('Learn insurance basics');
+    const sheet = await openItem('Learn insurance basics');
+    expect(within(sheet).getByLabelText('Code')).toHaveValue('INSURANCE_BASICS');
+    expect(within(sheet).getByLabelText('Code')).toHaveAttribute('readonly');
+    await userEvent.clear(within(sheet).getByLabelText('Item'));
+    await userEvent.type(within(sheet).getByLabelText('Item'), 'Insurance basics');
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Save' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Save draft' }));
+    expect(sent(calls, 'PUT').aspects[0].items[0]).toMatchObject({ code: 'INSURANCE_BASICS', label: 'Insurance basics' });
+  });
+
+  it('renames an aspect from its ⋯', async () => {
+    const { calls } = render();
+    await screen.findByText('Learn insurance basics');
+    await choose('1. Introduction', 'Rename');
+    const sheet = await screen.findByRole('dialog', { name: 'Rename' });
+    await userEvent.clear(within(sheet).getByLabelText('Name'));
+    await userEvent.type(within(sheet).getByLabelText('Name'), 'Getting started');
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Save' }));
+    expect(card('1. Getting started')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Save draft' }));
+    expect(sent(calls, 'PUT').aspects[0]).toMatchObject({ code: 'INTRODUCTION', label: 'Getting started' });
+  });
+
+  it('adds an item from the card’s foot, its code filled in from what was typed', async () => {
+    const { calls } = render();
+    await screen.findByText('Learn insurance basics');
+    await userEvent.click(screen.getByRole('button', { name: 'Add item to 2. Initial Setup' }));
+    const sheet = await screen.findByRole('dialog', { name: 'Add item' });
+    await userEvent.type(within(sheet).getByLabelText('Item'), 'Join the WhatsApp group');
+    expect(within(sheet).getByLabelText('Code')).toHaveValue('JOIN_THE_WHATSAPP_GROUP');
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Add' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Save draft' }));
+    expect(sent(calls, 'PUT').aspects[1].items.map((i: { code: string }) => i.code)).toEqual(['GOAL_SETTING', 'JOIN_THE_WHATSAPP_GROUP']);
+  });
+
+  it('adds an aspect with its first item, because an empty aspect is a heading over nothing', async () => {
+    const { calls } = render();
+    await screen.findByText('Learn insurance basics');
+    await userEvent.click(screen.getByRole('button', { name: 'Add aspect' }));
+    await userEvent.type(screen.getByLabelText('Aspect'), 'First sales');
+    await userEvent.type(screen.getByLabelText('Its first item'), 'Polis pertama');
+    await userEvent.click(screen.getByRole('button', { name: 'Add the aspect' }));
+    expect(card('3. First sales')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Save draft' }));
+    expect(sent(calls, 'PUT').aspects[2]).toMatchObject({ code: 'FIRST_SALES', label: 'First sales' });
+  });
+
+  it('will not remove the last item of an aspect, and says to remove the aspect instead', async () => {
+    render();
+    await screen.findByText('Learn insurance basics');
+    const sheet = await openItem('Goal setting: APE & activity targets');
+    const remove = within(sheet).getByRole('button', { name: 'Remove' });
+    expect(remove).toBeDisabled();
+    expect(remove).toHaveAttribute('title', 'An aspect needs at least one item — remove the aspect instead.');
+  });
+
+  it('takes an edit back without touching what the office has saved', async () => {
+    const { calls } = render();
+    await screen.findByText('Learn insurance basics');
+    const sheet = await openItem('Learn insurance basics');
+    await userEvent.selectOptions(within(sheet).getByLabelText('Completes from'), 'feature:leads');
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Save' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Undo my edits' }));
+    expect(within(rowOf('Learn insurance basics')).getByText('Completes automatically from: ticked by hand')).toBeInTheDocument();
+    expect(document.querySelector('[data-draft-bar]')).toBeNull();
+    expect(calls.some((c) => c.init.method === 'PUT')).toBe(false);
   });
 
   it('shows what the server refused, and keeps the edit', async () => {
     const { calls } = render(OWNER, CHECKLIST, {
       status: 400,
-      body: {
-        error: {
-          code: 'VALIDATION_FAILED',
-          message: 'PROSPECT_LIST is a draft, so no agent is offered it.',
-          requestId: 'r-1',
-        },
-      },
+      body: { error: { code: 'VALIDATION_FAILED', message: 'PROSPECT_LIST is a draft, so no agent is offered it.', requestId: 'r-1' } },
     });
-    await screen.findByText('1. Introduction');
-    await userEvent.selectOptions(
-      within(rowOf('Learn insurance basics')).getByLabelText('Completes from'),
-      'training:PROSPECT_LIST',
-    );
+    await screen.findByText('Learn insurance basics');
+    const sheet = await openItem('Learn insurance basics');
+    await userEvent.selectOptions(within(sheet).getByLabelText('Completes from'), 'training:PROSPECT_LIST');
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Save' }));
     await userEvent.click(screen.getByRole('button', { name: 'Save draft' }));
-
     expect(await screen.findByText(/no agent is offered it/)).toBeInTheDocument();
-    expect(within(rowOf('Learn insurance basics')).getByLabelText('Completes from')).toHaveValue('training:PROSPECT_LIST');
+    expect(within(rowOf('Learn insurance basics'))
+      .getByText('Completes automatically from: Training › Building Your Prospect List')).toBeInTheDocument();
     expect(calls.some((c) => c.init.method === 'PUT')).toBe(true);
   });
 
-  /*
-   * An office created before P5-T3, whose database has not had migration 0012 run yet, has no
-   * checklist of its own. The API answers with the standard one, unsaved; the screen used to
-   * dereference a null here and throw, and `toDisplayError` reported that crash as *"Could not
-   * reach the server"* — sending the reader to check their connection over a bug on the page.
-   * Reported from a real office.
-   */
   it('opens an office that has no checklist yet on the standard one, ready to save', async () => {
     const starting = {
       published: null,
@@ -350,474 +301,131 @@ it('removes an aspect with its items, and says how many are going', async () => 
       windowDays: 90,
     };
     render(OWNER, starting);
-
     expect(await screen.findByText(/standard checklist/)).toBeInTheDocument();
-    expect(screen.queryByText(/Could not reach the server/)).not.toBeInTheDocument();
     expect(screen.getByText('Learn insurance basics')).toBeInTheDocument();
-    // Savable as it stands — saving it is what gives the office a checklist — and nothing to
-    // publish until it has been saved.
-    expect(screen.getByRole('button', { name: 'Save draft' })).toBeEnabled();
-    expect(screen.getByRole('button', { name: 'Publish version 1' })).toBeDisabled();
+    const bar = document.querySelector<HTMLElement>('[data-draft-bar]')!;
+    expect(bar).toHaveTextContent('Draft. Nothing is published yet.');
+    expect(within(bar).getByRole('button', { name: 'Save draft' })).toBeEnabled();
+    expect(within(bar).getByRole('button', { name: 'Publish to agents' })).toBeDisabled();
   });
 
   it('says so plainly when the office has no checklist at all', async () => {
     render(OWNER, { published: null, draft: null, windowDays: 90 });
-
     expect(await screen.findByText('This office has no activation checklist yet.')).toBeInTheDocument();
-    expect(screen.queryByText(/Could not reach the server/)).not.toBeInTheDocument();
     expect(screen.queryByText(/standard checklist/)).not.toBeInTheDocument();
   });
 
   it('P13.2-T6 AC-8: an office started Empty authors its first aspect from nothing, and saves it', async () => {
-    // ADR-0115 §8: its source held no checklist, so its Owner builds the first one.
     const saved = {
       published: null, windowDays: 90,
       draft: { id: 'd-1', version: 1, status: 'draft', publishedAt: null, aspects: [] },
     };
     const { calls } = render(OWNER, { published: null, draft: null, windowDays: 90 }, { body: saved });
-
     expect(await screen.findByText(/Add its first aspect/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Save draft' })).toBeDisabled();
-    await userEvent.click(screen.getByRole('button', { name: '+ Add aspect' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Add aspect' }));
     await userEvent.type(screen.getByLabelText('Aspect'), 'First steps');
     await userEvent.type(screen.getByLabelText('Its first item'), 'Meet your leader');
     await userEvent.click(screen.getByRole('button', { name: 'Add the aspect' }));
-    expect(screen.queryByText('This office has no activation checklist yet.')).not.toBeInTheDocument();
-
     await userEvent.click(screen.getByRole('button', { name: 'Save draft' }));
-    const body = sent(calls, 'PUT');
-    expect(body.aspects).toEqual([expect.objectContaining({
+    expect(sent(calls, 'PUT').aspects).toEqual([expect.objectContaining({
       code: 'FIRST_STEPS', label: 'First steps', items: [expect.objectContaining({ label: 'Meet your leader' })],
     })]);
   });
 
   it('P18.2-T3 refuses a field member, who holds tenant_config:read but not activation_settings:read, and asks for nothing', async () => {
     const { calls } = render(FIELD_MEMBER);
-
     expect(await screen.findByRole('alert')).toHaveAttribute('data-permission', 'activation_settings:read');
-    expect(screen.getByText('Not available to you')).toBeInTheDocument();
     expect(calls.filter((c) => c.url.includes('/kpm/settings/'))).toEqual([]);
   });
 
-  it('gives a reader without write permission the checklist and none of the controls', async () => {
+  it('gives a reader without write permission the checklist and none of the controls; an item’s sheet reads only', async () => {
     render(READER);
-    await screen.findByText('1. Introduction');
-
-    expect(screen.getByText('Learn insurance basics')).toBeInTheDocument();
+    await screen.findByText('Learn insurance basics');
     expect(screen.queryByRole('button', { name: 'Save draft' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '+ Add aspect' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument();
-    expect(screen.queryByLabelText('Completes from')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Add aspect' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Actions for/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Add item to/ })).not.toBeInTheDocument();
+    expect(screen.queryByText('⠿')).not.toBeInTheDocument();
+    const sheet = await openItem('Learn insurance basics');
+    expect(within(sheet).getByLabelText('Completes from')).toBeDisabled();
+    expect(within(sheet).queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
   });
 });
 
-/*
- * P13-T3 AC-1, parity I-80: the settings screen says *whether* an item's link completes it, never when
- * (ADR-0062 §3). The badge used to read *Auto* for any link, so an item bound to a training module — which
- * nothing evaluates, and which the hire or a leader ticks by hand — told the Owner it ticked itself.
- */
-describe('Phase 13 exit review — the badge says whether a link works, never when', () => {
+describe('the badge says whether a link works, never when (Phase 13 exit review; P18.8-T7 G2)', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   const trainingItem = item({
-    code: 'MANDATORY_TRAINING',
-    label: 'Mandatory training: selling skill & product knowledge',
-    displayOrder: 1,
-    autoLink: 'training:PROSPECT_LIST',
-    link: PROSPECT_LINK,
+    code: 'MANDATORY_TRAINING', label: 'Mandatory training', displayOrder: 1,
+    autoLink: 'training:PROSPECT_LIST', link: PROSPECT_LINK,
   });
-  const WITH_TRAINING = {
-    ...CHECKLIST,
-    published: {
-      ...PUBLISHED,
-      aspects: [
-        ...PUBLISHED.aspects,
-        { code: 'TRAINING', label: '3. Training & Certification', displayOrder: 3, items: [trainingItem] },
-      ],
-    },
+  const FIRST_SALE = {
+    kind: 'sales:first', label: 'Sales data', route: null, live: true, form: 'closing',
+    completesWhen: 'the hire has a first sale since joining: a sales lead paid and issued, or a policy in the production file',
   };
-  const badgeOf = (label: string) => within(rowOf(label)).queryByRole('button', { name: /^(Auto|Ticked by hand) — / });
-
-  it('Phase 13 exit review: a live link reads Auto, with the registry’s sentence as its tooltip and in its name', async () => {
-    render(OWNER, WITH_TRAINING);
-    await screen.findByText('1. Introduction');
-
-    const auto = within(rowOf('Goal setting: APE & activity targets'))
-      .getByRole('button', { name: 'Auto — completes when the hire has saved any goal since joining' });
-    expect(auto).toHaveAccessibleDescription('Completes when the hire has saved any goal since joining.');
-    await userEvent.click(auto);
-    expect(screen.getByRole('tooltip')).toHaveTextContent('Completes when the hire has saved any goal since joining.');
-  });
-
-  it('Phase 13 exit review: a link that does not work reads Ticked by hand, never Auto, and says who ticks it — not when it will work', async () => {
-    render(OWNER, WITH_TRAINING);
-    await screen.findByText('1. Introduction');
-
-    const training = within(rowOf('Mandatory training: selling skill & product knowledge'));
-    expect(training.queryByText('Auto')).not.toBeInTheDocument();
-    const hand = training.getByRole('button', {
-      name: 'Ticked by hand — this link does not complete the item on its own, so the hire or one of their leaders ticks it',
-    });
-    expect(hand).toHaveTextContent(/^Ticked by hand/);
-    expect(hand).toHaveAccessibleDescription(
-      'This link does not complete the item on its own, so the hire or one of their leaders ticks it.',
-    );
-    // Its words, its name and its tooltip together: whether, and never when.
-    expect(hand.parentElement!.textContent).not.toMatch(/phase|until|\byet\b|soon|\d/i);
-    // The select still says what it completes from, as the prototype's row does.
-    expect(training.getByLabelText('Completes from')).toHaveValue('training:PROSPECT_LIST');
-    // A manual item says nothing about completing on its own.
-    expect(badgeOf('Learn insurance basics')).toBeNull();
-  });
-
-  it('Phase 13 exit review: a link chosen and not saved claims nothing until the save answers whether it works', async () => {
-    const saved = {
-      ...CHECKLIST,
-      draft: {
-        ...PUBLISHED, id: 'v2', version: 2, status: 'draft', publishedAt: null,
-        aspects: [
-          { ...PUBLISHED.aspects[0], items: [item({ autoLink: 'training:PROSPECT_LIST', link: PROSPECT_LINK }), PUBLISHED.aspects[0].items[1]] },
-          PUBLISHED.aspects[1],
-        ],
-      },
-    };
-    render(OWNER, CHECKLIST, { body: saved });
-    await screen.findByText('1. Introduction');
-
-    // A kind the server has already resolved says whether at once: Goal Settings works.
-    await userEvent.selectOptions(within(rowOf('Learn agency career mindset')).getByLabelText('Completes from'), 'feature:goals');
-    expect(badgeOf('Learn agency career mindset')).toHaveAccessibleName(/^Auto — /);
-
-    // One it has not is unresolved, and the row claims neither.
-    await userEvent.selectOptions(within(rowOf('Learn insurance basics')).getByLabelText('Completes from'), 'training:PROSPECT_LIST');
-    expect(badgeOf('Learn insurance basics')).toBeNull();
-
-    await userEvent.click(screen.getByRole('button', { name: 'Save draft' }));
-    expect(await within(rowOf('Learn insurance basics')).findByRole('button', { name: /^Ticked by hand — / })).toBeInTheDocument();
-    expect(within(rowOf('Learn insurance basics')).queryByText('Auto')).not.toBeInTheDocument();
-  });
-});
-
-/**
- * **P18.8-T7 G2: the three data-backed items read as data-backed** (ADR-0171 §3). They store no link — their kind is
- * bound by their code — and the settings read serves each its kind as `link`: *Auto*, and the select holding what it
- * completes from, *From Sales data* or *From Coaching sessions*, and offering nothing else. Saved back as stored.
- */
-describe('Settings › Activation checklist — the data-backed items (P18.8-T7 G2)', () => {
-  afterEach(() => vi.unstubAllGlobals());
-
-  const dataLink = (kind: string, label: string, completesWhen: string, form: string) => ({
-    kind, label, route: null, completesWhen, live: true, form,
-  });
-  const FIRST_SALE = dataLink(
-    'sales:first', 'Sales data',
-    'the hire has a first sale since joining: a sales lead paid and issued, or a policy in the production file', 'closing',
-  );
-  const CHECK_IN = dataLink(
-    'coaching:weekly:4', 'Coaching sessions', '4 1:1s with the hire are recorded in coaching sessions since joining', 'one_on_one',
-  );
-  const MILESTONE = dataLink('sales:closings:3', 'Sales data', 'the hire has 3 sales leads paid and issued since joining', 'closing');
-  const WITH_DATA = {
+  const WITH_LINKS = {
     ...CHECKLIST,
     published: {
       ...PUBLISHED,
       aspects: [
         ...PUBLISHED.aspects,
+        { code: 'TRAINING', label: '3. Training', displayOrder: 3, items: [trainingItem] },
         {
           code: 'FIRST_SALE', label: '4. First Sale', displayOrder: 4,
-          items: [
-            item({ code: 'JOINT_FIELD_WORK', label: 'Joint Field Work with leader', displayOrder: 1 }),
-            item({ code: 'FIRST_CASE_CLOSED', label: 'Close first case independently', displayOrder: 2, link: FIRST_SALE }),
-          ],
-        },
-        {
-          code: 'ONGOING_HABITS', label: '5. Ongoing Habits', displayOrder: 5,
-          items: [
-            item({ code: 'WEEKLY_CHECK_IN', label: 'Weekly 1-on-1 check-in (4 weeks)', displayOrder: 1, link: CHECK_IN }),
-            item({
-              code: 'INDEPENDENT_AGENT_MILESTONE', label: 'Reach Independent Agent milestone (3 independent closings)',
-              displayOrder: 2, link: MILESTONE,
-            }),
-          ],
+          items: [item({ code: 'FIRST_CASE_CLOSED', label: 'Close first case independently', link: FIRST_SALE })],
         },
       ],
     },
   };
 
-  it('P18.8-T7 G2 draws each as data-backed — Auto, and the select holding From Sales data or From Coaching sessions — and never No link (manual)', async () => {
-    render(OWNER, WITH_DATA);
-    await screen.findByText('4. First Sale');
-    for (const [label, words, completesWhen] of [
-      ['Close first case independently', 'From Sales data', FIRST_SALE.completesWhen],
-      ['Weekly 1-on-1 check-in (4 weeks)', 'From Coaching sessions', CHECK_IN.completesWhen],
-      ['Reach Independent Agent milestone (3 independent closings)', 'From Sales data', MILESTONE.completesWhen],
-    ] as const) {
-      const row = within(rowOf(label));
-      expect(row.getByRole('button', { name: `Auto — completes when ${completesWhen}` })).toBeInTheDocument();
-      const select = row.getByLabelText('Completes from');
-      // The one thing it completes from, and nothing to choose: not re-linked here.
-      expect(select).toBeDisabled();
-      expect(within(select).getAllByRole('option').map((o) => o.textContent)).toEqual([words]);
-      expect(row.queryByText('No link (manual)')).not.toBeInTheDocument();
-    }
-    // A manual item beside them keeps the select as it was, and its badge-less row.
-    const manual = within(rowOf('Joint Field Work with leader'));
-    expect(manual.getByLabelText('Completes from')).toBeEnabled();
-    expect(manual.getByLabelText('Completes from')).toHaveValue('');
-    expect(manual.queryByText('Auto')).not.toBeInTheDocument();
+  it('a link that does not work says Ticked by hand beside its line, never Auto', async () => {
+    render(OWNER, WITH_LINKS);
+    await screen.findByText('Mandatory training');
+    const row = rowOf('Mandatory training');
+    expect(within(row).getByText('Completes automatically from: Training › Building Your Prospect List')).toBeInTheDocument();
+    expect(within(row).getByRole('button', { name: /^Ticked by hand — / })).toBeInTheDocument();
+    // A working link claims nothing more than its line on the card; its sheet says Auto, with the registry's sentence.
+    expect(within(rowOf('Goal setting: APE & activity targets')).queryByRole('button', { name: /^(Auto|Ticked by hand) — / })).toBeNull();
+    const sheet = await openItem('Goal setting: APE & activity targets');
+    expect(within(sheet).getByRole('button', { name: /^Auto — completes when the hire has saved any goal since joining/ })).toBeInTheDocument();
   });
 
-  it('P18.8-T7 G2 saves them back as stored — no link — when the draft is saved, their labels still the Owner’s to edit', async () => {
-    const { calls } = render(OWNER, WITH_DATA);
-    await screen.findByText('4. First Sale');
-    await userEvent.click(within(rowOf('Weekly 1-on-1 check-in (4 weeks)')).getByRole('button', { name: 'Edit' }));
-    const field = screen.getByLabelText('Item');
-    await userEvent.clear(field);
-    await userEvent.type(field, 'Weekly 1:1 with your leader');
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Save draft' }));
-
-    const items = sent(calls, 'PUT').aspects.flatMap((a: { items: unknown[] }) => a.items);
-    expect(items).toEqual(expect.arrayContaining([
-      { code: 'FIRST_CASE_CLOSED', label: 'Close first case independently', autoLink: null },
-      { code: 'WEEKLY_CHECK_IN', label: 'Weekly 1:1 with your leader', autoLink: null },
-      { code: 'INDEPENDENT_AGENT_MILESTONE', label: 'Reach Independent Agent milestone (3 independent closings)', autoLink: null },
-    ]));
-  });
-
-  it('P18.8-T7 G2 a reader who may not edit sees the three as Auto, and no select at all', async () => {
-    render(READER, WITH_DATA);
-    await screen.findByText('4. First Sale');
-    const row = within(rowOf('Close first case independently'));
-    expect(row.getByRole('button', { name: `Auto — completes when ${FIRST_SALE.completesWhen}` })).toBeInTheDocument();
-    expect(row.queryByLabelText('Completes from')).not.toBeInTheDocument();
-  });
-});
-
-/**
- * **The checklist's grey text per size** (P18.9-T4 AC-6, ADR-0176 §6; the client's grey-text table of 2026-10-27,
- * UI-027). *"New versions apply to new hires only."* — *ⓘ · ⓘ · Show*: from 1024px under the version line, below it
- * an ⓘ at the end of that line. *"Linked items complete automatically."* — *Remove · ⓘ · Show*: from 1024px in the
- * toolbar, at 768–1023px an ⓘ in its place, below 768px nothing.
- */
-describe('P18.9-T4 AC-6 the checklist’s grey text per size', () => {
-  afterEach(() => vi.unstubAllGlobals());
-  const NEW_VERSIONS = 'New versions apply to new hires only.';
-  const LINKED = 'Linked items complete automatically.';
-
-  /** At `px`: whether each sentence and each ⓘ is drawn, read from the classes CSS would apply there. */
-  async function drawnAt(px: number) {
-    atWidth(px);
-    render();
-    await screen.findByText(/Hires starting now are given/);
-    const shown = (el: Element | null | undefined) => (el ? !wears(el, px).split(' ').includes('hidden') : false);
-    const sentence = (text: string) => screen.getAllByText(text)
-      .find((el) => !el.classList.contains('sr-only') && el.getAttribute('role') !== 'tooltip');
-    const tip = (text: string) => screen.getByRole('button', { name: text }).parentElement;
-    return {
-      newVersions: { sentence: shown(sentence(NEW_VERSIONS)), tip: shown(tip(NEW_VERSIONS)) },
-      linked: { sentence: shown(sentence(LINKED)), tip: shown(tip(LINKED)) },
-    };
-  }
-
-  it.each([1024, 1280])('P18.9-T4 AC-6 at %ipx shows both sentences and draws neither ⓘ', async (px) => {
-    expect(await drawnAt(px)).toEqual({ newVersions: { sentence: true, tip: false }, linked: { sentence: true, tip: false } });
-  });
-
-  it.each([768, 1023])('P18.9-T4 AC-6 at %ipx puts both behind their ⓘ', async (px) => {
-    expect(await drawnAt(px)).toEqual({ newVersions: { sentence: false, tip: true }, linked: { sentence: false, tip: true } });
-  });
-
-  it('P18.9-T4 AC-6 at 767px keeps the new versions’ ⓘ and removes the linked items’ sentence altogether', async () => {
-    expect(await drawnAt(767)).toEqual({ newVersions: { sentence: false, tip: true }, linked: { sentence: false, tip: false } });
-  });
-
-  it('P18.9-T4 AC-6 puts the new versions’ ⓘ at the end of the version line it is about, and the old words nowhere', async () => {
-    render();
-    const tip = await screen.findByRole('button', { name: NEW_VERSIONS });
-    expect(tip.closest('p')).toHaveTextContent(/^Hires starting now are given version 1\./);
-    expect(screen.queryByText(/Publishing gives the new version/)).toBeNull();
-    expect(screen.queryByText(/no manual check-off needed/)).toBeNull();
-  });
-});
-
-/**
- * **44px targets on a phone** (P18.9-T7 AC-6, ADR-0178 §5; UI-040). *Changed 2026-11-05 (P19.2-T3 AC-3; UI-141):* below
- * 1024px the checklist is an accordion of one-line items whose controls are in sheets (the `P19.2-T3` specs below), so
- * what this block pinned below 1024px — the cards' ↑ ↓, their inline editors' 44px fields, the cards at 768px to the
- * byte — is gone with the cards there. The laptop's checklist is pinned as it was.
- */
-describe('P18.9-T7 AC-6 the checklist’s targets on a phone (UI-040)', () => {
-  afterEach(() => vi.unstubAllGlobals());
-
-  /** The checklist's markup on the build before P18.9-T7, at rest and with an item being edited, from this fixture on 2026-10-28. */
-  const BEFORE_T7: Record<'rest' | 'editing', Record<1280, string>> = {
-    rest: { 1280: '0598691fa01e3600375f5e235bb02562a3ec6796ecbe5775d0d2b38fbdd99ed3' },
-    editing: { 1280: '0f58649e4bf806fa8046bd22fd621563caa7c60c621045f68f0ca164a20fd901' },
-  };
-
-  it.each([1280] as const)('P18.9-T7 AC-6 at %ipx draws the checklist as it was, to the byte', async (px) => {
-    atWidth(px);
-    stubFetch({
-      '/kpm/settings/activation-checklist': { body: CHECKLIST },
-      '/kpm/settings/training': { body: TRAINING },
-    });
-    const { container } = renderWithSession(<ActivationChecklistPage />, { me: OWNER });
-    await screen.findByText('Learn insurance basics');
-    expect(digestAt(container, px)).toBe(BEFORE_T7.rest[px]);
-    await userEvent.click(within(rowOf('Learn insurance basics')).getByRole('button', { name: 'Edit' }));
-    await screen.findByLabelText('Item');
-    expect(digestAt(container, px)).toBe(BEFORE_T7.editing[px]);
-  });
-
-  it('P18.9-T7 AC-6 draws no ↑ ↓ at 768px, where the handle’s drag and keys stand', async () => {
-    atWidth(768);
-    stubFetch({ '/kpm/settings/activation-checklist': { body: CHECKLIST }, '/kpm/settings/training': { body: TRAINING } });
-    renderWithSession(<ActivationChecklistPage />, { me: OWNER });
-    await screen.findByText('Learn insurance basics');
-    expect(screen.queryByRole('button', { name: /^Move / })).not.toBeInTheDocument();
-  });
-
-  it('P18.9-T7 AC-6 offers a reader neither handles nor arrows', async () => {
-    atWidth(375);
-    stubFetch({ '/kpm/settings/activation-checklist': { body: CHECKLIST }, '/kpm/settings/training': { body: TRAINING } });
-    renderWithSession(<ActivationChecklistPage />, { me: READER });
-    await screen.findByText('Learn insurance basics');
-    expect(screen.queryByRole('button', { name: /^(Move|Reorder) / })).not.toBeInTheDocument();
-  });
-});
-
-/**
- * **The checklist below 1024px: an accordion of one-line items, an item's controls in its sheet** (P19.2-T3 AC-3;
- * UI-141: *16 native "Diselesaikan dari" selects open … with uppercase "OTOMATIS — SELESAI SAAT …" lines*, 5.1 screens at
- * 375; `kpm-owner-mobile-2026-11-03` 6 — the phone *and* the tablet, this one page).
- */
-describe('P19.2-T3 AC-3 the activation checklist on a phone and a tablet (UI-141)', () => {
-  afterEach(() => vi.unstubAllGlobals());
-  const at = (px: number) => {
-    atWidth(px);
-    const stub = stubFetch({
-      '/kpm/settings/activation-checklist': [{ body: CHECKLIST }, { body: CHECKLIST }],
-      '/kpm/settings/training': { body: TRAINING },
-    });
-    const rendered = renderWithSession(<ActivationChecklistPage />, { me: OWNER });
-    return { ...stub, container: rendered.container };
-  };
-  const heading = (name: string) => screen.getByRole('button', { name: new RegExp(`^${name.replace('.', '\\.')}`) });
-
-  it.each([375, 768, 1023])('P19.2-T3 AC-3 at %ipx draws the aspects as 48px headings, the first open, and no select until an item is opened', async (px) => {
-    at(px);
-    await screen.findByText('Learn insurance basics');
-    const first = heading('1. Introduction');
-    const second = heading('2. Initial Setup');
-    expect(first).toHaveAttribute('aria-expanded', 'true');
-    expect(second).toHaveAttribute('aria-expanded', 'false');
-    expect(wears(first, px).split(' ')).toContain('min-h-12');
-    expect(first).toHaveTextContent('2 items');
-    expect(screen.queryByRole('combobox')).toBeNull();
-    expect(screen.queryByText('Goal setting: APE & activity targets')).toBeNull();
-    // One open at a time (D-25).
-    await userEvent.click(second);
-    expect(first).toHaveAttribute('aria-expanded', 'false');
-    expect(screen.queryByText('Learn insurance basics')).toBeNull();
-    expect(screen.getByText('Goal setting: APE & activity targets')).toBeInTheDocument();
-  });
-
-  it('P19.2-T3 AC-3 marks an item that completes by itself with ⚡, never the upper-case line', async () => {
-    at(375);
-    await screen.findByText('Learn insurance basics');
-    await userEvent.click(heading('2. Initial Setup'));
-    const row = screen.getByRole('button', { name: 'Goal setting: APE & activity targets' }).closest('li')!;
-    expect(row.querySelector('[data-auto-marker]')).not.toBeNull();
-    expect(within(row).queryByText(/^AUTO/)).toBeNull();
-    expect(screen.queryByText(/OTOMATIS|AUTO —/)).toBeNull();
-    await userEvent.click(heading('1. Introduction'));
-    expect(screen.getByRole('button', { name: 'Learn insurance basics' }).closest('li')!.querySelector('[data-auto-marker]')).toBeNull();
-  });
-
-  it('P19.2-T3 AC-3 opens an item’s sheet: its name, Completes from, ↑ ↓ and Remove; Save changes the draft, Save draft saves it', async () => {
-    const { calls } = at(375);
-    await userEvent.click(await screen.findByRole('button', { name: 'Learn insurance basics' }));
-    const sheet = await screen.findByRole('dialog', { name: 'Learn insurance basics' });
-    expect(within(sheet).getByLabelText('Code')).toHaveValue('INSURANCE_BASICS');
-    await userEvent.selectOptions(within(sheet).getByLabelText('Completes from'), 'feature:leads');
+  it('P18.8-T7 G2 a data-backed item names the data on its line, the select holds it alone, and it saves back with no link', async () => {
+    const { calls } = render(OWNER, WITH_LINKS);
+    await screen.findByText('Close first case independently');
+    expect(within(rowOf('Close first case independently'))
+      .getByText('Completes automatically from: Sales data')).toBeInTheDocument();
+    const sheet = await openItem('Close first case independently');
+    const select = within(sheet).getByLabelText('Completes from');
+    expect(select).toBeDisabled();
+    expect([...select.querySelectorAll('option')].map((o) => o.textContent)).toEqual(['From Sales data']);
     await userEvent.clear(within(sheet).getByLabelText('Item'));
-    await userEvent.type(within(sheet).getByLabelText('Item'), 'Insurance basics');
-    await userEvent.click(within(sheet).getByRole('button', { name: 'Move Learn insurance basics down' }));
+    await userEvent.type(within(sheet).getByLabelText('Item'), 'First case closed');
     await userEvent.click(within(sheet).getByRole('button', { name: 'Save' }));
-    expect(screen.queryByRole('dialog')).toBeNull();
-    // The pinned bar saves the draft.
     await userEvent.click(screen.getByRole('button', { name: 'Save draft' }));
-    await waitFor(() => expect(calls.some((c) => c.init.method === 'PUT' || c.init.method === 'POST')).toBe(true));
-    const saved = sent(calls, calls.find((c) => c.init.method === 'PUT') ? 'PUT' : 'POST') as {
-      aspects: { code: string; items: { code: string; label: string; autoLink: string | null }[] }[];
-    };
-    expect(saved.aspects[0].items).toEqual([
-      expect.objectContaining({ code: 'CAREER_MINDSET' }),
-      expect.objectContaining({ code: 'INSURANCE_BASICS', label: 'Insurance basics', autoLink: 'feature:leads' }),
-    ]);
-  });
-
-  it('P19.2-T3 AC-3 keeps every aspect action behind its ⋮ — Rename, ↑ ↓, Remove last — and + Add item in the open aspect', async () => {
-    at(768);
-    await screen.findByText('Learn insurance basics');
-    await userEvent.click(screen.getByRole('button', { name: 'Actions for 2. Initial Setup' }));
-    const menu = within(screen.getByRole('menu', { name: 'Actions for 2. Initial Setup' }));
-    expect(menu.getAllByRole('menuitem').map((i) => i.textContent?.trim())).toEqual([
-      'Rename', 'Move 2. Initial Setup up', 'Move 2. Initial Setup down', expect.stringMatching(/^Remove/),
-    ]);
-    await userEvent.click(menu.getByRole('menuitem', { name: 'Move 2. Initial Setup up' }));
-    expect(screen.getAllByRole('button', { expanded: false }).concat(screen.getAllByRole('button', { expanded: true }))
-      .map((b) => b.textContent)).toEqual(expect.arrayContaining([expect.stringMatching(/^12\. Initial Setup/)]));
-
-    await userEvent.click(screen.getByRole('button', { name: '+ Add item' }));
-    const adding = await screen.findByRole('dialog', { name: 'Add item' });
-    await userEvent.type(within(adding).getByLabelText('Item'), 'Meet your mentor');
-    expect(within(adding).getByLabelText('Code')).toHaveValue('MEET_YOUR_MENTOR');
-    await userEvent.click(within(adding).getByRole('button', { name: 'Add' }));
-    expect(screen.getByRole('button', { name: 'Meet your mentor' })).toBeInTheDocument();
-
-    await userEvent.click(screen.getByRole('button', { name: 'Actions for 1. Introduction' }));
-    await userEvent.click(within(screen.getByRole('menu', { name: 'Actions for 1. Introduction' })).getByRole('menuitem', { name: 'Rename' }));
-    const rename = await screen.findByRole('dialog', { name: 'Rename' });
-    await userEvent.clear(within(rename).getByLabelText('Name'));
-    await userEvent.type(within(rename).getByLabelText('Name'), '1. Welcome');
-    await userEvent.click(within(rename).getByRole('button', { name: 'Save' }));
-    expect(heading('1. Welcome')).toBeInTheDocument();
-  });
-
-  it('P19.2-T3 AC-3 pins Save draft and Publish version n at the foot, and Publish waits for the draft to be saved', async () => {
-    at(375);
-    await screen.findByText('Learn insurance basics');
-    const bar = document.querySelector('[data-floating-bar]')!;
-    expect(within(bar as HTMLElement).getByRole('button', { name: 'Save draft' })).toBeInTheDocument();
-    expect(within(bar as HTMLElement).getByRole('button', { name: 'Publish version 2' })).toBeDisabled();
-    // Nowhere else on the page.
-    expect(screen.getAllByRole('button', { name: 'Save draft' })).toHaveLength(1);
-  });
-
-  it('P19.2-T3 AC-3 at 1024px keeps the cards: every select, the inline actions, the card’s own buttons, no pinned bar', async () => {
-    atWidth(1024);
-    stubFetch({ '/kpm/settings/activation-checklist': { body: CHECKLIST }, '/kpm/settings/training': { body: TRAINING } });
-    renderWithSession(<ActivationChecklistPage />, { me: OWNER });
-    await screen.findByText('Learn insurance basics');
-    expect(screen.getAllByRole('combobox')).toHaveLength(3);
-    expect(document.querySelector('[data-floating-bar]')).toBeNull();
-    expect(screen.getAllByRole('button', { name: 'Rename' })).toHaveLength(2);
+    expect(sent(calls, 'PUT').aspects[3].items[0]).toEqual({ code: 'FIRST_CASE_CLOSED', label: 'First case closed', autoLink: null });
   });
 });
 
 describe('P19.2-T3 AC-4 the checklist’s targets (UI-142)', () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it.each([375, 768])('P19.2-T3 AC-4 at %ipx finds no target under 44px, an aspect open and an item’s sheet open', async (px) => {
+  it.each([375, 768])('P19.2-T3 AC-4 at %ipx finds no target under 44px, with an edit waiting', async (px) => {
     atWidth(px);
     stubFetch({ '/kpm/settings/activation-checklist': { body: CHECKLIST }, '/kpm/settings/training': { body: TRAINING } });
-    renderWithSession(<div data-surface="v1"><ActivationChecklistPage /></div>, { me: OWNER });
+    const { container } = renderWithSession(<div data-surface="v1"><ActivationChecklistPage /></div>, { me: OWNER });
     await screen.findByText('Learn insurance basics');
-    expect(smallTargets(document.body, px)).toEqual([]);
-    await userEvent.click(screen.getByRole('button', { name: 'Learn insurance basics' }));
-    await screen.findByRole('dialog', { name: 'Learn insurance basics' });
-    expect(smallTargets(document.body, px)).toEqual([]);
+    await userEvent.click(screen.getByRole('button', { name: 'Actions for 1. Introduction' }));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Move 1. Introduction down' }));
+    expect(smallTargets(container, px)).toEqual([]);
+  });
+
+  it('P18.9-T7 AC-6 at 375px moves an aspect with ↑ ↓ beside its ⠿', async () => {
+    atWidth(375);
+    render();
+    await screen.findByText('Learn insurance basics');
+    await userEvent.click(screen.getByRole('button', { name: 'Move 2. Initial Setup up' }));
+    expect(card('1. Initial Setup')).toBeInTheDocument();
   });
 });

@@ -114,14 +114,16 @@ describe('P19.1-T1 AC-4 the 64px icon rail from 1024 to 1279px (UI-114)', () => 
     expect(drawn()).toBe('rail');
     expect(wears(aside(), px).split(' ')).toContain('w-[var(--sidebar-rail-width)]');
     expect(wears(aside(), px).split(' ')).not.toContain('w-sidebar');
-    // The same items, icons only, each named: the words are not drawn, and no `title` doubles the drawn name.
-    const item = screen.getByRole('link', { name: 'Leads' });
-    expect(item).toHaveAttribute('href', '/leads');
+    // The top items, icons only, each named: the words are not drawn, and no `title` doubles the drawn name.
+    const item = screen.getByRole('link', { name: 'Calendar' });
+    expect(item).toHaveAttribute('href', '/calendar');
     expect(item).not.toHaveAttribute('title');
-    expect(within(item).queryByText('Leads')).toBeNull();
+    expect(within(item).queryByText('Calendar')).toBeNull();
     expect(screen.getByRole('button', { name: 'Search agent' })).toBeInTheDocument();
-    // The groups flatten: no heading to open, so nothing behind one.
-    expect(screen.queryByRole('button', { name: 'My team' })).toBeNull();
+    // P19.17-T3 AC-6 (part E): one icon per group, named by it, opening a flyout — the group's items are behind it.
+    expect(screen.getByRole('button', { name: 'My team' })).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.getByRole('button', { name: 'My team' }).closest('[data-rail-group]')).not.toBeNull();
+    expect(screen.queryByRole('link', { name: 'Leads' })).toBeNull();
     // Nothing is written by arriving.
     expect(stored()).toEqual({ laptop: null, desk: null });
   });
@@ -187,7 +189,11 @@ describe('P19.1-T1 AC-4 the 64px icon rail from 1024 to 1279px (UI-114)', () => 
     expect(drawn()).toBe('full');
   });
 
-  it('P19.2-T1 AC-10 the Owner’s pages take the rail at 1024px too (ADR-0197 §4); only /admin keeps the full sidebar', () => {
+  /*
+   * *Changed 2026-11-20 (P19.23-T1 AC-1; ADR-0277 §1):* ADR-0197 §4's exception goes — the console at /admin takes the
+   * rail at 1024px as every other reader's shell. It read *"only /admin keeps the full sidebar"* until then.
+   */
+  it('P19.2-T1 AC-10, P19.23-T1 AC-1 the Owner’s pages take the rail at 1024px too (ADR-0197 §4), and so does /admin (ADR-0277 §1)', () => {
     window.localStorage.clear();
     atWidth(1024);
     route.path = '/people/members';
@@ -200,14 +206,14 @@ describe('P19.1-T1 AC-4 the 64px icon rail from 1024 to 1279px (UI-114)', () => 
     renderWithSession(<Shell family="admin" title="Overview">x</Shell>, {
       me: makeMe({ user: { ...makeMe().user, platformRole: 'super_admin' }, membership: null, permissions: ['kpm:list_all'] }),
     });
-    expect(drawn()).toBe('full');
+    expect(drawn()).toBe('rail');
   });
 
   it('P19.1-T1 AC-4 shows an item’s name beside it on hover and on focus, and Escape puts it away (WCAG 1.4.13)', async () => {
     at(1024);
-    const item = screen.getByRole('link', { name: 'Leads' });
+    const item = screen.getByRole('link', { name: 'Calendar' });
     fireEvent.mouseEnter(item);
-    expect(tip()).toHaveTextContent('Leads');
+    expect(tip()).toHaveTextContent('Calendar');
     // Decoration to a screen reader, which has the item's name already; fixed beside the item, so the nav cannot clip it.
     expect(tip()).toHaveAttribute('aria-hidden', 'true');
     expect(tip()).toHaveClass('fixed');
@@ -217,18 +223,18 @@ describe('P19.1-T1 AC-4 the 64px icon rail from 1024 to 1279px (UI-114)', () => 
     expect(tip()).toBeNull();
 
     act(() => item.focus());
-    expect(tip()).toHaveTextContent('Leads');
+    expect(tip()).toHaveTextContent('Calendar');
     act(() => item.blur());
     expect(tip()).toBeNull();
   });
 
   it('P19.1-T1 AC-4 a long press on touch shows the name and does not follow the link', async () => {
     at(1152);
-    const item = screen.getByRole('link', { name: 'Leads' });
+    const item = screen.getByRole('link', { name: 'Calendar' });
     // iOS's link preview and Android's menu stay away from a long press.
     expect(item.className).toContain('[-webkit-touch-callout:none]');
     fireEvent.touchStart(item, { touches: [{ clientX: 10, clientY: 10 }] });
-    await waitFor(() => expect(tip()).toHaveTextContent('Leads'));
+    await waitFor(() => expect(tip()).toHaveTextContent('Calendar'));
     // `fireEvent` answers false when the handler prevented the default: the tap that follows is not a navigation.
     expect(fireEvent.touchEnd(item)).toBe(false);
     expect(fireEvent.contextMenu(item)).toBe(true);
@@ -241,12 +247,24 @@ describe('P19.1-T1 AC-4 the 64px icon rail from 1024 to 1279px (UI-114)', () => 
 
   it('P19.1-T1 AC-4 a right click with a mouse keeps the browser’s own menu', () => {
     at(1024);
-    expect(fireEvent.contextMenu(screen.getByRole('link', { name: 'Leads' }))).toBe(true);
+    expect(fireEvent.contextMenu(screen.getByRole('link', { name: 'Calendar' }))).toBe(true);
   });
 
   it('P19.1-T1 AC-4 passes axe on the rail at 1152px, with a name drawn', async () => {
     at(1152);
     fireEvent.mouseEnter(screen.getByRole('link', { name: 'Calendar' }));
+    const rules = { rules: { 'color-contrast': { enabled: false }, region: { enabled: false } } };
+    expect((await axe(document.body, rules)).violations).toEqual([]);
+  });
+
+  it('P19.17-T3 AC-6 a group’s icon opens its flyout beside the rail, its items links, and passes axe open', async () => {
+    at(1152);
+    await userEvent.click(screen.getByRole('button', { name: 'Me' }));
+    const flyout = document.querySelector<HTMLElement>('[data-rail-flyout]')!;
+    expect(within(flyout).getByRole('link', { name: 'Leads' })).toHaveAttribute('href', '/leads');
+    expect(within(flyout).getByRole('link', { name: 'Goal Setting' })).toHaveAttribute('aria-current', 'page');
+    // The group of the current page is the white one on the rail.
+    expect(screen.getByRole('button', { name: 'Me' })).toHaveClass('bg-card');
     const rules = { rules: { 'color-contrast': { enabled: false }, region: { enabled: false } } };
     expect((await axe(document.body, rules)).violations).toEqual([]);
   });

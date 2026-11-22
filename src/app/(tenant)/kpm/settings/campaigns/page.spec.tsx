@@ -1,7 +1,7 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { atWidth, makeMe, renderWithSession, stubFetch, wears } from '@test/harness';
+import { atWidth, makeMe, renderWithSession, stubFetch } from '@test/harness';
 import { smallTargets } from '@test/touch-audit';
 import { TenantConfigProvider } from '@/lib/tenant-config-cache';
 import CampaignsSettingsPage from './page';
@@ -34,47 +34,8 @@ const campaign = (over: Record<string, unknown> = {}) => ({
   ...over,
 });
 
-const tier = (over: Record<string, unknown> = {}) => ({
-  id: 't1', kind: 'production_club', code: 'STAR_CLUB', name: 'Star Club',
-  appliesToOrgLevelCodes: [],
-  criteriaGroups: [{
-    mode: 'all',
-    criteria: [{
-      metricKey: 'APE_ACHIEVED', metricName: 'APE achieved', comparator: 'gte',
-      value: 120_000_000_000, unit: 'idr_minor',
-    }],
-  }],
-  groupMode: 'all', reward: 'Promotion bonus', rank: 1, waitingOnMetrics: [], ...over,
-});
-
-const moc = () => ({
-  id: 'm1', kind: 'moc', code: 'MOC_AB', name: 'Maintenance of Contract — AB',
-  appliesToOrgLevelCodes: ['AB'],
-  criteriaGroups: [
-    {
-      mode: 'all',
-      criteria: [{
-        metricKey: 'NET_APE', metricName: 'NET_APE', comparator: 'gte',
-        value: 60_000_000_000, unit: 'idr_minor',
-      }],
-    },
-    {
-      mode: 'all',
-      criteria: [{
-        metricKey: 'DIRECT_AB_COUNT', metricName: 'DIRECT_AB_COUNT', comparator: 'gte',
-        value: 5, unit: 'count',
-      }],
-    },
-  ],
-  groupMode: 'any', reward: '', rank: 1,
-  waitingOnMetrics: ['NET_APE', 'DIRECT_AB_COUNT'],
-});
-
-function render(
-  campaigns: unknown[] = [campaign()], rules: unknown[] = [tier(), moc()], me = OWNER,
-) {
+function render(campaigns: unknown[] = [campaign()], me = OWNER) {
   const stub = stubFetch({
-    '/kpm/settings/campaigns/rules': { body: rules },
     '/kpm/settings/campaigns': { body: campaigns },
     // The metric vocabulary is served, not listed in the screen (P5-T9, invariant 7).
     '/metrics': {
@@ -103,9 +64,10 @@ function render(
   return stub;
 }
 
-const openTiers = async () => {
-  await screen.findByRole('checkbox', { name: 'Show archived' });
-  await userEvent.click(screen.getByRole('link', { name: 'Production club tiers' }));
+/** ⋯ → *Edit* on a campaign's row (P19.25-T5 AC-1): the form opens in its sheet. */
+const openEdit = async (title = 'Year-End Star Club Drive') => {
+  await userEvent.click(await screen.findByRole('button', { name: `More for ${title}` }));
+  await userEvent.click(screen.getByRole('menuitem', { name: 'Edit' }));
 };
 
 /**
@@ -125,52 +87,10 @@ describe('the office’s Campaigns screen', () => {
     expect(await screen.findByText(/APE achieved at least IDR 500M/)).toBeInTheDocument();
   });
 
-  it('shows the phase worked out from the dates', async () => {
+  it('shows the phase worked out from the dates: a running one its dates, an ended one its dates and Ended', async () => {
     render([campaign(), campaign({ id: 'c2', code: 'OLD', title: 'Last year', phase: 'ended' })]);
-
-    expect(await screen.findByText('Running')).toBeInTheDocument();
-    expect(screen.getByText('Ended')).toBeInTheDocument();
-  });
-
-  // *This office* since P18.9-T4 AC-8 (UI-030), where it read *Your office’s*.
-  it('marks the office’s own campaign as the office’s', async () => {
-    render();
-
-    expect(await screen.findByText('This office')).toBeInTheDocument();
-  });
-
-  it('shows the tiers read-only, with the reason rather than inert controls', async () => {
-    render();
-    await openTiers();
-
-    expect(await screen.findByText('Star Club')).toBeInTheDocument();
-    expect(screen.getByText(/These are your insurer’s, not your office’s/)).toBeInTheDocument();
-    // Parity I-76: the prototype gives each tier Edit and a red Delete.
-    expect(screen.queryByRole('button', { name: /edit|delete|archive/i })).not.toBeInTheDocument();
-  });
-
-  it('says a rule cannot be worked out yet, naming what it is waiting on', async () => {
-    // The prototype fabricates the inputs. A rule whose inputs do not exist can never pass, and
-    // showing it as ordinary would tell somebody they failed something nothing measures.
-    render();
-    await openTiers();
-
-    expect(await screen.findByText('Not measured yet')).toBeInTheDocument();
-    const why = screen.getByText(
-      'Nothing measures NET_APE, DIRECT_AB_COUNT yet, so this rule cannot be worked out. Nothing here guesses them.',
-    );
-    // The state and what it waits on, and no timing: no phase, no date, no "until … arrive" (ADR-0070).
-    expect(why.textContent).not.toMatch(/until|arrive|phase/i);
-  });
-
-  it('reads MOC’s two groups as an "or", as the carrier states it', async () => {
-    render();
-    await openTiers();
-
-    // Net APE **or** five direct ABs — the carrier's own "or", which the prototype flattens.
-    expect(await screen.findByText('Maintenance of Contract — AB')).toBeInTheDocument();
-    expect(screen.getByText(/^or\s*$/)).toBeInTheDocument();
-    expect(screen.getByText('AB')).toBeInTheDocument();
+    expect(await screen.findByText(/IDR 500M · 1 Oct – 31 Dec 2026$/)).toBeInTheDocument();
+    expect(within(screen.getByText('Last year').closest('li')!).getByText(/· Ended$/)).toBeInTheDocument();
   });
 
   it('sends a money target as integer sen, never as rupiah', async () => {
@@ -208,7 +128,7 @@ describe('the office’s Campaigns screen', () => {
 
   it('edits a campaign without ever sending its code', async () => {
     const stub = render();
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+    await openEdit();
 
     expect(screen.getByLabelText('Code')).toBeDisabled();
     await userEvent.clear(screen.getByLabelText('Title'));
@@ -224,7 +144,8 @@ describe('the office’s Campaigns screen', () => {
     const stub = render([campaign({ status: 'archived' })]);
     await userEvent.click(await screen.findByRole('checkbox', { name: 'Show archived' }));
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Restore' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'More for Year-End Star Club Drive' }));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Restore' }));
     await waitFor(() => expect(stub.calls.some((c) => c.url.includes('/c1/restore'))).toBe(true));
     expect(screen.queryByRole('button', { name: /delete/i })).not.toBeInTheDocument();
   });
@@ -243,11 +164,11 @@ describe('the office’s Campaigns screen', () => {
   });
 
   it('shows a reader who cannot write without a control to change anything', async () => {
-    render([campaign()], [tier()], READER);
+    render([campaign()], READER);
     await screen.findByText('Year-End Star Club Drive');
 
     expect(screen.queryByRole('button', { name: 'Add a campaign' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^More for/ })).not.toBeInTheDocument();
   });
 
   describe('the fields the agent’s card draws (P18.2-T7 AC-9, D-fields)', () => {
@@ -280,13 +201,14 @@ describe('the office’s Campaigns screen', () => {
       });
     });
 
-    it('P18.2-T7 AC-9 a structural campaign: its section and its window, and no end', async () => {
+    it('P18.2-T7 AC-9, P19.25-T5 AC-1 a Struktural campaign: its window and no end, and no section — no subtype sent', async () => {
       const stub = render([]);
       await userEvent.click(await screen.findByRole('button', { name: 'Add a campaign' }));
       await userEvent.type(screen.getByLabelText('Title'), 'MDRT Qualification');
       await userEvent.selectOptions(screen.getByLabelText('Kind'), 'structural');
       expect(screen.queryByLabelText('Ends')).not.toBeInTheDocument();
-      await userEvent.selectOptions(screen.getByLabelText('Section'), 'ongoing');
+      expect(screen.queryByLabelText('Section')).not.toBeInTheDocument();
+      expect(within(screen.getByLabelText('Kind')).getAllByRole('option').map((o) => o.textContent)).toEqual(['Seasonal', 'Structural']);
       await userEvent.selectOptions(screen.getByLabelText('Read over'), 'calendar_year');
       await userEvent.type(screen.getByLabelText('Starts'), '2026-01-01');
       await userEvent.click(screen.getByRole('button', { name: 'Add the campaign' }));
@@ -294,14 +216,24 @@ describe('the office’s Campaigns screen', () => {
       await waitFor(() => expect(stub.calls.some((c) => c.init.method === 'POST')).toBe(true));
       const sent = JSON.parse(String(stub.calls.find((c) => c.init.method === 'POST')!.init.body));
       expect(sent).toMatchObject({
-        kind: 'structural', subtype: 'ongoing', window: 'calendar_year', endsAt: null,
+        kind: 'structural', subtype: null, window: 'calendar_year', endsAt: null,
         startsAt: '2025-12-31T17:00:00.000Z', appliesToOrgLevelCodes: [],
       });
     });
 
+    it('P19.25-T5 AC-1 editing a stored structural campaign keeps its subtype: nothing about it is sent', async () => {
+      const stub = render([campaign({
+        id: 'c-mdrt', code: 'MDRT_QUALIFICATION', title: 'MDRT Qualification', kind: 'structural', subtype: 'ongoing',
+        window: 'calendar_year', endsAt: null, phase: 'running',
+      })]);
+      await openEdit('MDRT Qualification');
+      await userEvent.click(screen.getByRole('button', { name: 'Save the campaign' }));
+      await waitFor(() => expect(stub.calls.some((c) => c.init.method === 'PATCH')).toBe(true));
+      expect(JSON.parse(String(stub.calls.find((c) => c.init.method === 'PATCH')!.init.body))).not.toHaveProperty('subtype');
+    });
+
     it('P18.2-T7 AC-9 the server’s refusal is named on the screen, in its words', async () => {
       const stub = stubFetch({
-        '/kpm/settings/campaigns/rules': { body: [] },
         'GET /kpm/settings/campaigns': { body: [] },
         'POST /kpm/settings/campaigns': {
           status: 400,
@@ -345,7 +277,7 @@ describe('the office’s Campaigns screen', () => {
       // A threshold keeps the places it was set with, and no ,0 (P18.9-T3 AC-2).
       const row = (await screen.findByText(/Training completion more than 80%/)).closest('li')!;
       expect(within(row).getByText('Not measured yet')).toBeInTheDocument();
-      await userEvent.click(screen.getByRole('button', { name: 'Edit' }));
+      await openEdit();
       const select = screen.getByLabelText('Requirement 1');
       expect(select).toHaveValue('TRAINING_COMPLETION_PCT');
       expect(within(select).getByRole('option', { name: 'Training completion (not measured yet)' })).toBeInTheDocument();
@@ -368,7 +300,7 @@ describe('the office’s Campaigns screen', () => {
 
     it('P18.2-T7 AC-9 editing a two-requirement campaign’s line sends both requirements back, each with its comparator', async () => {
       const stub = render([sprint()]);
-      await userEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+      await openEdit('Q4 APE Sprint');
       expect(screen.getByLabelText('Requirement 1')).toHaveValue('APE_ACHIEVED');
       expect(screen.getByLabelText('Requirement 1 Comparison')).toHaveValue('gte');
       expect(screen.getByLabelText('Requirement 1 Target (IDR)')).toHaveValue('500000000');
@@ -390,7 +322,7 @@ describe('the office’s Campaigns screen', () => {
 
     it('P18.2-T7 AC-9 a row is added and removed, the metric another row names not offered twice', async () => {
       const stub = render([sprint()]);
-      await userEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+      await openEdit('Q4 APE Sprint');
       await userEvent.click(screen.getByRole('button', { name: '+ Add requirement' }));
       const third = screen.getByLabelText('Requirement 3');
       expect(within(third).getByRole('option', { name: 'APE achieved' })).toBeDisabled();
@@ -414,7 +346,7 @@ describe('the office’s Campaigns screen', () => {
 
     it('P18.2-T7 AC-9 removing every row saves a campaign that measures nothing', async () => {
       const stub = render([sprint()]);
-      await userEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+      await openEdit('Q4 APE Sprint');
       await userEvent.click(screen.getByRole('button', { name: 'Remove requirement 2' }));
       await userEvent.click(screen.getByRole('button', { name: 'Remove requirement 1' }));
       await userEvent.click(screen.getByRole('button', { name: 'Save the campaign' }));
@@ -424,7 +356,7 @@ describe('the office’s Campaigns screen', () => {
 
     it('P18.2-T7 AC-9 editing reads back the office’s days and the fields as stored', async () => {
       render([campaign({ startsAt: '2026-09-30T17:00:00.000Z', endsAt: '2026-12-31T16:59:59.999Z', appliesToOrgLevelCodes: ['AGENT'] })]);
-      await userEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+      await openEdit();
       // It read the UTC day of the instant: 30 Sep for a campaign that starts on 1 Okt in Jakarta.
       expect(screen.getByLabelText('Starts')).toHaveValue('2026-10-01');
       expect(screen.getByLabelText('Ends')).toHaveValue('2026-12-31');
@@ -434,12 +366,13 @@ describe('the office’s Campaigns screen', () => {
       expect(screen.getByRole('checkbox', { name: 'Agent' })).toBeChecked();
     });
 
-    it('P18.2-T7 AC-9 the settings list is otherwise unchanged: no kind, poster or line on the row', async () => {
+    it('P18.2-T7 AC-9, P19.25-T5 AC-1 the row carries its tag, never its poster or card line', async () => {
       render();
       const title = await screen.findByText('Year-End Star Club Drive');
       const row = title.closest('li')!;
       expect(row).not.toHaveTextContent('The last push of the year.');
-      expect(row).not.toHaveTextContent(/Seasonal|⭐/);
+      expect(row).not.toHaveTextContent('⭐');
+      expect(within(row).getByText('Seasonal')).toBeInTheDocument();
     });
   });
 });
@@ -450,7 +383,7 @@ describe('the office’s Campaigns screen', () => {
  * success rate at least 0,30""*). Upcoming soonest first, running soonest first, ended latest first; a requirement on
  * one of the office's ratios in that ratio's unit — a success rate *30%*, leads per activity *1,50* (ADR-0174).
  */
-describe('P18.9-T4 AC-8 the campaigns settings: order, This office, rates', () => {
+describe('P18.9-T4 AC-8 the campaigns settings: order, rates', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   const ratio = (code: string, label: string, displayUnit: 'percent' | 'decimal') => ({
@@ -464,7 +397,6 @@ describe('P18.9-T4 AC-8 the campaigns settings: order, This office, rates', () =
 
   function renderWithConfig(campaigns: unknown[]) {
     stubFetch({
-      '/kpm/settings/campaigns/rules': { body: [] },
       '/kpm/settings/campaigns': { body: campaigns },
       '/metrics': { body: [] },
       '/kpm/settings/publish-state': {
@@ -485,15 +417,9 @@ describe('P18.9-T4 AC-8 the campaigns settings: order, This office, rates', () =
       campaign({ id: 'e', code: 'SPRING', title: 'Spring drive', phase: 'ended', startsAt: '2026-03-01T00:00:00.000Z' }),
     ]);
     await screen.findByText('Year-End Star Club Drive');
-    expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual([
+    expect([...document.querySelectorAll('[data-row]')].map((row) => row.querySelector('.font-bold')!.textContent)).toEqual([
       'November sprint', 'January kick-off', 'Year-End Star Club Drive', 'Spring drive', 'Last year’s drive',
     ]);
-  });
-
-  it('P18.9-T4 AC-8 tags the office’s own campaign This office, and never Your office’s', async () => {
-    renderWithConfig([campaign()]);
-    expect(await screen.findByText('This office')).toBeInTheDocument();
-    expect(screen.queryByText(/Your office’s/)).toBeNull();
   });
 
   it('P18.9-T4 AC-8 writes a requirement on a rate as a percentage, and one on a count of a count as the number', async () => {
@@ -503,8 +429,8 @@ describe('P18.9-T4 AC-8 the campaigns settings: order, This office, rates', () =
         { metricKey: 'LEADS_PER_ACTIVITY', metricName: 'Leads per activity', comparator: 'gte', value: 1.5, unit: 'ratio', measured: true },
       ],
     })]);
-    expect(await screen.findByText('Recruitment success rate at least 30%')).toBeInTheDocument();
-    expect(screen.getByText('Leads per activity at least 1.50')).toBeInTheDocument();
+    const line = await screen.findByText(/Recruitment success rate at least 30%/);
+    expect(line).toHaveTextContent('Recruitment success rate at least 30% + Leads per activity at least 1.50');
     expect(screen.queryByText(/at least 0.30/)).toBeNull();
   });
 
@@ -512,77 +438,99 @@ describe('P18.9-T4 AC-8 the campaigns settings: order, This office, rates', () =
     renderWithConfig([campaign({
       requirements: [{ metricKey: 'MEETING_PER_APPROACH', metricName: 'Set appointment to meeting', comparator: 'gte', value: 0.3, unit: 'ratio', measured: true }],
     })]);
-    expect(await screen.findByText('Set appointment to meeting at least 0.30')).toBeInTheDocument();
+    expect(await screen.findByText(/^Set appointment to meeting at least 0.30 · /)).toBeInTheDocument();
   });
 });
 
 /**
- * **A campaign on a phone: one line, and its card and its form in its sheet** (P19.2-T3 AC-3; UI-141: *Activity types and
- * Campaigns: same row + sheet*, 3.5 screens at 375).
+ * **P19.25-T5 AC-1 — *Struktural* or *Musiman*, and no Production club** (ADR-0282; `data-upload-pengaturan-*` frame
+ * 20): the filter with its counts, one white list, each row's tag and ⋯, *+ Tambah campaign* at its foot, the two notes
+ * under it — and no *Production club tiers* tab, no MOC, no read of the carrier's rules.
  */
-describe('P19.2-T3 AC-3 the campaigns on a phone (UI-141)', () => {
+describe('P19.25-T5 AC-1 Pengaturan › Campaigns: Struktural or Musiman', () => {
   afterEach(() => vi.unstubAllGlobals());
-  const TWO = [campaign(), campaign({ id: 'c2', code: 'OLD', title: 'Old drive', phase: 'ended', status: 'archived' })];
+  const MDRT = campaign({
+    id: 'c-mdrt', code: 'MDRT_QUALIFICATION', title: 'MDRT Qualification', kind: 'structural', subtype: 'ongoing',
+    window: 'calendar_year', endsAt: null, phase: 'running', startsAt: '2025-12-31T17:00:00.000Z',
+  });
+  const PROMO = campaign({
+    id: 'c-promo', code: 'PROMOTION_AAB_AB', title: 'Kenaikan jenjang AAB → AB', kind: 'structural', subtype: 'promotion',
+    window: 'rolling_12m', endsAt: null, phase: 'running', startsAt: '2025-12-31T17:00:00.000Z', requirements: [],
+  });
+  const NEXT = campaign({ id: 'c-next', code: 'Q1_2027', title: 'Q1 2027 APE Challenge', phase: 'upcoming', startsAt: '2026-12-31T17:00:00.000Z', endsAt: '2027-03-31T16:59:59.000Z' });
+  const ALL = [campaign(), MDRT, PROMO, NEXT];
+  const titles = () => [...document.querySelectorAll('[data-row]')].map((row) => row.querySelector('.font-bold')!.textContent);
 
-  it('P19.2-T3 AC-3 at 375px draws each campaign as a 56px row — its title, its phase · This office, › — and no form', async () => {
-    atWidth(375);
-    render(TWO);
-    await userEvent.click(await screen.findByRole('checkbox', { name: 'Show archived' }));
-    const row = screen.getByRole('button', { name: 'Year-End Star Club Drive' }).closest('li')!;
-    expect(wears(row, 375).split(' ')).toContain('min-h-14');
-    expect(row).toHaveTextContent('Running · This office');
-    expect(within(screen.getByRole('button', { name: 'Old drive' }).closest('li')!).getByText('Archived')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();
-    expect(screen.queryByRole('combobox')).toBeNull();
+  it('P19.25-T5 AC-1 filters Semua / Struktural / Musiman with their counts; Struktural first, each row tagged', async () => {
+    const stub = render(ALL);
+    await screen.findByText('MDRT Qualification');
+    expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['All 4', 'Structural 2', 'Seasonal 2']);
+    expect(titles()).toEqual(['Kenaikan jenjang AAB → AB', 'MDRT Qualification', 'Q1 2027 APE Challenge', 'Year-End Star Club Drive']);
+    expect(within(screen.getByText('MDRT Qualification').closest('li')!).getByText('Structural')).toBeInTheDocument();
+    expect(within(screen.getByText('Q1 2027 APE Challenge').closest('li')!).getByText('Seasonal')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('tab', { name: 'Structural 2' }));
+    expect(titles()).toEqual(['Kenaikan jenjang AAB → AB', 'MDRT Qualification']);
+    await userEvent.click(screen.getByRole('tab', { name: 'Seasonal 2' }));
+    expect(titles()).toEqual(['Q1 2027 APE Challenge', 'Year-End Star Club Drive']);
+    // No tiers tab, no MOC, and the carrier's rules are never read.
+    expect(screen.queryByRole('link', { name: 'Production club tiers' })).toBeNull();
+    expect(screen.queryByText(/Maintenance of Contract|MOC|Club tier/)).toBeNull();
+    expect(stub.calls.some((c) => c.url.includes('/kpm/settings/campaigns/rules'))).toBe(false);
   });
 
-  it('P19.2-T3 AC-3 at 375px opens the campaign’s sheet with its card, and Edit turns it into the form', async () => {
-    atWidth(375);
-    render();
-    await userEvent.click(await screen.findByRole('button', { name: 'Year-End Star Club Drive' }));
-    const sheet = await screen.findByRole('dialog', { name: 'Year-End Star Club Drive' });
-    expect(within(sheet).getByText('Push to Star Club before the year closes.')).toBeInTheDocument();
-    expect(within(sheet).getByText(/Extra unit budget/)).toBeInTheDocument();
-    await userEvent.click(within(sheet).getByRole('button', { name: 'Edit' }));
-    expect(within(sheet).getByLabelText('Title')).toHaveValue('Year-End Star Club Drive');
-    await userEvent.click(within(sheet).getByRole('button', { name: 'Cancel' }));
-    expect(within(sheet).getByRole('button', { name: 'Edit' })).toBeInTheDocument();
+  it('P19.25-T5 AC-1 a row’s line: what it asks and when — every year, year-round, its dates, from a day', async () => {
+    render(ALL);
+    await screen.findByText('MDRT Qualification');
+    const line = (title: string) => screen.getByText(title).closest('li')!.querySelector('.text-muted')!.textContent;
+    expect(line('MDRT Qualification')).toBe('APE achieved at least IDR 500M · every year');
+    expect(line('Kenaikan jenjang AAB → AB')).toBe('year-round');
+    expect(line('Year-End Star Club Drive')).toBe('APE achieved at least IDR 500M · 1 Oct – 31 Dec 2026');
+    expect(line('Q1 2027 APE Challenge')).toBe('APE achieved at least IDR 500M · from 1 Jan 2027');
+    expect(screen.getByText('Structural = always on (promotion paths, MDRT)')).toBeInTheDocument();
+    expect(screen.getByText('Seasonal = has a start and an end date')).toBeInTheDocument();
   });
 
-  it('P19.2-T3 AC-3 at 375px archives from the sheet, and Add a campaign opens the form in a sheet', async () => {
-    atWidth(375);
-    const stub = render();
-    await userEvent.click(await screen.findByRole('button', { name: 'Year-End Star Club Drive' }));
-    const sheet = await screen.findByRole('dialog', { name: 'Year-End Star Club Drive' });
-    await userEvent.click(within(sheet).getByRole('button', { name: 'Archive' }));
-    await waitFor(() => expect(stub.calls.some((c) => c.url.includes('/kpm/settings/campaigns/c1/archive'))).toBe(true));
-    await userEvent.keyboard('{Escape}');
+  it('P19.25-T5 AC-1 + Add campaign from the Struktural filter opens the form on Struktural', async () => {
+    render(ALL);
+    await screen.findByText('MDRT Qualification');
+    await userEvent.click(screen.getByRole('tab', { name: 'Structural 2' }));
     await userEvent.click(screen.getByRole('button', { name: 'Add a campaign' }));
-    const adding = await screen.findByRole('dialog', { name: 'Add a campaign' });
-    expect(within(adding).getByLabelText('Title')).toHaveValue('');
+    const sheet = await screen.findByRole('dialog', { name: 'Add a campaign' });
+    expect(within(sheet).getByLabelText('Kind')).toHaveValue('structural');
+    expect(within(sheet).getByLabelText('Read over')).toHaveValue('calendar_year');
   });
 
-  it.each([768, 1280])('P19.2-T3 AC-3 at %ipx keeps a card per campaign with Edit and Archive on it', async (px) => {
-    atWidth(px);
-    render();
+  it('P19.25-T5 AC-1 ⋯ archives a campaign, never deletes one', async () => {
+    const stub = render(ALL);
+    await userEvent.click(await screen.findByRole('button', { name: 'More for MDRT Qualification' }));
+    expect(screen.queryByRole('menuitem', { name: /delete/i })).toBeNull();
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Archive' }));
+    await waitFor(() => expect(stub.calls.some((c) => c.url.includes('/kpm/settings/campaigns/c-mdrt/archive'))).toBe(true));
+  });
+
+  it('P19.25-T5 AC-1 a kind with nothing in it says so', async () => {
+    render([campaign()]);
     await screen.findByText('Year-End Star Club Drive');
-    expect(document.querySelectorAll('[data-list-row]')).toHaveLength(0);
-    expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('tab', { name: 'Structural 0' }));
+    expect(screen.getByText('No campaigns of this kind yet.')).toBeInTheDocument();
   });
-});
 
-describe('P19.2-T3 AC-4 the campaigns’ targets (UI-142)', () => {
-  afterEach(() => vi.unstubAllGlobals());
+  it('P19.25-T5 AC-1 says when the campaigns cannot be read', async () => {
+    stubFetch({
+      '/kpm/settings/campaigns': { status: 500, body: { error: { code: 'INTERNAL', message: 'Something broke.', requestId: 'r' } } },
+      '/metrics': { body: [] },
+      '/kpm/settings/publish-state': { body: { publishedVersion: 1, workingVersion: 1, hasUnpublishedChanges: false, publishedAt: null } },
+    });
+    renderWithSession(<CampaignsSettingsPage />, { me: OWNER });
+    expect(await screen.findByText('Something broke.')).toBeInTheDocument();
+  });
 
-  it.each([375, 768])('P19.2-T3 AC-4 at %ipx finds no target under 44px on either tab', async (px) => {
+  it.each([375, 768])('P19.25-T5 AC-1 at %ipx finds no target under 44px', async (px) => {
     atWidth(px);
-    render();
+    render(ALL);
     const frame = document.body.firstElementChild!;
     frame.setAttribute('data-surface', 'v1');
-    await screen.findByText('Year-End Star Club Drive');
-    expect(smallTargets(frame, px)).toEqual([]);
-    await openTiers();
-    await screen.findByText('Star Club');
+    await screen.findByText('MDRT Qualification');
     expect(smallTargets(frame, px)).toEqual([]);
   });
 });

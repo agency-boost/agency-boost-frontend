@@ -1,9 +1,11 @@
 'use client';
 
+import Link from 'next/link';
+import dynamic from 'next/dynamic';
 import { useCallback, useEffect, useState } from 'react';
 import { AudiencePicker } from '@/components/events/audience-picker';
-import { FeedbackDialog } from '@/components/events/feedback-dialog';
 import { PublishBar } from '@/components/publish-bar';
+import { ActionMenu, type ActionMenuItem } from '@/components/ui/action-menu';
 import { SettingsScreen } from '@/components/settings-screen';
 import { ConfigBadge } from '@/components/ui/config-badge';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -30,11 +32,21 @@ import {
 } from '@/lib/tenant-config';
 import { ARCHIVED_SWITCH_ROW } from '../settings-touch';
 
-/** The two tabs, by their addresses: §A.3's names, the same in both languages (`settings-events.tsx`). */
+/**
+ * *Catat kehadiran*: the roll call and the named *Ringkasan masukan* (ADR-0138, ADR-0141 — the stewards' dialog, as it
+ * was behind *View feedback*), loaded the first time it is opened (P19.25-T3; ADR-0281 §6).
+ */
+const FeedbackDialog = dynamic(() => import('@/components/events/feedback-dialog').then((m) => m.FeedbackDialog), { ssr: false });
+
+/** The two tabs, by their addresses: *Events | Jenis event* (P19.25-T3 AC-1), their words the reader's (`settings-events.tsx`). */
 const TABS = [
   { label: settingsEventsMessages.en.tabs.events, href: '#events' },
   { label: settingsEventsMessages.en.tabs.types, href: '#types' },
 ];
+
+/** A past event's feedback and attendance: Advanced analytics › *Event*, on *Feedback*, that event chosen, its month. */
+const feedbackHref = (event: { id: string; startsOn: string }) =>
+  `/kpm/advanced-analytics/events?view=feedback&event=${encodeURIComponent(event.id)}&month=${event.startsOn.slice(0, 7)}`;
 
 /** The issuer and the scope, which the prototype crams into one free-text string — in this order. */
 const ISSUERS = ['kpm', 'company', 'group'] as const;
@@ -44,7 +56,6 @@ const ISSUERS = ['kpm', 'company', 'group'] as const;
  */
 const SCOPES = ['all_agents', 'leaders', 'select_agents', 'select_leaders'] as const;
 
-const PHASE_TONE: Record<string, 'won' | 'open'> = { upcoming: 'open', running: 'won', past: 'open' };
 
 /** A stored value's words, or the value itself for one this screen does not know. */
 const wordFor = (words: Readonly<Record<string, string>>, value: string) => words[value] ?? value;
@@ -61,9 +72,12 @@ type FieldRefusal = { field: 'dates' | 'audience'; message: string };
  * `settings.ts`; P18.10-T4), its day in the reader's figures.
  *
  * **Nothing per-person is edited here.** RSVP, the claim and feedback are each member's own record,
- * written on the agent's Events screen. What the office does with them is behind *View feedback* on a
- * past row (`KPM_Owner.html:1655`; P18.2-T5 AC-7, T6 AC-5): the roll call, where the Owner or an Admin
- * confirms who came, and the *Feedback Summary*.
+ * written on the agent's Events screen. *Changed 2026-11-20 (P19.25-T3 AC-1; ADR-0281 §6):* a past row's
+ * ***Lihat masukan ›*** opens Advanced analytics › *Event* on *Feedback* with that event chosen, where the
+ * *View feedback* dialog opened in place; the roll call, where a steward records who came, is ***Catat
+ * kehadiran*** in the row's ⋯ (form 3), the dialog *View feedback* opened — the roll call and the named *Ringkasan
+ * masukan* (ADR-0141, kept for the stewards). Status *Akan datang* / *Sudah lewat* — a running event is *Akan
+ * datang* until it ends — and *+ Tambah event* at the list's foot.
  *
  * **The list is the office's administration's** (P18.2-T5 AC-2): it carries every invitee list and every
  * leaders-only event, so it reads under `event_settings:read`, which no field rung holds.
@@ -92,13 +106,17 @@ export default function EventsSettingsPage() {
   const [fieldRefusal, setFieldRefusal] = useState<FieldRefusal | null>(null);
   const [typeDraft, setTypeDraft] = useState({ label: '', code: '', touched: false, emoji: '' });
   const [addingType, setAddingType] = useState<string | null>(null);
-  /** The past event whose *View feedback* is open. */
-  const [feedbackFor, setFeedbackFor] = useState<EventRow | null>(null);
+  /** The past event whose roll call (*Catat kehadiran*) is open. */
+  const [recording, setRecording] = useState<EventRow | null>(null);
   const mayReadList = useCan('event_settings:read');
-  // *View feedback* opens the roll call (`event_attendance:confirm`) and the summary (`event_feedback:read`).
+  // *Catat kehadiran* is the roll call's (`event_attendance:confirm`); *Lihat masukan ›* opens Advanced analytics.
   const mayConfirm = useCan('event_attendance:confirm');
   const mayReadFeedback = useCan('event_feedback:read');
-  const mayViewFeedback = mayConfirm || mayReadFeedback;
+  const mayReadAnalytics = useCan('advanced_analytics:read');
+  const tabs = [
+    { label: t.tabs.events, href: TABS[0].href },
+    { label: t.tabs.types, href: TABS[1].href },
+  ];
   const setInvitees = useCallback((ids: string[]) => setDraft((n) => ({ ...n, invitees: ids })), []);
 
   const load = useCallback(async () => {
@@ -199,8 +217,9 @@ export default function EventsSettingsPage() {
         {adding && addPanel(active)}
 
         {/*
-          * The prototype's `config-table` (`KPM_Owner.html:1651-1656`): one bordered list, a row per event, as the
-          * other settings screens draw theirs (P18.5-T13 AC-2, the tidy), where each event was a card of its own.
+          * *Pengaturan › Events* (P19.25-T3 AC-1; ADR-0281 §6; the brief of 19 November): one list, a row per event — its
+          * title, *"20 Nov 2026 · Kantor KPM · semua anggota"*, the status *Akan datang* or *Sudah lewat* (a running event
+          * is *Akan datang* until it ends), *Lihat masukan ›* on a past one, and ⋯ — then *+ Tambah event* at its foot.
           */}
         <Card className="p-0">
           {shown.length === 0 ? (
@@ -208,74 +227,79 @@ export default function EventsSettingsPage() {
           ) : (
             <ul className="flex flex-col divide-y divide-hairline">
               {shown.map((event) => {
-                const viewable = event.phase === 'past' && mayViewFeedback;
+                const past = event.phase === 'past';
+                const menu: ActionMenuItem[] = [
+                  ...(canWrite ? [{
+                    label: s.edit,
+                    onSelect: () => {
+                      const opened = draftOf(event);
+                      setDraft(opened);
+                      setOriginal(opened);
+                      setFieldRefusal(null);
+                      setAdding(event.id);
+                    },
+                  }] : []),
+                  ...(past && (mayConfirm || mayReadFeedback) ? [{ label: t.recordAttendance, onSelect: () => setRecording(event) }] : []),
+                  ...(canWrite ? [{
+                    label: event.status === 'archived' ? s.restore : s.archive,
+                    tone: event.status === 'archived' ? 'neutral' as const : 'alert' as const,
+                    onSelect: () => void run(() => (event.status === 'archived' ? restoreEvent(event.id) : archiveEvent(event.id))),
+                  }] : []),
+                ];
+                const audience = event.audience.scope === 'select_agents' || event.audience.scope === 'select_leaders'
+                  ? t.audienceShort[event.audience.scope]({ n: event.audience.inviteeMembershipIds.length })
+                  : wordFor(t.audienceShort as unknown as Record<string, string>, event.audience.scope);
                 return (
-                  <li key={event.id} className="flex flex-wrap items-center gap-3 px-4 py-3 sm:px-5">
+                  <li key={event.id} data-event-row={event.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 sm:px-5">
                     <div className="min-w-0 flex-1">
                       <h2 className="text-md font-semibold text-navy">{event.title}</h2>
-                      {event.blurb && <p className="mt-0.5 text-sm text-muted">{event.blurb}</p>}
-                      <p className="mt-1 flex flex-wrap items-center gap-2">
-                        <ConfigBadge tone={PHASE_TONE[event.phase]}>
-                          {wordFor(t.phases, event.phase)}
-                        </ConfigBadge>
-                        <ConfigBadge tone="open">
-                          {types.find((t) => t.code === event.typeCode)?.label ?? event.typeCode}
-                        </ConfigBadge>
-                        {event.status === 'archived' && (
-                          <ConfigBadge tone="open">{s.archivedBadge}</ConfigBadge>
-                        )}
-                      </p>
-                      <p className="mt-1 text-sm text-muted">
-                        {formatCalendarDay(event.startsOn, figures)} · {wordFor(t.issuers, event.audience.issuer)} ·{' '}
-                        {wordFor(t.scopes, event.audience.scope)}
-                        {event.audience.inviteeMembershipIds.length > 0 && (
-                          <> · {t.invited({ n: event.audience.inviteeMembershipIds.length })}</>
-                        )}
-                        {event.location && <> · {event.location}</>}
+                      <p className="mt-0.5 text-sm text-muted">
+                        {[formatCalendarDay(event.startsOn, figures), event.location, audience].filter(Boolean).join(' · ')}
                       </p>
                     </div>
-                    {/* The row's actions in one group, *View feedback* first, as `cfg-actions` holds them (`:1655`). */}
-                    {(viewable || canWrite) && (
-                      <div className="flex flex-wrap items-center gap-2">
-                        {viewable && (
-                          <Button variant="inline" onClick={() => setFeedbackFor(event)}>
-                            {office.viewFeedback}
-                          </Button>
+                    <span className="flex items-center gap-2">
+                      {event.status === 'archived' && <ConfigBadge tone="open">{s.archivedBadge}</ConfigBadge>}
+                      <span
+                        data-status={past ? 'past' : 'upcoming'}
+                        className={cn(
+                          'rounded-pill px-2.5 py-1 text-sm font-semibold',
+                          past ? 'bg-pill-grey text-pill-grey-ink' : 'bg-secondary-50 text-navy',
                         )}
-                        {canWrite && (
-                          <>
-                            <Button
-                              variant="inline"
-                              disabled={busy}
-                              onClick={() => {
-                                const opened = draftOf(event);
-                                setDraft(opened);
-                                setOriginal(opened);
-                                setFieldRefusal(null);
-                                setAdding(event.id);
-                              }}
-                            >
-                              {s.edit}
-                            </Button>
-                            <Button
-                              variant="inlineDanger"
-                              disabled={busy}
-                              onClick={() => void run(() => (event.status === 'archived'
-                                ? restoreEvent(event.id)
-                                : archiveEvent(event.id)))}
-                            >
-                              {event.status === 'archived' ? s.restore : s.archive}
-                            </Button>
-                          </>
-                        )}
-                      </div>
-                    )}
+                      >
+                        {past ? t.status.past : t.status.upcoming}
+                      </span>
+                      {past && mayReadAnalytics && (
+                        <Link
+                          href={feedbackHref(event)}
+                          aria-label={t.seeFeedbackFor({ title: event.title })}
+                          className="inline-flex min-h-11 items-center whitespace-nowrap px-1 text-sm font-bold text-navy hover:underline"
+                        >
+                          {t.seeFeedback}
+                        </Link>
+                      )}
+                      {menu.length > 0 && (
+                        <ActionMenu glyph="⋯" label={t.actionsFor({ title: event.title })} items={menu} />
+                      )}
+                    </span>
                   </li>
                 );
               })}
             </ul>
           )}
+          {canWrite && (
+            <div className="border-t border-hairline px-4 sm:px-5">
+              <button
+                type="button"
+                disabled={busy || adding !== null || active.length === 0}
+                onClick={() => { setDraft(emptyDraft()); setOriginal(null); setFieldRefusal(null); setAdding('new'); }}
+                className="min-h-11 text-md font-bold text-primary-ink disabled:opacity-40"
+              >
+                {t.plusAddEvent}
+              </button>
+            </div>
+          )}
         </Card>
+        <p className="text-sm text-muted">{t.whereFeedback}</p>
       </div>
     );
   }
@@ -560,7 +584,6 @@ export default function EventsSettingsPage() {
    * the other settings screens hold theirs (P18.5-T13 AC-2): *Show archived*, one box for both tabs, and the tab's
    * add button on the right, once the lists it adds to are read.
    */
-  const activeTypes = types?.filter((t) => t.status === 'active') ?? [];
   const toolbar = types === null || (tab !== '#types' && events === null) ? undefined : {
     actions: (
       <>
@@ -572,7 +595,8 @@ export default function EventsSettingsPage() {
           />
           {s.showArchived}
         </label>
-        {canWrite && (tab === '#types' ? (
+        {/* *Jenis event*'s add button; *Events*' is *+ Tambah event* at its list's foot (P19.25-T3 AC-1). */}
+        {canWrite && tab === '#types' && (
           <Button
             disabled={busy || addingType !== null}
             onClick={() => {
@@ -582,14 +606,7 @@ export default function EventsSettingsPage() {
           >
             {t.addType}
           </Button>
-        ) : (
-          <Button
-            disabled={busy || adding !== null || activeTypes.length === 0}
-            onClick={() => { setDraft(emptyDraft()); setOriginal(null); setFieldRefusal(null); setAdding('new'); }}
-          >
-            {t.addAnEvent}
-          </Button>
-        ))}
+        )}
       </>
     ),
   };
@@ -599,7 +616,7 @@ export default function EventsSettingsPage() {
       title={t.title}
       subtitle={t.subtitle}
       permission="event_settings:read"
-      tabs={TABS}
+      tabs={tabs}
       tabsLabel={s.sections({ title: t.title })}
       activeHref={tab}
       onSelectTab={setTab}
@@ -613,8 +630,8 @@ export default function EventsSettingsPage() {
         </div>
       )}
       {tab === '#types' ? typesTab() : eventsTab()}
-      {feedbackFor && (
-        <FeedbackDialog eventId={feedbackFor.id} title={feedbackFor.title} onClose={() => setFeedbackFor(null)} />
+      {recording && (
+        <FeedbackDialog eventId={recording.id} title={recording.title} onClose={() => setRecording(null)} />
       )}
     </SettingsScreen>
   );

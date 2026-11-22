@@ -510,7 +510,8 @@ describe('P19.1-T4, P19.11-T4 the goal card’s UI-157 words in Indonesian', () 
     expect(goal).toHaveTextContent('Belum diunggah');
     expect(goal.querySelector('[data-who-uploads]')).toBeNull();
     expect(goal.querySelector('dl')).toHaveTextContent(/^Sisa bulan iniRp 290 JtPolis yang dibutuhkan± 15 polis$/);
-    expect(within(goal).getByRole('link', { name: 'Unggah produksi →' })).toHaveAttribute('href', '/kpm/data-upload');
+    // P19.21-T1 AC-9: on the current month, the search filled with the reader's name.
+    expect(within(goal).getByRole('link', { name: 'Unggah produksi →' }).getAttribute('href')).toMatch(/^\/kpm\/data-upload\?month=\d{4}-\d{2}&q=.+/);
     expect(within(goal).queryByRole('button', { name: 'Isi produksi sementara' })).not.toBeInTheDocument();
     noEnglishLeft();
 

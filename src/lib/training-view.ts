@@ -1,7 +1,10 @@
-import { projectStaged, type StagedMark } from '@/lib/staged-projection';
 import {
-  stageChange,
-  type ConfigChange,
+  confirmTrainingUpload,
+  requestTrainingUpload,
+  signedUploadForm,
+  type ContentFile,
+  type ModuleContent,
+  type ModuleContentView,
   type TrainingCategoryRow,
   type TrainingModuleRow,
   type TrainingSkillRow,
@@ -13,29 +16,7 @@ export type TrainingCategory = Omit<TrainingCategoryRow, 'skills'>;
 export type TrainingSkill = Omit<TrainingSkillRow, 'modules'>;
 export type TrainingModule = TrainingModuleRow;
 
-export type TrainingEntity = 'trainingCategory' | 'trainingSkill' | 'trainingModule';
-
-/** One row as it will be once what is staged is saved. */
-export interface ShownRow<T> {
-  row: T;
-  /** What an op staged **on this row** does to it. */
-  staged: StagedMark | null;
-  /** Archived, whether by itself or because the category or skill above it is. */
-  archived: boolean;
-  /**
-   * Archived only because the row above it is — by an archive that is staged, since a saved one
-   * has already archived this row as well. The Undo for it is on that row, not this one.
-   */
-  cascaded: boolean;
-}
-
-export interface TrainingView {
-  categories: ShownRow<TrainingCategory>[];
-  skills: ShownRow<TrainingSkill>[];
-  modules: ShownRow<TrainingModule>[];
-}
-
-/** The read's tree as three lists, which is how the batch addresses it — one op, one row. */
+/** The read's tree as three lists — a module's page finds its skill and category in them. */
 export function flattenTraining(tree: TrainingCategoryRow[]) {
   const categories: TrainingCategory[] = tree.map(({ skills: _skills, ...category }) => category);
   const skills: TrainingSkill[] = tree.flatMap((category) =>
@@ -46,174 +27,108 @@ export function flattenTraining(tree: TrainingCategoryRow[]) {
 }
 
 /**
- * The office's training taxonomy as it will be (P5-T1).
- *
- * **Flattened before it is projected**, because a staged op can move a row: a skill named into
- * another category, a module under another skill. Projecting the nested read would leave a
- * moved row drawn under the parent it is leaving. As three lists, a move is one field changing,
- * and each row's parent is looked up by code afterwards — the way the server holds them.
- *
- * **An archive reaches down, on screen as it does on the server.** Archiving a category takes
- * its skills and their modules with it (`TrainingService.archiveCategory`), so a staged archive
- * shows them archived too. A restore does not reach down, and neither does this: the rows a
- * category once held stay archived after it comes back.
+ * Whether a code is taken at one level of this office — **archived rows included**. A code is never reused (invariant
+ * §3), and the server refuses one that is; saying so beside the field is kinder than a refusal after *Tambah*.
  */
-export function projectTraining(tree: TrainingCategoryRow[], staged: ConfigChange[]): TrainingView {
-  const flat = flattenTraining(tree);
-
-  const categories = projectStaged(flat.categories, staged, {
-    entity: 'trainingCategory',
-    create: (body, id) => ({
-      id,
-      code: String(body.code ?? '').toUpperCase(),
-      label: String(body.label ?? ''),
-      description: body.description ? String(body.description) : null,
-      displayOrder: flat.categories.length + 1,
-      version: 0,
-      status: 'active' as const,
-    }),
-  }).map(({ row, staged: mark }) => ({
-    row, staged: mark, archived: row.status === 'archived', cascaded: false,
-  }));
-
-  const skills = projectStaged(flat.skills, staged, {
-    entity: 'trainingSkill',
-    create: (body, id) => ({
-      id,
-      code: String(body.code ?? '').toUpperCase(),
-      categoryCode: String(body.categoryCode ?? ''),
-      label: String(body.label ?? ''),
-      description: body.description ? String(body.description) : null,
-      displayOrder: flat.skills.length + 1,
-      version: 0,
-      status: 'active' as const,
-    }),
-  }).map(({ row, staged: mark }) => {
-    const own = row.status === 'archived';
-    const parent = categories.find((c) => c.row.code === row.categoryCode);
-    const above = !parent || parent.archived;
-    return { row, staged: mark, archived: own || above, cascaded: !own && above };
-  });
-
-  const modules = projectStaged(flat.modules, staged, {
-    entity: 'trainingModule',
-    create: (body, id) => ({
-      id,
-      code: String(body.code ?? '').toUpperCase(),
-      skillCode: String(body.skillCode ?? ''),
-      title: String(body.title ?? ''),
-      description: body.description ? String(body.description) : null,
-      // What the server defaults it to: nothing in P5-T1 gives a module content.
-      publishState: body.publishState === 'published' ? 'published' as const : 'draft' as const,
-      displayOrder: flat.modules.length + 1,
-      version: 0,
-      status: 'active' as const,
-    }),
-  }).map(({ row, staged: mark }) => {
-    const own = row.status === 'archived';
-    const parent = skills.find((s) => s.row.code === row.skillCode);
-    const above = !parent || parent.archived;
-    return { row, staged: mark, archived: own || above, cascaded: !own && above };
-  });
-
-  return { categories, skills, modules };
-}
-
-/** A row created in this sitting and not saved: it has no id the server knows. */
-export const isUnsaved = (row: { id: string }) => row.id.startsWith('staged:');
-
-/**
- * Stage an edit, sending only what differs from the office's saved row.
- *
- * A field put back to what it was is **taken out** of the staged body, and an edit left with
- * nothing in it is dropped. Otherwise publishing a module and unpublishing it again would still
- * send an update, mark the row *Edited* and move its version — a change made of no change.
- */
-export function stageEdit(
-  now: ConfigChange[],
-  entity: TrainingEntity,
-  saved: { id: string; version: number } & Record<string, unknown>,
-  fields: Record<string, unknown>,
-): ConfigChange[] {
-  const op = `${entity}.update` as ConfigChange['op'];
-  const previous = now.find((c) => c.op === op && c.id === saved.id);
-  const body: Record<string, unknown> = { ...previous?.body, ...fields };
-  for (const key of Object.keys(body)) {
-    if (body[key] === saved[key] || (body[key] === '' && saved[key] === null)) delete body[key];
-  }
-
-  const without = now.filter((c) => !(c.op === op && c.id === saved.id));
-  if (Object.keys(body).length === 0) return without;
-  // Replaced rather than merged by `stageChange`, which would put the removed fields back.
-  return stageChange(without, { op, id: saved.id, expectedVersion: saved.version, body });
-}
-
-/**
- * Archive or restore, where pressing the opposite of a staged one **takes that one back**.
- *
- * A category staged for archive shows *Restore*. Staging a restore beside the archive would, once
- * saved, archive the category, archive everything in it, and bring back the category alone — which
- * is not what anybody pressing Archive and then Restore means.
- */
-export function stageStatus(
-  now: ConfigChange[],
-  entity: TrainingEntity,
-  row: { id: string; version: number },
-  to: 'archive' | 'restore',
-): ConfigChange[] {
-  const opposite = `${entity}.${to === 'archive' ? 'restore' : 'archive'}`;
-  if (now.some((c) => c.op === opposite && c.id === row.id)) {
-    return now.filter((c) => !(c.op === opposite && c.id === row.id));
-  }
-  return stageChange(now, {
-    op: `${entity}.${to}` as ConfigChange['op'],
-    id: row.id,
-    expectedVersion: row.version,
-  });
-}
-
-/**
- * Take one row's staged ops back — and, for a category or skill that was only ever staged, the
- * rows staged inside it.
- *
- * A skill added to a category added in the same sitting names that category by code. Undoing the
- * category alone would leave the skill naming nothing: drawn under no category, and refused at Save
- * for a reason the reader had already dealt with. The screens offer no way to *move* a saved row into
- * an unsaved one, so what hangs off an unsaved row is only ever a create.
- */
-export function unstageTraining(
-  now: ConfigChange[],
-  entity: TrainingEntity,
-  row: { id: string; code: string },
-): ConfigChange[] {
-  const own = /^staged:[^:]+:(\d+)$/.exec(row.id);
-  if (!own) {
-    return now.filter((c) => !(c.op.startsWith(`${entity}.`) && c.id === row.id));
-  }
-
-  const gone = new Set<number>([Number(own[1])]);
-  const code = (value: unknown) => String(value ?? '').trim().toUpperCase();
-  const skills = new Set<string>(entity === 'trainingSkill' ? [code(row.code)] : []);
-  if (entity === 'trainingCategory') {
-    now.forEach((c, at) => {
-      if (c.op === 'trainingSkill.create' && code(c.body?.categoryCode) === code(row.code)) {
-        gone.add(at);
-        skills.add(code(c.body?.code));
-      }
-    });
-  }
-  now.forEach((c, at) => {
-    if (c.op === 'trainingModule.create' && skills.has(code(c.body?.skillCode))) gone.add(at);
-  });
-  return now.filter((_, at) => !gone.has(at));
-}
-
-/**
- * Whether a code is taken at one level of this office — **archived rows included**, and rows
- * staged but not saved. A code is never reused, and the server refuses one that is; saying so
- * beside the field is kinder than refusing the whole batch at Save.
- */
-export function codeTaken(rows: ShownRow<{ code: string }>[], code: string): boolean {
+export function codeTaken(rows: readonly { code: string }[], code: string): boolean {
   const wanted = code.trim().toUpperCase();
-  return wanted !== '' && rows.some((r) => r.row.code.toUpperCase() === wanted);
+  return wanted !== '' && rows.some((r) => r.code.toUpperCase() === wanted);
+}
+
+/**
+ * **A category's *"n skill · n modul"*, a skill's *"n modul"*** (P19.25-T4 AC-1): what it holds that is not archived —
+ * drafts included, because the Owner is shown their own catalog, not what agents are offered.
+ */
+export function categoryCounts(category: TrainingCategoryRow): { skills: number; modules: number } {
+  const skills = category.skills.filter((s) => s.status === 'active');
+  return { skills: skills.length, modules: skills.reduce((n, s) => n + liveModules(s), 0) };
+}
+
+export const liveModules = (skill: TrainingSkillRow): number => skill.modules.filter((m) => m.status === 'active').length;
+
+/**
+ * **What a module's material may be: any format the owner named** (P19.25-T4 AC-2, ADR-0282 §3; backend
+ * `TRAINING_FILE_MIME_TYPES`): each type the API signs, by the extensions a picker offers and a desktop with no type
+ * reports. A mirror the server checks again — before it signs and against what storage holds (ADR-0040). The template's
+ * material takes the same (ADR-0208 §1). Pinned by `training-view.spec.ts` and, against the API's document,
+ * `contract.spec.ts`.
+ */
+export const TRAINING_FILE_TYPES: readonly { mimeType: string; extensions: readonly string[]; video?: true }[] = [
+  { mimeType: 'image/jpeg', extensions: ['jpg', 'jpeg'] },
+  { mimeType: 'image/png', extensions: ['png'] },
+  { mimeType: 'image/webp', extensions: ['webp'] },
+  { mimeType: 'application/pdf', extensions: ['pdf'] },
+  { mimeType: 'video/mp4', extensions: ['mp4'], video: true },
+  { mimeType: 'text/csv', extensions: ['csv'] },
+  { mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', extensions: ['xlsx'] },
+  { mimeType: 'text/html', extensions: ['html', 'htm'] },
+  { mimeType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation', extensions: ['pptx'] },
+  { mimeType: 'application/vnd.ms-powerpoint', extensions: ['ppt'] },
+  { mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', extensions: ['docx'] },
+  { mimeType: 'application/msword', extensions: ['doc'] },
+  { mimeType: 'video/webm', extensions: ['webm'], video: true },
+  { mimeType: 'video/quicktime', extensions: ['mov'], video: true },
+];
+
+const acceptOf = (types: typeof TRAINING_FILE_TYPES) =>
+  types.flatMap((t) => [t.mimeType, ...t.extensions.map((e) => `.${e}`)]).join(',');
+
+/** *Unggah materi*'s picker: every type and every extension. */
+export const TRAINING_ACCEPT = acceptOf(TRAINING_FILE_TYPES);
+/** A module page's *File* picker: every type but a video. */
+export const TRAINING_FILE_ACCEPT = acceptOf(TRAINING_FILE_TYPES.filter((t) => !t.video));
+/** A module page's *Video* picker. */
+export const TRAINING_VIDEO_ACCEPT = acceptOf(TRAINING_FILE_TYPES.filter((t) => t.video));
+
+/**
+ * **The type a chosen file is sent as, or `null` when it is no material** (P19.25-T4 AC-2): its own type where the browser
+ * reports one of the list; **only where it reports none**, the one its extension names — a desktop often reports none
+ * for a `.pptx` or an `.html`. A type the browser did report and the list lacks is refused whatever the name says: the
+ * name is the uploader's to choose, the media type is not (`module-content.spec.tsx`, *a mis-declared file*).
+ */
+export function trainingFileType(file: { type: string; name: string }): string | null {
+  if (TRAINING_FILE_TYPES.some((t) => t.mimeType === file.type)) return file.type;
+  if (file.type !== '') return null;
+  const extension = /\.([a-z0-9]+)$/i.exec(file.name)?.[1]?.toLowerCase();
+  return TRAINING_FILE_TYPES.find((t) => extension && t.extensions.includes(extension))?.mimeType ?? null;
+}
+
+export const isVideoType = (mimeType: string) => TRAINING_FILE_TYPES.some((t) => t.mimeType === mimeType && t.video);
+
+/**
+ * **The module's material once a file is chosen on its row** (P19.25-T4 AC-2, ADR-0282 §2):
+ *
+ * - *Unggah materi* — the module shows nothing: the file is its material.
+ * - *Ganti* on the office's own material — the item the row names (the first file, else video, else link) is replaced by
+ *   the file; everything else the office holds stays.
+ * - *Ganti* on the template's material — the office's material becomes the file alone. The template's is never copied
+ *   (its files are the company's, never attachable as an office's) and never touched: *Urungkan perubahan saya* on the
+ *   module's page puts it back (ADR-0208 §3).
+ *
+ * A video goes under *Video*, anything else under *File*.
+ */
+export function withUploaded(view: Pick<ModuleContentView, 'content' | 'overridden'>, item: ContentFile): ModuleContent {
+  const into = isVideoType(item.mimeType) ? 'videos' : 'files';
+  if (!view.overridden) return { files: [], videos: [], links: [], [into]: [item] };
+  const next: ModuleContent = {
+    files: [...view.content.files], videos: [...view.content.videos], links: [...view.content.links],
+  };
+  if (next.files.length > 0) next.files.shift();
+  else if (next.videos.length > 0) next.videos.shift();
+  else if (next.links.length > 0) next.links.shift();
+  next[into] = [item, ...next[into]];
+  return next;
+}
+
+/**
+ * **One file from the picker to an item a module can hold** (P5-T2's three steps, ADR-0040): sign an upload into the
+ * office's own folder, send the bytes straight to storage, and confirm what landed. The item is attached by saving the
+ * module's material; nothing is attached when a step fails.
+ */
+export async function uploadTrainingFile(file: File, mimeType: string): Promise<ContentFile> {
+  const signed = await requestTrainingUpload({ filename: file.name, mimeType, bytes: file.size });
+  const sent = await fetch(signed.uploadUrl, { method: 'POST', body: signedUploadForm(signed, file) });
+  if (!sent.ok) throw new Error('upload failed');
+  const confirmed = await confirmTrainingUpload(signed.storageKey);
+  return { id: '', label: file.name, storageKey: confirmed.storageKey, mimeType: confirmed.mimeType, bytes: confirmed.bytes };
 }

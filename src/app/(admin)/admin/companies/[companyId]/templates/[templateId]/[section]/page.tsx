@@ -1,10 +1,11 @@
 'use client';
 
 import dynamic from 'next/dynamic';
+import { useRouter } from 'next/navigation';
 import { use, useEffect, useState } from 'react';
 import { Page } from '@/components/page';
 import { SettingsTabs } from '@/components/settings-tabs';
-import { BackLink } from '@/components/kpm-template/company-frame';
+import { BackLink, useCompany } from '@/components/kpm-template/company-frame';
 import { DraftBar, useVersionWords } from '@/components/kpm-template/draft-bar';
 import { KindEditor } from '@/components/kpm-template/kind-editor';
 import { materialCount, type PayloadMaterial } from '@/components/kpm-template/material-count';
@@ -15,14 +16,15 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { LeaveGuard } from '@/components/ui/save-state';
 import { SkeletonCards } from '@/components/ui/skeleton';
 import { Toast, useToast } from '@/components/ui/toast';
-import { isOfficeKind, listTemplates, readTemplate, type NamedTemplate } from '@/lib/admin';
+import { isOfficeKind, isTemplateLibrary, listTemplates, readTemplate, type NamedTemplate } from '@/lib/admin';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { tileRefusal } from '@/lib/summary-tiles';
 import { useHashTab } from '@/lib/use-hash-tab';
-import { sectionOf, templateHref, type TemplateSection } from '@/lib/template-sections';
+import { publishHref, sectionOf, settingsHref, type TemplateSection } from '@/lib/template-sections';
 import { useOpenedOnce } from '@/lib/use-opened-once';
 import { useLanguage, useMessages } from '@/i18n/language-provider';
 import { adminTemplateMessages } from '@/i18n/messages/admin-template';
+import { adminCompaniesConsoleMessages } from '@/i18n/messages/admin-companies-console';
 
 /*
  * **The two dialogs load the first time they open** (the bundle, 2026-11-06; `performance-and-scale.md`): a module's
@@ -66,7 +68,10 @@ export default function SectionPage({
   }, [companyId]);
 
   const template = templates?.find((row) => row.id === templateId) ?? null;
-  const back = <BackLink href={templateHref(companyId, templateId)}>{template?.name ?? words.card.list}</BackLink>;
+  // P19.23-T4 AC-4 (ADR-0278 §1): back to *Pengaturan template*, where every section's row is.
+  const company = useCompany(companyId);
+  const consoleWords = useMessages(adminCompaniesConsoleMessages);
+  const back = <BackLink href={settingsHref(companyId)}>{consoleWords.frame.settings}</BackLink>;
 
   if (!section) {
     return (
@@ -98,25 +103,36 @@ export default function SectionPage({
           templateId={templateId}
           section={section}
           template={template}
+          insurer={company ? !isTemplateLibrary(company) : false}
         />
       )}
     </Page>
   );
 }
 
+/** The sections every KPM reads live, with their own publish (ADR-0214, ADR-0218): no row of *Pengaturan template*. */
+const OWN_PUBLISH: readonly string[] = ['analytics', 'branding'];
+
 function SectionBody({
   companyId,
   templateId,
   section,
   template,
+  insurer,
 }: {
   companyId: string;
   templateId: string;
   section: TemplateSection;
   /** `null` while the template is read: the editors wait for it, to know whether it is archived. */
   template: NamedTemplate | null;
+  /**
+   * An insurer's template (not the Default template): its *Terbitkan* opens *Terbitkan ke KPM* — nothing published
+   * automatically, nothing pre-selected (P19.23-T4 AC-5; ADR-0278 §7).
+   */
+  insurer: boolean;
 }) {
   const words = useMessages(adminTemplateMessages);
+  const router = useRouter();
   const language = useLanguage();
   const archived = template?.status === 'archived';
   const drafts = useTemplateDrafts({ companyId, templateId, kinds: section.kinds, readOnly: archived });
@@ -235,7 +251,10 @@ function SectionBody({
             publishError={section.slug === 'analytics' ? analytics.error : publishError}
             onRetry={() => void drafts.flush()}
             onReload={drafts.retryLoad}
-            onPublish={section.slug === 'analytics' ? analytics.request : () => void publish()}
+            onPublish={section.slug === 'analytics' ? analytics.request
+              : insurer && !OWN_PUBLISH.includes(section.slug)
+                ? () => { void drafts.flush().then(() => router.push(publishHref(companyId))); }
+                : () => void publish()}
           />
           {section.slug === 'training' && (
             <p className="mb-3 text-sm text-muted">{words.material.count({ x: withMaterial, y: trainingModules.length })}</p>

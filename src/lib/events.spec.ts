@@ -103,8 +103,9 @@ describe('KPM Events: what the screen derives, and nothing more (P18.2-T5, T6)',
     // Led by the client's *Joined ✓* since 2026-10-26 (P18.7-T1 AC-6), the prototype's sentence after it.
     expect(goingToast('Kickoff 2026')).toBe("Joined ✓ — you're going to Kickoff 2026");
     expect(cancelledToast('Kickoff 2026')).toBe('RSVP cancelled for Kickoff 2026');
-    // The nav item's words, where the prototype titled the page *KPM Events* (P18.7-T9 AC-2; UI-027).
-    expect(PROTOTYPE_COPY.title).toBe('Event List');
+    // The nav item's words, where the prototype titled the page *KPM Events* (P18.7-T9 AC-2; UI-027): *Event* since
+    // P19.13-T4 (UI-197), where it was *Event List*.
+    expect(PROTOTYPE_COPY.title).toBe('Event');
     expect(PROTOTYPE_COPY.sub).toBe('Browse upcoming and past events from your KPM — join, and share feedback once they wrap up.');
     expect(PROTOTYPE_COPY.emptyGoing).toBe("You haven't joined any upcoming events yet.");
     expect(PROTOTYPE_COPY.didntJoinSub).toBe("Feedback is only collected from agents who attended, so there's nothing to fill out here.");

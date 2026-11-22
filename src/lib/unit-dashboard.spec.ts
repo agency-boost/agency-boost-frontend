@@ -9,7 +9,7 @@ import {
   PROTOTYPE_COPY, provenanceWords, readUnitDashboard, readerName, recruitLine, regroup, rowName, salesLine, STATUS_TOOLTIP,
   totalNote, totalRecruitLine, touchesWords, UNIT_PERIODS, unitPeriods, updateUnitProduction,
   goalMet, marksOf, matchesFilter, readUnitActivities, rowHref, sectionCount, splitMoney, statusShown, statusTally, tabFrom,
-  addGroupMembers, keepView, readUnitPotensi, storedView, UNIT_VIEWS, unitViews, viewFrom,
+  addGroupMembers, DEFAULT_PERIOD, keepView, progressTone, readUnitPotensi, storedView, UNIT_VIEWS, unitViews, viewFrom,
   type UnitRow,
 } from './unit-dashboard';
 import { formatMonthLong } from './format';
@@ -19,13 +19,14 @@ import { unitDashboardMessages } from '@/i18n/messages/unit-dashboard';
 describe('the Unit Dashboard’s client', () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it('P15-T2 AC-6 reads the period from the address, This month when it names none or one it does not know', () => {
+  it('P19.18-T1 AC-1 reads the period from the address, Tahun ini when it names none or one it does not know', () => {
+    expect(DEFAULT_PERIOD).toBe('year');
     expect(periodFrom('7d')).toBe('7d');
-    expect(periodFrom('year')).toBe('year');
+    expect(periodFrom('month')).toBe('month');
     expect(periodFrom(['month', 'year'])).toBe('month');
-    expect(periodFrom(undefined)).toBe('month');
-    expect(periodFrom('week')).toBe('month');
-    expect(periodFrom(null)).toBe('month');
+    expect(periodFrom(undefined)).toBe('year');
+    expect(periodFrom('week')).toBe('year');
+    expect(periodFrom(null)).toBe('year');
   });
 
   it('P15-T2 asks for the period, and with for only when it names a unit below the reader', async () => {
@@ -470,8 +471,12 @@ describe('UI V1 (Phase 18.11 T4): the page’s small rules', () => {
     expect(splitMoney('Rp 750')).toEqual({ value: 'Rp 750', unit: null });
   });
 
-  it('UI-005 a goal’s % is green from 100 and red under it, on the unrounded figure', () => {
+  it('UI-005 a goal is met from 100, on the unrounded figure', () => {
     expect([goalMet(99.6), goalMet(100), goalMet(135)]).toEqual([false, true, true]);
+  });
+
+  it('P19.18-T1 AC-5 progress is navy below 100% and green from 100% — never red', () => {
+    expect([progressTone(0), progressTone(99.6), progressTone(100), progressTone(135)]).toEqual(['navy', 'navy', 'green', 'green']);
   });
 
   it('UI-003 the month in full for a label, in each language, from its number', () => {
@@ -509,16 +514,17 @@ describe('P19.12-T6 the views', () => {
     try { window.localStorage.clear(); } catch { /* none */ }
   });
 
-  it('P19.12-T6 AC-3 reads ?scope= as one of the three, anything else as none', () => {
-    expect(UNIT_VIEWS).toEqual(['direct', 'informal', 'downline']);
+  it('P19.18-T1 AC-2 reads ?scope= as one of the four, Direct Unit first; anything else as none', () => {
+    expect(UNIT_VIEWS).toEqual(['unit', 'direct', 'informal', 'downline']);
+    expect(viewFrom('unit')).toBe('unit');
     expect(viewFrom('informal')).toBe('informal');
     expect(viewFrom(['downline', 'direct'])).toBe('downline');
     for (const other of ['', 'all', 'Direct', undefined, null]) expect(viewFrom(other)).toBeNull();
   });
 
-  it('P19.12-T6 AC-2 names the views in the client’s words, and in English', () => {
-    expect(unitViews('id').map((v) => v.label)).toEqual(['Grup langsung', 'Grup informal', 'Semua downline']);
-    expect(unitViews().map((v) => v.label)).toEqual(['Direct group', 'Informal group', 'All downline']);
+  it('P19.18-T1 AC-2 names the views in the client’s words, Direct Unit kept in both languages', () => {
+    expect(unitViews('id').map((v) => v.label)).toEqual(['Direct Unit', 'Grup langsung', 'Grup informal', 'Semua downline']);
+    expect(unitViews().map((v) => v.label)).toEqual(['Direct Unit', 'Direct group', 'Informal group', 'All downline']);
   });
 
   it('P19.12-T6 AC-3 keeps the last view per membership, and nothing when storage is refused', () => {

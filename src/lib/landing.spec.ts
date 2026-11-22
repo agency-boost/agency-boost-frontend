@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { makeMe } from '@test/harness';
 import { fieldLandingFor, landingFor, OFFICE_LANDING } from './landing';
+import { enterKpm, leaveKpm } from './super-admin-kpm';
 import type { Me } from './session';
 
 /** The membership shape, with only what a given case is about spelled out. */
@@ -17,6 +18,8 @@ function member(over: Partial<NonNullable<Me['membership']>> = {}): Me['membersh
   };
 }
 
+const KPM = '66f0000000000000000002a1';
+
 const superAdmin = makeMe({
   user: {
     id: 'u-root', email: 'root@agencyboost.test', fullName: 'Root', preferredName: null,
@@ -32,6 +35,23 @@ describe('where signing in takes you', () => {
 
   it('sends a Super Admin to the platform console', () => {
     // Checked before anything about offices, because they belong to none.
+    expect(landingFor(superAdmin)).toBe('/admin');
+  });
+
+  /*
+   * Found 2026-11-20: a Super Admin inside a KPM who opened a page its Owner may not — *Buka profil*'s Personal Summary,
+   * the Unit Dashboard — was sent to `/admin`, whose page leaves the KPM: thrown out of it, never asked. Their landing
+   * inside is the KPM's own page, which keeps it entered.
+   */
+  it('keeps a Super Admin inside a KPM in it: the KPM’s own page, never the Dashboard', () => {
+    enterKpm(KPM);
+    try {
+      expect(landingFor(superAdmin)).toBe(`/admin/tenants/${KPM}`);
+      // A support session is a member's, and the KPM entered is not theirs to land in.
+      expect(landingFor({ ...superAdmin, isImpersonating: true })).toBe('/admin');
+    } finally {
+      leaveKpm();
+    }
     expect(landingFor(superAdmin)).toBe('/admin');
   });
 
@@ -56,22 +76,23 @@ describe('where signing in takes you', () => {
     );
   });
 
-  it('P19.2-T1 AC-4 sends a KPM Owner to their own Home, in Akun saya (UI-169 item 1; their office until then)', () => {
-    expect(landingFor(makeMe({ membership: member({ isKpmOwner: true, directCount: 3 }) }))).toBe('/home');
+  it('P19.17-T3 AC-8 sends a KPM Owner to the KPM Overview (ADR-0269 §6; the brief’s *Landing page stays KPM Overview*)', () => {
+    expect(landingFor(makeMe({ membership: member({ isKpmOwner: true, directCount: 3 }) }))).toBe('/kpm/overview');
+    expect(landingFor(makeMe({ membership: member({ isKpmOwner: true, orgLevelCode: 'AB', hierarchyRole: 'ab' }) }))).toBe(OFFICE_LANDING);
   });
 
-  it('P19.2-T1 AC-4 sends a KPM Admin to their own Home too, an Admin who leads nobody included (ADR-0189)', () => {
-    expect(landingFor(makeMe({ membership: member({ isKpmAdmin: true }) }))).toBe('/home');
+  it('P19.17-T3 AC-8 sends a KPM Admin to the KPM Overview too, an Admin who leads nobody included', () => {
+    expect(landingFor(makeMe({ membership: member({ isKpmAdmin: true }) }))).toBe('/kpm/overview');
   });
 
-  it('P19.2-T1 AC-4 running the office is no branch of its own: the Owner and the Admin take the field member’s row', () => {
-    // OD-102 sent both to the office (P11-T6 AC-8); ADR-0198 §4 moves them to Home, by the same function as every member.
-    const both = member({ isKpmOwner: true, orgLevelCode: 'AB', hierarchyRole: 'ab', directCount: 5 });
-    expect(landingFor(makeMe({ membership: both }))).toBe(fieldLandingFor(both!));
-    const adminLeader = member({ isKpmAdmin: true, orgLevelCode: 'AAB', hierarchyRole: 'aab', directCount: 2 });
-    expect(landingFor(makeMe({ membership: adminLeader }))).toBe(fieldLandingFor(adminLeader!));
-    // A pending or removed Owner is still answered by the status first.
+  it('P19.17-T3 AC-8 a core leader, who has the same KPM group, still lands on Home: the brief names the Owner’s alone', () => {
+    const core = member({ orgLevelCode: 'AB', hierarchyRole: 'ab', isCoreLeader: true, directCount: 4 });
+    expect(landingFor(makeMe({ membership: core }))).toBe('/home');
+  });
+
+  it('P19.17-T3 AC-8 a pending or removed Owner is still answered by the status first', () => {
     expect(landingFor(makeMe({ membership: member({ isKpmOwner: true, status: 'pending' }) }))).toBe('/user-management/leader');
+    expect(landingFor(makeMe({ membership: member({ isKpmAdmin: true, status: 'removed' }) }))).toBe('/user-management/kpm');
   });
 
   it('UI-100 (ADR-0180 §10) sends somebody who leads people to Home, no longer the Unit Dashboard', () => {
@@ -94,8 +115,8 @@ describe('where signing in takes you', () => {
       expect(landingFor(makeMe({ membership: hire, activation }))).toBe('/home');
     }
     expect(landingFor(makeMe({ membership: member({ directCount: 2 }), activation: { open: true, complete: false } }))).toBe('/home');
-    // The office's people sign in to Home as well since P19.2-T1 (UI-169 item 1).
-    expect(landingFor(makeMe({ membership: member({ isKpmAdmin: true }), activation: { open: true, complete: false } }))).toBe('/home');
+    // P19.17-T3 AC-8: an Admin in their 90 days lands on the KPM Overview, as every Admin does.
+    expect(landingFor(makeMe({ membership: member({ isKpmAdmin: true }), activation: { open: true, complete: false } }))).toBe('/kpm/overview');
   });
 
   it('lets a pending membership win over any role it carries', () => {
@@ -106,36 +127,36 @@ describe('where signing in takes you', () => {
   });
 });
 
-describe('the field landing, one function for every active member (P13.2-T5 AC-1; P19.2-T1 AC-4)', () => {
+describe('the field landing, one function for every active member but the office’s (P13.2-T5 AC-1; P19.17-T3 AC-8)', () => {
   it('UI-100 is Home, with a direct report or without (ADR-0180 §10)', () => {
     expect(fieldLandingFor({ directCount: 3 })).toBe('/home');
     expect(fieldLandingFor({ directCount: 1 })).toBe('/home');
     expect(fieldLandingFor({ directCount: 0 })).toBe('/home');
   });
 
-  it('P19.2-T1 AC-4 is exactly where landingFor sends every active member, the Owner and the Admin included', () => {
+  it('P19.17-T3 AC-8 is exactly where landingFor sends every active member who does not run the office', () => {
     // The landing order's last branch *is* the function: no second copy of the rule to drift.
     for (const directCount of [0, 1, 4]) {
       for (const [orgLevelCode, hierarchyRole] of [['AB', 'ab'], ['AAB', 'aab'], ['AGENT', 'agent']] as const) {
-        for (const office of [{}, { isKpmOwner: true }, { isKpmAdmin: true }]) {
-          const m = member({ orgLevelCode, hierarchyRole, directCount, ...office });
+        for (const tag of [{}, { isCoreLeader: true }]) {
+          const m = member({ orgLevelCode, hierarchyRole, directCount, ...tag });
           expect(landingFor(makeMe({ membership: m }))).toBe(fieldLandingFor(m!));
         }
       }
     }
   });
 
-  it('P19.2-T1 AC-4 where each reader signs in: Home for every member, /admin for a Super Admin', () => {
-    // One table for the exit review (UI-147, UI-169 item 1). The office view is reached from the avatar menu
-    // (`lib/views.ts`), and its landing, `OFFICE_LANDING`, is a switch's, never a sign-in's.
+  it('P19.17-T3 AC-8 where each reader signs in: the KPM Overview for the Owner and the Admins, Home for every other member', () => {
+    // One table for the exit review (ADR-0269 §6; OD-381's default). There is no view to switch to any more.
     const cases = [
       ['an AB who leads people', member({ orgLevelCode: 'AB', hierarchyRole: 'ab', directCount: 4 }), '/home'],
       ['an AAB who leads nobody', member({ orgLevelCode: 'AAB', hierarchyRole: 'aab', directCount: 0 }), '/home'],
       ['an Agent', member(), '/home'],
-      ['the Owner, leading people', member({ isKpmOwner: true, orgLevelCode: 'AB', hierarchyRole: 'ab', directCount: 5 }), '/home'],
-      ['the Owner, leading nobody', member({ isKpmOwner: true, orgLevelCode: 'AB', hierarchyRole: 'ab', directCount: 0 }), '/home'],
-      ['the Admin, leading people', member({ isKpmAdmin: true, orgLevelCode: 'AAB', hierarchyRole: 'aab', directCount: 1 }), '/home'],
-      ['the Admin, leading nobody', member({ isKpmAdmin: true, directCount: 0 }), '/home'],
+      ['a core leader', member({ orgLevelCode: 'AB', hierarchyRole: 'ab', isCoreLeader: true }), '/home'],
+      ['the Owner, leading people', member({ isKpmOwner: true, orgLevelCode: 'AB', hierarchyRole: 'ab', directCount: 5 }), '/kpm/overview'],
+      ['the Owner, leading nobody', member({ isKpmOwner: true, orgLevelCode: 'AB', hierarchyRole: 'ab', directCount: 0 }), '/kpm/overview'],
+      ['the Admin, leading people', member({ isKpmAdmin: true, orgLevelCode: 'AAB', hierarchyRole: 'aab', directCount: 1 }), '/kpm/overview'],
+      ['the Admin, leading nobody', member({ isKpmAdmin: true, directCount: 0 }), '/kpm/overview'],
     ] as const;
     for (const [who, m, signIn] of cases) {
       expect([who, landingFor(makeMe({ membership: m }))]).toEqual([who, signIn]);

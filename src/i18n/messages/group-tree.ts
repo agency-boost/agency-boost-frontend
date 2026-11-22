@@ -53,7 +53,8 @@ const en = {
   leaderOf: ({ name }: { name: string }) => `${name}’s ${kept('leader')}`,
   notFoundTitle: 'This Group Tree is not one you can open.',
   notFoundLine: 'The leader may have left, or be outside the people you can see.',
-  back: 'Back to KPM Analytics',
+  // P19.19-T4 (ADR-0272 §1): KPM Analytics is removed; the way back is the KPM Overview.
+  back: 'Back to the Overview',
 };
 
 const id: MessagesOf<typeof en> = {
@@ -75,7 +76,7 @@ const id: MessagesOf<typeof en> = {
   leaderOf: ({ name }) => `${kept('Leader')} ${name}`,
   notFoundTitle: `${kept('Group Tree')} ini tidak dapat Anda buka.`,
   notFoundLine: 'Leader-nya mungkin sudah keluar, atau di luar orang yang dapat Anda lihat.',
-  back: `Kembali ke ${kept('KPM Analytics')}`,
+  back: `Kembali ke ${kept('Overview')}`,
 };
 
 export const groupTreeMessages = defineMessages({ en, id });

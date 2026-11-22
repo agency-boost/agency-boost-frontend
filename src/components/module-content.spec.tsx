@@ -201,11 +201,15 @@ describe('P19.6-T2 an HTML lesson in the module’s files', () => {
     vi.restoreAllMocks();
   });
 
-  it('P19.6-T2 AC-1 offers .html and .htm in Files, and not in Video', async () => {
+  it('P19.6-T2 AC-1, P19.25-T4 AC-2 offers .html, .htm and the office formats in Files, and only video in Video', async () => {
     render();
     await screen.findByRole('heading', { name: 'Files' });
-    expect(screen.getByLabelText('Add to Files').getAttribute('accept')).toBe('.pdf,.png,.jpg,.jpeg,.webp,.csv,.xlsx,text/html,.html,.htm');
-    expect(screen.getByLabelText('Add to Videos').getAttribute('accept')).toBe('.mp4');
+    const files = screen.getByLabelText('Add to Files').getAttribute('accept')!.split(',');
+    for (const ext of ['.pdf', '.png', '.jpg', '.jpeg', '.webp', '.csv', '.xlsx', '.html', '.htm', '.pptx', '.ppt', '.docx', '.doc']) {
+      expect(files).toContain(ext);
+    }
+    expect(files).not.toContain('.mp4');
+    expect(screen.getByLabelText('Add to Videos').getAttribute('accept')).toBe('video/mp4,.mp4,video/webm,.webm,video/quicktime,.mov');
   });
 
   it('P19.6-T2 AC-1 signs an HTML lesson as text/html, then confirms it', async () => {

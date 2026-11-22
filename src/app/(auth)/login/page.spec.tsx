@@ -28,7 +28,7 @@ const member = (membership: Partial<NonNullable<Me['membership']>>, permissions:
 const FIELD = ['member:read_profile', 'tenant_config:read', 'profile:read_self', 'leader_meeting:read_shared_link'];
 const OWNER = member(
   { orgLevelCode: 'AB', hierarchyRole: 'ab', isKpmOwner: true, directCount: 3 },
-  [...FIELD, 'kpm_overview:read', 'kpm_analytics:read'],
+  [...FIELD, 'kpm_overview:read', 'data_upload:read'],
 );
 const AGENT = member({}, FIELD);
 const LEADER = member({ orgLevelCode: 'AB', hierarchyRole: 'ab', directCount: 4 }, [...FIELD, 'unit_dashboard:read']);
@@ -110,10 +110,10 @@ describe('login', () => {
    * signed in. It is honoured now only for somebody who can open it; anybody else lands on their own page.
    */
   describe('only for the person who can open the page (2026-10-11)', () => {
-    const COMPLIANCE = '?next=%2Fkpm%2Fanalytics%2Fcompliance%3Fcategory%3Dtraining';
+    const COMPLIANCE = '?next=%2Fkpm%2Fdata-upload%3Fmonth%3D2026-10';
 
     it('the Owner, who can open it, goes back to it, query kept', async () => {
-      expect(await signInFrom(COMPLIANCE, OWNER)).toBe('/kpm/analytics/compliance?category=training');
+      expect(await signInFrom(COMPLIANCE, OWNER)).toBe('/kpm/data-upload?month=2026-10');
     });
 
     it('the reported case: an Agent who signs in after them lands on Home (UI-100), not on the Owner’s page', async () => {
@@ -124,8 +124,9 @@ describe('login', () => {
       expect(await signInFrom(COMPLIANCE, LEADER)).toBe('/home');
     });
 
+    // The Owner's own page is the KPM Overview since P19.17-T3 (AC-8; ADR-0269 §6).
     it('an address that is no page of the app lands on their own page rather than a 404', async () => {
-      expect(await signInFrom('?next=%2Fkpm%2Fadvanced-analytics', OWNER)).toBe('/home');
+      expect(await signInFrom('?next=%2Fkpm%2Fadvanced-analytics', OWNER)).toBe('/kpm/overview');
     });
 
     it('an unsafe next still lands on their own page: a host written as a path', async () => {
@@ -133,11 +134,11 @@ describe('login', () => {
     });
 
     it('an unsafe next still lands on their own page: another origin, whatever path it ends in', async () => {
-      expect(await signInFrom('?next=https%3A%2F%2Fevil.test%2Fkpm%2Foverview', OWNER)).toBe('/home');
+      expect(await signInFrom('?next=https%3A%2F%2Fevil.test%2Fkpm%2Foverview', OWNER)).toBe('/kpm/overview');
     });
 
     it('no next lands on their own page', async () => {
-      expect(await signInFrom('', OWNER)).toBe('/home');
+      expect(await signInFrom('', OWNER)).toBe('/kpm/overview');
     });
   });
 
@@ -182,8 +183,8 @@ describe('login', () => {
       expect(await signInFrom('?next=%2Fleader-meetings%2Fshared%2Fabc&reason=expired', AGENT)).toBe('/home');
     });
 
-    it('P19.2-T1 AC-4 lands an Owner on their own Home, not on the analytics page the session ended on', async () => {
-      expect(await signInFrom('?next=%2Fkpm%2Fanalytics%2Fcompliance&reason=expired', OWNER)).toBe('/home');
+    it('P19.17-T3 AC-8 lands an Owner on the KPM Overview, not on the analytics page the session ended on', async () => {
+      expect(await signInFrom('?next=%2Fkpm%2Fdata-upload&reason=expired', OWNER)).toBe('/kpm/overview');
     });
   });
 

@@ -20,9 +20,10 @@ vi.mock('next/navigation', () => ({
  * proposal exists. **None of it on a downline's lead**: the server sends no `proposals` there, and the screen asks for
  * none (decision 4).
  *
- * *Changed by P19.11-T3 (UX-9, UX-11; UXQ3):* the card's pill went (AC-2) and its icon now shows only on a lead with a
- * finished proposal, opening the latest one (AC-1), with a *›* between the type and the stage (AC-3); the sheet's
- * section shows the latest finished proposal alone, *Buat proposal* below it (AC-7).
+ * *Changed by P19.11-T3 (UX-9, UX-11):* a *›* between the type and the stage (AC-3). *Changed again by P19.14-T4
+ * (PR-07; ADR-0257, which amends ADR-0241):* **the pill is back** — the latest proposal's first product and how many more
+ * it holds, a draft included — with ***Buat proposal*** on every Sales card of the reader's own, left of WhatsApp; the
+ * sheet's *Proposal* section lists **one row per proposal**, drafts included, *Buat proposal* below them.
  */
 
 const AGENT = makeMe({
@@ -64,12 +65,12 @@ const lead = (over: Partial<Lead> = {}): Lead => ({
   dateRegistered: '2026-10-20T03:00:00.000Z', version: 2, flags: [], overdueDays: null, proposals: null, ...over,
 });
 
-/** A finished proposal (`p1`) and a draft: the card's icon opens `p1` (P19.11-T3 AC-1). */
-const ROSA = lead({ proposals: { count: 2, latest: { products: ['PRUWell Medical', 'PRUCinta'] }, done: 1, latestDone: { id: 'p1' } } });
-/** Drafts only, one with a product: no icon. */
-const HENDRO = lead({ id: 'l2', name: 'Pak Hendro Gunawan', proposals: { count: 1, latest: { products: ['PRULady'] }, done: 0, latestDone: null } });
+/** A finished proposal (`p1`) and a draft; the latest with a product holds two: *"PRUWell Medical +1"*. */
+const ROSA = lead({ proposals: { count: 2, latest: { id: 'p1', products: ['PRUWell Medical', 'PRUCinta'] }, done: 1, latestDone: { id: 'p1' }, client: null } });
+/** Drafts only, one with a product: the pill counts it (OD-333), *"PRULady"*. */
+const HENDRO = lead({ id: 'l2', name: 'Pak Hendro Gunawan', proposals: { count: 1, latest: { id: 'p3', products: ['PRULady'] }, done: 0, latestDone: null, client: null } });
 const WULAN = lead({ id: 'l3', name: 'Ibu Wulan Sari' });
-const EMPTY_DRAFT = lead({ id: 'l4', name: 'Ibu Maya Lestari', proposals: { count: 1, latest: { products: [] }, done: 0, latestDone: null } });
+const EMPTY_DRAFT = lead({ id: 'l4', name: 'Ibu Maya Lestari', proposals: { count: 1, latest: { id: null, products: [] }, done: 0, latestDone: null, client: null } });
 const RECRUIT = lead({ id: 'l5', name: 'Mas Andi', type: 'recruitment', statusCode: 'NOT_APPROACHED' });
 /** A downline's lead, as a leader's list holds it: the server sends no `proposals` on it. */
 const DOWNLINE = lead({ id: 'l6', name: 'Ibu Sinta Dewi', ownerMembershipId: 'mem-2' });
@@ -80,8 +81,16 @@ const ROW: ProposalRow = {
   id: 'p1', version: 3, client: { name: 'Ibu Rosa Damayanti' }, date: '2026-11-05',
   fileName: 'Proposal-Ibu-Rosa-Damayanti-2026-11-05.pdf',
   products: [{ name: 'PRUWell Medical', plan: 'Gold' }, { name: 'PRUCinta', plan: null }],
-  status: 'done', totals: [{ currency: 'IDR', amountMinor: 125_000_000 }, { currency: 'USD', amountMinor: 12_500 }],
+  status: 'done',
+  totals: [
+    { currency: 'IDR', payFrequency: 'monthly', amountMinor: 125_000_000, items: 1 },
+    { currency: 'USD', payFrequency: 'annual', amountMinor: 12_500, items: 1 },
+  ],
   leadId: 'l1', leadDeleted: false, updatedAt: '2026-11-05T03:00:00.000Z',
+};
+/** A draft of the same lead, changed since: the sheet lists it too (P19.14-T4 AC-3). */
+const DRAFT_ROW: ProposalRow = {
+  ...ROW, id: 'p2', status: 'draft', date: '2026-11-07', products: [{ name: 'PRUCritical Benefit 88', plan: null }], totals: [],
 };
 
 const BASE = {
@@ -97,9 +106,9 @@ const BASE = {
   ] } },
   '/leads/l6': { body: { ...DOWNLINE, history: [] } },
   '/leads/l2': { body: { ...HENDRO, history: [] } },
-  // The sheet asks for the latest finished one alone (P19.11-T3 AC-7): `status=done&pageSize=1`.
-  '/proposals?leadId=l1': { body: { rows: [ROW], total: 1, page: 1, pageSize: 1 } },
-  '/proposals?leadId=l2': { body: { rows: [], total: 0, page: 1, pageSize: 1 } },
+  // The sheet asks for every proposal of the lead (P19.14-T4 AC-3), newest change first.
+  '/proposals?leadId=l1': { body: { rows: [DRAFT_ROW, ROW], total: 2, page: 1, pageSize: 50 } },
+  '/proposals?leadId=l2': { body: { rows: [], total: 0, page: 1, pageSize: 50 } },
 };
 
 const render = (routes: Record<string, unknown> = {}, width = 360) => {
@@ -116,61 +125,59 @@ describe('P19.7-T2 AC-12 proposals on the Leads page', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   describe('the card', () => {
-    it('P19.11-T3 AC-1 a lead with a finished proposal wears the icon: a named, tipped link to the latest finished one at step 3', async () => {
+    it('P19.14-T4 AC-1 a Sales card wears the pill: the latest proposal’s first product and how many more it holds', async () => {
+      render();
+      const rosa = (await cardOf('Ibu Rosa Damayanti')).querySelector('[data-lead-proposal]')!;
+      expect(rosa).toHaveTextContent('PRUWell Medical +1');
+      expect(within(rosa as HTMLElement).getByText('Proposal:')).toHaveClass('sr-only');
+      // A draft counts (OD-333): its one product, no count.
+      expect((await cardOf('Pak Hendro Gunawan')).querySelector('[data-lead-proposal]')).toHaveTextContent(/^Proposal: PRULady$/);
+      // The pill sits on the type and stage line, after the stage — a label, never a link: the card opens the sheet.
+      const line = (await cardOf('Ibu Rosa Damayanti')).querySelector('[data-lead-stage]')!.parentElement!;
+      expect([...line.children].map((child) => child.textContent)).toEqual(['Sales', '›Follow-up', 'Proposal: PRUWell Medical +1']);
+      expect(rosa.closest('a')).toBeNull();
+    });
+
+    it('P19.14-T4 AC-1 no pill on a lead with an empty draft only, or with no proposal', async () => {
+      render();
+      for (const name of ['Ibu Maya Lestari', 'Ibu Wulan Sari']) {
+        expect((await cardOf(name)).querySelector('[data-lead-proposal]')).toBeNull();
+      }
+    });
+
+    it('P19.14-T4 AC-1 Buat proposal on every Sales card of the reader’s own, named and tipped, with this lead chosen', async () => {
+      render();
+      for (const [name, id] of [['Ibu Rosa Damayanti', 'l1'], ['Ibu Wulan Sari', 'l3'], ['Ibu Maya Lestari', 'l4']]) {
+        const link = within(await cardOf(name)).getByRole('link', { name: `Make a proposal for ${name}` });
+        expect(link).toHaveAttribute('href', `/proposal/new?leadId=${id}`);
+        expect(link).toHaveAttribute('title', 'Make a proposal');
+      }
+      // Not on a Recruit lead.
+      expect((await cardOf('Mas Andi')).querySelector('[data-make-proposal]')).toBeNull();
+    });
+
+    it('P19.14-T4 AC-1 WhatsApp keeps its right-aligned place, Buat proposal just before it', async () => {
       render();
       const card = await cardOf('Ibu Rosa Damayanti');
-      const link = within(card).getByRole('link', { name: 'Open the proposal for Ibu Rosa Damayanti' });
-      expect(link).toHaveAttribute('href', '/proposal/p1?step=3');
-      expect(link).toHaveAttribute('title', 'Open the proposal');
-      expect(link.querySelector('svg')).toHaveAttribute('aria-hidden', 'true');
+      expect(card.lastElementChild!.querySelector('[data-channel="whatsapp"]')).not.toBeNull();
+      expect(card.querySelector('[data-make-proposal]')!.nextElementSibling).toBe(card.lastElementChild);
     });
 
-    it('P19.11-T3 AC-1 no icon on a lead with drafts only, an empty draft, or no proposal: drafts never count', async () => {
-      render();
-      for (const name of ['Pak Hendro Gunawan', 'Ibu Maya Lestari', 'Ibu Wulan Sari']) {
-        const card = await cardOf(name);
-        expect(within(card).queryByRole('link', { name: /proposal/i })).not.toBeInTheDocument();
-        expect(card.querySelector('[data-open-proposal]')).toBeNull();
-      }
-    });
-
-    it('P19.11-T3 AC-1 WhatsApp keeps its right-aligned place with the icon and without it', async () => {
-      render();
-      const withIcon = await cardOf('Ibu Rosa Damayanti');
-      const without = await cardOf('Ibu Wulan Sari');
-      for (const card of [withIcon, without]) {
-        // The card's last control, at its right edge, either way.
-        expect(card.lastElementChild!.querySelector('[data-channel="whatsapp"]')).not.toBeNull();
-      }
-      // The icon stands just before it, never after.
-      expect(withIcon.querySelector('[data-open-proposal]')!.nextElementSibling).toBe(withIcon.lastElementChild);
-    });
-
-    it('P19.11-T3 AC-2 no proposal or product chip on any card, and no space kept for one', async () => {
-      render();
-      const cards = within(await list()).getAllByRole('listitem');
-      for (const card of cards) {
-        expect(card.querySelector('[data-proposal-pill]')).toBeNull();
-        expect(card).not.toHaveTextContent(/PRUWell Medical|PRULady|PRUCinta/);
-      }
-      // The line under the name holds the type, the stage and nothing else.
-      const line = (await cardOf('Ibu Rosa Damayanti')).querySelector('[data-lead-stage]')!.parentElement!;
-      expect([...line.children].map((child) => child.textContent)).toEqual(['Sales', '›Follow-up']);
-    });
-
-    it('P19.11-T3 AC-1 nothing on a downline’s lead: the server sends no proposals there (decision 4)', async () => {
+    it('P19.14-T4 AC-1 nothing on a downline’s lead: no pill, no Buat proposal (decision 4)', async () => {
       render();
       const card = await cardOf('Ibu Sinta Dewi');
-      expect(card.querySelector('[data-open-proposal]')).toBeNull();
-      expect(card.querySelector('[data-proposal-pill]')).toBeNull();
+      expect(card.querySelector('[data-make-proposal]')).toBeNull();
+      expect(card.querySelector('[data-lead-proposal]')).toBeNull();
     });
 
-    it('P19.11-T3 AC-1 no icon for a reader without proposal:read', async () => {
+    it('P19.14-T4 AC-1 no pill for a reader without proposal:read, no Buat proposal without proposal:create', async () => {
       atWidth(360);
       stubFetch(BASE as Parameters<typeof stubFetch>[0]);
-      const noRead = { ...AGENT, permissions: AGENT.permissions.filter((p) => p !== 'proposal:read') };
+      const noRead = { ...AGENT, permissions: AGENT.permissions.filter((p) => p !== 'proposal:read' && p !== 'proposal:create') };
       renderInLayout(AgentLayout, <LeadsPage />, { me: noRead });
-      expect((await cardOf('Ibu Rosa Damayanti')).querySelector('[data-open-proposal]')).toBeNull();
+      const card = await cardOf('Ibu Rosa Damayanti');
+      expect(card.querySelector('[data-lead-proposal]')).toBeNull();
+      expect(card.querySelector('[data-make-proposal]')).toBeNull();
     });
 
     it('P19.11-T3 AC-3 a small muted › between the type and the stage, hidden from a screen reader, and wrapping with the stage', async () => {
@@ -237,28 +244,27 @@ describe('P19.7-T2 AC-12 proposals on the Leads page', () => {
       return within(await screen.findByRole('dialog', { name }));
     };
 
-    it('P19.11-T3 AC-7 the Proposal section asks for the latest finished proposal alone, and shows that one: date, products, premium, Selesai', async () => {
+    it('P19.14-T4 AC-3 the Proposal section lists one row per proposal, drafts included: date, products with plan, total, status', async () => {
       const { calls } = render();
       const sheet = await open();
       const section = (await sheet.findByRole('heading', { name: 'Proposal' })).closest('section')!;
       const asked = calls.find((c) => /\/proposals\?leadId=l1/.test(c.url))!;
-      expect(new URL(asked.url).searchParams.get('status')).toBe('done');
-      expect(new URL(asked.url).searchParams.get('pageSize')).toBe('1');
+      expect(new URL(asked.url).searchParams.get('status')).toBeNull();
       const rows = await within(section).findAllByRole('link').then((links) => links.filter((a) => a.hasAttribute('data-proposal-row')));
-      expect(rows.map((a) => a.getAttribute('href'))).toEqual(['/proposal/p1?step=3']);
-      expect(rows[0]).toHaveTextContent('PRUWell Medical · Gold, PRUCinta');
-      expect(rows[0]).toHaveTextContent('5 Nov');
-      // Each currency on its own, never added: IDR 1.250.000 and USD 125,00 (ADR-0223 §8).
-      expect(rows[0]).toHaveTextContent(/IDR 1,250,000 · USD 125\.00/);
-      expect(within(rows[0]).getByText('Done')).toHaveAttribute('data-tone', 'green');
-      // Never a draft.
-      expect(within(section).queryByText('Draft')).not.toBeInTheDocument();
+      // A draft opens at its products; a finished one at its PDF.
+      expect(rows.map((a) => a.getAttribute('href'))).toEqual(['/proposal/p2?step=2', '/proposal/p1?step=pdf']);
+      expect(rows[1]).toHaveTextContent('PRUWell Medical · Gold, PRUCinta');
+      expect(rows[1]).toHaveTextContent('5 Nov');
+      // Each currency and Cara bayar on its own, never added (ADR-0255 §7).
+      expect(rows[1]).toHaveTextContent(/IDR 1,250,000 monthly · USD 125\.00 annually/);
+      expect(within(rows[1]).getByText('Done')).toHaveAttribute('data-tone', 'green');
+      expect(within(rows[0]).getByText('Draft')).toHaveAttribute('data-tone', 'grey');
       // Above Riwayat.
       const history = sheet.getByRole('heading', { name: 'History' }).closest('section')!;
       expect(section.compareDocumentPosition(history) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     });
 
-    it('P19.11-T3 AC-7 + Buat proposal stays below the finished proposal, with this lead chosen', async () => {
+    it('P19.14-T4 AC-3 + Buat proposal stays below the rows, with this lead chosen', async () => {
       render();
       const sheet = await open();
       const section = (await sheet.findByRole('heading', { name: 'Proposal' })).closest('section')!;
@@ -269,15 +275,14 @@ describe('P19.7-T2 AC-12 proposals on the Leads page', () => {
       expect(button).toHaveClass('mt-2');
     });
 
-    it('P19.11-T3 AC-7 with nothing finished — drafts only — the section is Buat proposal alone, a label’s gap under its heading', async () => {
-      const { calls } = render();
-      const sheet = await open('Pak Hendro Gunawan');
+    it('P19.14-T4 AC-3 with no proposal the section is Buat proposal alone, a label’s gap under its heading', async () => {
+      render({ '/leads/l3': { body: { ...WULAN, history: [] } }, '/proposals?leadId=l3': { body: { rows: [], total: 0, page: 1, pageSize: 50 } } });
+      const sheet = await open('Ibu Wulan Sari');
       const section = (await sheet.findByRole('heading', { name: 'Proposal' })).closest('section')!;
       await waitFor(() => expect(within(section).queryByText('Loading the proposals…')).not.toBeInTheDocument());
-      expect(calls.some((c) => /\/proposals\?leadId=l2&status=done/.test(c.url))).toBe(true);
       expect(section.querySelector('[data-proposal-row]')).toBeNull();
       const button = within(section).getByRole('link', { name: 'Make a proposal' });
-      expect(button).toHaveAttribute('href', '/proposal/new?leadId=l2');
+      expect(button).toHaveAttribute('href', '/proposal/new?leadId=l3');
       expect(button).not.toHaveClass('mt-2');
     });
 
@@ -287,7 +292,7 @@ describe('P19.7-T2 AC-12 proposals on the Leads page', () => {
       const history = (await sheet.findByRole('heading', { name: 'History' })).closest('section')!;
       await within(history).findByText(/Status → Follow-up/);
       const linked = within(history).getByRole('link', { name: 'Proposal made · PRUWell Medical, PRUCinta' });
-      expect(linked).toHaveAttribute('href', '/proposal/p1?step=3');
+      expect(linked).toHaveAttribute('href', '/proposal/p1?step=pdf');
       expect(linked.closest('li')).toHaveTextContent('5 Nov');
       expect(within(history).getByText(/Proposal made · PRULady/)).toBeInTheDocument();
       expect(within(history).queryByRole('link', { name: /PRULady/ })).not.toBeInTheDocument();
@@ -309,12 +314,12 @@ describe('P19.7-T2 AC-12 proposals on the Leads page', () => {
     });
   });
 
-  it('P19.11-T3 AC-1 AC-7 in Indonesian: Buka proposal, Sudah ada proposal / Belum ada proposal, Buat proposal, Selesai, Proposal dibuat', async () => {
+  it('P19.14-T4 AC-1 AC-3 in Indonesian: Buat proposal, Sudah ada proposal / Belum ada proposal, Draf, Selesai, Proposal dibuat', async () => {
     atWidth(360);
     stubFetch(BASE as Parameters<typeof stubFetch>[0]);
     renderInIndonesian(<AgentLayout><LeadsPage /></AgentLayout>, { me: AGENT });
     const card = await screen.findByRole('button', { name: 'Ibu Rosa Damayanti' });
-    expect(screen.getByRole('link', { name: 'Buka proposal Ibu Rosa Damayanti' })).toHaveAttribute('title', 'Buka proposal');
+    expect(screen.getByRole('link', { name: 'Buat proposal untuk Ibu Rosa Damayanti' })).toHaveAttribute('title', 'Buat proposal');
     await userEvent.click(screen.getByRole('button', { name: 'Filter dan urutan' }));
     const filters = within(await screen.findByRole('dialog', { name: 'Filter dan urutan' }));
     expect(within(filters.getByRole('group', { name: 'Proposal' })).getAllByRole('button').map((b) => b.textContent))
@@ -324,7 +329,8 @@ describe('P19.7-T2 AC-12 proposals on the Leads page', () => {
     const sheet = within(await screen.findByRole('dialog', { name: 'Ibu Rosa Damayanti' }));
     await sheet.findByRole('heading', { name: 'Proposal' });
     expect(await sheet.findByText('Selesai')).toBeInTheDocument();
-    expect(sheet.queryByText('Draf')).not.toBeInTheDocument();
+    expect(sheet.getByText('Draf')).toBeInTheDocument();
+    expect(sheet.getByText(/bulanan/)).toBeInTheDocument();
     expect(sheet.getByRole('link', { name: 'Buat proposal' })).toBeInTheDocument();
     expect(await sheet.findByRole('link', { name: 'Proposal dibuat · PRUWell Medical, PRUCinta' })).toBeInTheDocument();
   });

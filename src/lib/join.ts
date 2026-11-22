@@ -111,13 +111,17 @@ export interface UntaggedMember {
   role: 'ab' | 'aab' | 'agent';
 }
 
-export const readInbox = () => api<PendingRequest[]>('/join/requests');
+/**
+ * The requests waiting on the reader. `scope: 'mine'` (P19.20-T6 AC-1; ADR-0273 §7): User Management's *Pending Requests*
+ * — the reader's own unit, the Owner's and an Admin's too; absent, the office's queue for them.
+ */
+export const readInbox = (scope?: 'mine') => api<PendingRequest[]>(`/join/requests${scope ? `?scope=${scope}` : ''}`);
 
 /**
  * **How many requests are waiting on the reader** (UI V1, UI-085): the orange count on the *Pending Requests* tab, read
  * on all four User Management screens — the requests `readInbox` lists, counted on the server without their names.
  */
-export const readWaitingCount = () => api<{ count: number }>('/join/requests/count');
+export const readWaitingCount = (scope?: 'mine') => api<{ count: number }>(`/join/requests/count${scope ? `?scope=${scope}` : ''}`);
 
 export const readRoutingChoices = () => api<RoutingChoice[]>('/join/requests/routing');
 

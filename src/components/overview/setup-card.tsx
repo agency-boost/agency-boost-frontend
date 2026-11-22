@@ -9,8 +9,8 @@ import { kpmOverviewMessages } from '@/i18n/messages/kpm-overview';
 import { cn } from '@/lib/cn';
 import { formatCalendarDay, formatMonth } from '@/lib/format';
 import {
-  SETTINGS_PAGE_COUNT, SETTINGS_PAGES, SETUP_STEPS, STEP_HREF, uploadHref, type OverviewSetup, type ReviewedPage,
-  type SetupStep,
+  SETTINGS_HUB_HREF, SETTINGS_PAGE_COUNT, SETTINGS_PAGES, SETUP_STEPS, STEP_HREF, uploadHref, type OverviewSetup,
+  type ReviewedPage, type SetupStep,
 } from '@/lib/kpm-overview';
 import { useSession } from '@/lib/session';
 
@@ -23,20 +23,18 @@ import { useSession } from '@/lib/session';
  * pengaturan ›* (at 1280 and at 1024 alike).
  *
  * - Each step opens the page where it is done: a settings page, *Import people*, Data upload **on the open month**
- *   (`?month=`), and the recruitment target's sheet (`onTarget`).
+ *   (`?month=`), and — *since P19.19 (ADR-0272 §7)* — *Performa vs target* on this page, where each AB group's monthly
+ *   targets are set (`onTarget`), where it was the office's one recruitment target. *Semua pengaturan ›* opens the hub.
  * - **A step done is ticked**, its number a ✓, its words kept so the card still says what was done.
- * - **The server decides every tick** (`GET /kpm/overview`'s `setup`); the page ticks step 7 itself once the target
- *   it saved comes back, so a finished step ticks without a reload. When all seven are done the server answers `null`
- *   and the card is gone for good.
+ * - **The server decides every tick** (`GET /kpm/overview`'s `setup`). When all seven are done the server answers
+ *   `null` and the card is gone for good.
  */
 export function SetupCard({
-  setup, onTarget, onAllSettings,
+  setup, onTarget,
 }: {
   setup: OverviewSetup;
-  /** Step 7: the recruitment target's sheet, on this page. */
+  /** Step 7: *Performa vs target*, on this page, where each AB group's targets are set (ADR-0272 §7). */
   onTarget: () => void;
-  /** *Semua pengaturan ›*: the settings list. */
-  onAllSettings: () => void;
 }) {
   const t = useMessages(kpmOverviewMessages);
   const figures = useFigureLanguage();
@@ -65,7 +63,7 @@ export function SetupCard({
     {
       key: 'recruit-target',
       title: t.targetStep,
-      meta: setup.target === null ? t.noTarget : t.targetIs({ n: setup.target }),
+      meta: setup.target === null ? t.noTarget : t.targetGroups({ n: setup.target }),
       onClick: onTarget,
     },
   ];
@@ -92,12 +90,11 @@ export function SetupCard({
               meta={step.meta}
               href={step.href}
               onClick={step.onClick}
-              haspopup={step.onClick !== undefined}
             />
           </li>
         ))}
         <li>
-          <Step title={t.allSettings} meta={t.allSettingsMeta({ n: SETTINGS_PAGE_COUNT })} onClick={onAllSettings} haspopup />
+          <Step title={t.allSettings} meta={t.allSettingsMeta({ n: SETTINGS_PAGE_COUNT })} href={SETTINGS_HUB_HREF} />
         </li>
       </ol>
     </section>

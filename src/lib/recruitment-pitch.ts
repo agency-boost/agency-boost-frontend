@@ -33,6 +33,13 @@ export interface PitchFile {
   mimeType?: string;
 }
 
+/** **A material given as a link** (P19.21-T3 AC-6, ADR-0274): the `https://` address and the day it was set. */
+export interface PitchLink {
+  url: string;
+  /** `YYYY-MM-DD`, a day of the office's calendar the server resolved. */
+  addedOn: string;
+}
+
 export interface PitchChecklistItem {
   code: string;
   label: string;
@@ -47,6 +54,11 @@ export interface PitchSlot {
   required: boolean;
   state: PitchSlotState;
   file: PitchFile | null;
+  /**
+   * The material given as a link, where the office gave one instead of a file (P19.21-T3 AC-6). The API always sends
+   * it; optional so a fixture that is about something else need not — absent reads as no link.
+   */
+  link?: PitchLink | null;
   /** `[]` for a slot with none. Who ticked is never sent. */
   checklist: PitchChecklistItem[];
   /** The file's version, `0` when never written. A tick names it, so one made against a file replaced since is refused. */
@@ -61,6 +73,11 @@ export interface PitchSummary {
   missing: number;
   /** `partial`. */
   unconfirmed: number;
+  /**
+   * **The same over all six, no split** (P19.21-T3 AC-6, ADR-0274): *Pengaturan › Recruitment pitch*'s *"2/6 materi
+   * siap"*. Optional for a fixture that is about something else.
+   */
+  all?: { ready: number; total: number; missing: number; unconfirmed: number };
 }
 
 export interface PitchMaterialsView {
@@ -92,6 +109,61 @@ export const attachPitchDocument = (slot: PitchSlotCode, storageKey: string) =>
   api<PitchSlot>(`/kpm/settings/recruitment-pitch/${encodeURIComponent(slot)}`, {
     method: 'PUT', body: { storageKey },
   });
+
+/**
+ * **A link in place of a file** (P19.21-T3 AC-6, ADR-0274): an `https://` address; the server clears the slot's ticks in
+ * the same write, as an attach does, and refuses anything else (`400 VALIDATION_FAILED`).
+ */
+export const setPitchLink = (slot: PitchSlotCode, url: string) =>
+  api<PitchSlot>(`/kpm/settings/recruitment-pitch/${encodeURIComponent(slot)}/link`, { method: 'PUT', body: { url } });
+
+/**
+ * **What a pitch material may be** (P19.21-T3 AC-6, ADR-0274; backend `PITCH_MATERIAL_MIME_TYPES`): each type the API
+ * signs, by the extensions a picker offers and a desktop with no type reports. A mirror the server checks again, before
+ * it signs and against what storage holds (ADR-0040); pinned by `recruitment-pitch.spec.ts`.
+ */
+export const PITCH_FILE_TYPES: readonly { mimeType: string; extensions: readonly string[] }[] = [
+  { mimeType: 'application/pdf', extensions: ['pdf'] },
+  { mimeType: 'text/html', extensions: ['html', 'htm'] },
+  { mimeType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation', extensions: ['pptx'] },
+  { mimeType: 'application/vnd.ms-powerpoint', extensions: ['ppt'] },
+  { mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', extensions: ['docx'] },
+  { mimeType: 'application/msword', extensions: ['doc'] },
+  { mimeType: 'image/jpeg', extensions: ['jpg', 'jpeg'] },
+  { mimeType: 'image/png', extensions: ['png'] },
+  { mimeType: 'image/webp', extensions: ['webp'] },
+  { mimeType: 'video/mp4', extensions: ['mp4'] },
+  { mimeType: 'video/webm', extensions: ['webm'] },
+  { mimeType: 'video/quicktime', extensions: ['mov'] },
+];
+
+/** A picker's `accept` for a pitch material: every type and every extension. */
+export const PITCH_ACCEPT = PITCH_FILE_TYPES.flatMap((t) => [t.mimeType, ...t.extensions.map((e) => `.${e}`)]).join(',');
+
+/**
+ * **The type a chosen file is sent as, or `null` when it is no pitch format** (P19.21-T3 AC-6): its own type where the
+ * browser reports one of the list, else the one its extension names — a desktop often reports none for a `.pptx`.
+ */
+export function pitchFileType(file: { type: string; name: string }): string | null {
+  if (PITCH_FILE_TYPES.some((t) => t.mimeType === file.type)) return file.type;
+  const extension = /\.([a-z0-9]+)$/i.exec(file.name)?.[1]?.toLowerCase();
+  return PITCH_FILE_TYPES.find((t) => extension && t.extensions.includes(extension))?.mimeType ?? null;
+}
+
+/**
+ * **How an agent's tap opens a material** (P19.21-T3 AC-6, ADR-0274): a link in a new tab; an HTML page in the sandboxed
+ * window (ADR-0217 §4); PowerPoint and Word download (storage serves them as attachments, named by their type); a PDF,
+ * an image and a video open in a new tab, as a PDF always did.
+ */
+export type PitchOpening = 'link' | 'sandboxed' | 'download' | 'tab';
+export function pitchOpening(slot: Pick<PitchSlot, 'file' | 'link'>): PitchOpening | null {
+  if (slot.link) return 'link';
+  const type = slot.file?.mimeType ?? null;
+  if (!slot.file) return null;
+  if (type === 'text/html') return 'sandboxed';
+  if (type && /officedocument|msword|ms-powerpoint/.test(type)) return 'download';
+  return 'tab';
+}
 
 /** Tick or untick one item, pinned to the file it was made against (`409 VERSION_CONFLICT` otherwise). */
 export const setPitchConfirmation = (

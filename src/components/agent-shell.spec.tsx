@@ -2,6 +2,7 @@ import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { makeMe, renderWithSession } from '@test/harness';
+import { openEveryGroup } from '@test/sidebar';
 import type { Me } from '@/lib/session';
 import { PHONE_QUERY } from '@/lib/use-phone';
 import { AgentShell } from './agent-shell';
@@ -24,67 +25,39 @@ function reader(over: Partial<NonNullable<Me['membership']>> = {}): Me {
 }
 
 /**
- * **The view switcher in the field family's pages** (P19.2-T1 AC-3, AC-5; UI-169 items 2, 3; ADR-0198 §3). Until P19.2
- * an Owner or an Admin found *Open Owner view* or *Open Admin view* here (P13.2-T5, ADR-0114); the views are the avatar's
- * menu now, at every width, and in the sidebar's account menu from 1024px. `shell-views.spec.tsx` holds the rest.
+ * **One account menu for everybody** (P19.17-T3 AC-1; ADR-0269 §1, §2; the brief's gaps 3 and 5). Until P19.2 an Owner or
+ * an Admin found *Open Owner view* here (P13.2-T5, ADR-0114), then the views and *Tambah akun* (ADR-0198, ADR-0199), with
+ * *📘 Panduan* between *Your account* and *Sign out* (ADR-0219 §5). All of it is gone: *Akun Anda · Keluar*, whoever reads.
  */
-describe('P19.2-T1 the views, in the field pages’ account menu (P13.2-T5’s links replaced)', () => {
+describe('P19.17-T3 AC-1 the account menu: Your account and Sign out, for every role', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   const chip = () => screen.getByRole('button', { name: /Rina/ });
   const panel = () => document.getElementById('sidebar-user-actions')!;
-  /**
-   * The panel's controls, in order, by their text: the views, then *Your account* and *Sign out* — with *📘 Panduan*
-   * between those two since P19.6-T5 (AC-1; ADR-0219 §5): its new tab is in its name (`aria-label`), not in its text.
-   */
+  /** The panel's controls, in order, by their text. */
   const controls = () => Array.from(panel().querySelectorAll('a[href], button')).map((a) => a.textContent);
-  const GUIDE = '📘Guide';
-
-  it('P19.2-T1 AC-5 offers an Owner My account and KPM Owner, above Your account — no Open Owner view', async () => {
-    renderWithSession(<AgentShell title="Coaching Session">body</AgentShell>, {
-      me: reader({ isKpmOwner: true, directCount: 3, office: { code: '0417', branch: 'Cempaka Putih' } }),
-    });
-    await userEvent.click(chip());
-    expect(controls()).toEqual(['My account', 'KPM Owner · Cempaka Putih', 'Your account', GUIDE, 'Sign out']);
-    expect(within(panel()).getByRole('button', { name: 'My account' })).toHaveAttribute('aria-current', 'true');
-    expect(screen.queryByText('Open Owner view')).not.toBeInTheDocument();
-  });
-
-  it('P19.2-T1 AC-5 offers an Admin who is not the Owner KPM Admin', async () => {
-    renderWithSession(<AgentShell title="Log Activity">body</AgentShell>, { me: reader({ isKpmAdmin: true }) });
-    await userEvent.click(chip());
-    expect(within(panel()).getByRole('button', { name: 'KPM Admin' })).toBeInTheDocument();
-    expect(screen.queryByText('Open Admin view')).not.toBeInTheDocument();
-  });
 
   it.each([
+    ['an Owner', { isKpmOwner: true, directCount: 3, office: { code: '0417', branch: 'Cempaka Putih' } }],
+    ['an Admin who is not the Owner', { isKpmAdmin: true }],
+    ['a core leader', { isCoreLeader: true, directCount: 4 }],
     ['an AB who leads people', { orgLevelCode: 'AB', hierarchyRole: 'ab', directCount: 4 }],
-    ['an AAB who leads people', { orgLevelCode: 'AAB', hierarchyRole: 'aab', directCount: 2 }],
     ['an AAB who leads nobody', { orgLevelCode: 'AAB', hierarchyRole: 'aab', directCount: 0 }],
     ['an Agent', { orgLevelCode: 'AGENT', hierarchyRole: 'agent', directCount: 0 }],
-  ] as const)('P19.2-T1 AC-5 offers %s no views: one view, no switcher', async (_, over) => {
+  ] as const)('P19.17-T3 AC-1 offers %s Your account and Sign out, and nothing else', async (_, over) => {
     renderWithSession(<AgentShell title="Log Activity">body</AgentShell>, { me: reader(over) });
     await userEvent.click(chip());
-    expect(controls()).toEqual(['Your account', GUIDE, 'Sign out']);
+    expect(controls()).toEqual(['Your account', 'Sign out']);
+    expect(screen.queryByText(/My account|Add account|Open Owner view|Guide/)).not.toBeInTheDocument();
   });
 
-  it('P19.2-T1 AC-5 offers somebody in no office no views either', async () => {
+  it('P19.17-T3 AC-1 somebody in no office, the same', async () => {
     renderWithSession(<AgentShell title="Find your KPM">body</AgentShell>, { me: makeMe({ membership: null }) });
     await userEvent.click(chip());
-    expect(controls()).toEqual(['Your account', GUIDE, 'Sign out']);
+    expect(controls()).toEqual(['Your account', 'Sign out']);
   });
 
-  it('P19.2-T1 AC-5 offers a support session impersonating an Owner the Owner’s own views (ADR-0198 §6)', async () => {
-    const me = {
-      ...reader({ isKpmOwner: true, directCount: 3 }),
-      isImpersonating: true, impersonationReadOnly: true, impersonatedBy: 'u-support',
-    };
-    renderWithSession(<AgentShell title="Coaching Session">body</AgentShell>, { me });
-    await userEvent.click(chip());
-    expect(within(panel()).getByRole('button', { name: 'KPM Owner' })).toBeInTheDocument();
-  });
-
-  it('P19.2-T1 AC-3, UI-004 on a phone the Lainnya sheet holds no view switch: Keluar after the groups, as for everybody', async () => {
+  it('P19.17-T3 AC-7 on a phone the Lainnya sheet ends with Keluar, after the groups, with no guide and no view', async () => {
     vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
       media: query,
       matches: query === PHONE_QUERY,
@@ -94,17 +67,25 @@ describe('P19.2-T1 the views, in the field pages’ account menu (P13.2-T5’s l
     renderWithSession(<AgentShell title="Coaching Session">body</AgentShell>, {
       me: reader({ isKpmAdmin: true, directCount: 1 }),
     });
-    expect(screen.queryByRole('button', { name: 'Open menu' })).not.toBeInTheDocument();
     await userEvent.click(await screen.findByRole('button', { name: 'More' }));
     const sheet = await screen.findByRole('dialog', { name: 'More' });
-    expect(within(sheet).queryByRole('link', { name: 'Open Admin view' })).not.toBeInTheDocument();
-    expect(within(sheet).getByRole('button', { name: 'Sign out' })).toBeInTheDocument();
+    expect(within(sheet).queryByRole('link', { name: /Open Admin view|Guide/ })).not.toBeInTheDocument();
+    const signOut = within(sheet).getByRole('button', { name: 'Sign out' });
+    const groups = sheet.querySelectorAll('[data-more-group]');
+    expect(groups[groups.length - 1].compareDocumentPosition(signOut) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });
 
 describe('the profile line under the name (P18.5-T6 AC-2, ADR-0159 §5)', () => {
   afterEach(() => vi.unstubAllGlobals());
   const OFFICE = { code: '0417', branch: 'Cempaka Putih' };
+
+  it('P19.17-T3 the Owner’s line names the role, KPM Owner, where it named the rung in Akun saya', () => {
+    renderWithSession(<AgentShell title="Coaching Session">body</AgentShell>, {
+      me: reader({ isKpmOwner: true, groups: [], office: OFFICE }),
+    });
+    expect(screen.getByText('KPM Owner · 0417 · Cempaka Putih')).toBeInTheDocument();
+  });
 
   it('the rung · Core Leader · the groups · the office, one line, its whole text in the tooltip', () => {
     renderWithSession(<AgentShell title="Coaching Session">body</AgentShell>, {
@@ -137,9 +118,10 @@ describe('the profile line under the name (P18.5-T6 AC-2, ADR-0159 §5)', () => 
  */
 describe('UI-004 Sales and Recruitment under Aktivitas (P18.5-T12 AC-1, P17-T3 AC-1)', () => {
   afterEach(() => { route.path = '/coaching'; });
-  const sidebar = () => within(screen.getByRole('navigation', { name: 'Main' }));
+  // Every group opened first (P19.13-T2's rule; every group starts open since P19.17-T3, so it opens nothing).
+  const sidebar = () => within(openEveryGroup());
   /** The nav's group headings and items, in order, by their text. */
-  const navOrder = () => Array.from(screen.getByRole('navigation', { name: 'Main' })
+  const navOrder = () => Array.from(openEveryGroup()
     .querySelectorAll('[aria-controls^="nav-group"], a, button[data-nav-control]'))
     .map((el) => (el.textContent ?? '').trim());
 
@@ -147,8 +129,8 @@ describe('UI-004 Sales and Recruitment under Aktivitas (P18.5-T12 AC-1, P17-T3 A
     ['an Agent', reader({ orgLevelCode: 'AGENT', hierarchyRole: 'agent', directCount: 0 })],
     ['an AAB', reader({ orgLevelCode: 'AAB', hierarchyRole: 'aab', directCount: 1 })],
     ['an AB', reader({ orgLevelCode: 'AB', hierarchyRole: 'ab', directCount: 4 })],
-    ['an Owner in their field view', reader({ isKpmOwner: true, directCount: 3 })],
-    ['an Admin in their field view', reader({ isKpmAdmin: true })],
+    ['an Owner', reader({ isKpmOwner: true, directCount: 3 })],
+    ['an Admin', reader({ isKpmAdmin: true })],
   ])('UI-004 offers %s Sales and Recruitment, live, under Activities', (_who, me) => {
     renderWithSession(<AgentShell title="x">body</AgentShell>, { me });
     const order = navOrder();

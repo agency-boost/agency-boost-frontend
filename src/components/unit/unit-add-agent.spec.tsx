@@ -1,4 +1,4 @@
-import { screen, within } from '@testing-library/react';
+import { cleanup, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { atWidth, makeMe, renderWithSession, stubFetch } from '@test/harness';
@@ -29,7 +29,7 @@ describe('+ Add agent on the Unit Dashboard (P18.8-T3 AC-1)', () => {
 
   it('P18.8-T3 AC-1 sits in the roster’s header beside Update production, and adds to the reader’s own unit', async () => {
     const { calls } = show();
-    const header = (await screen.findByRole('heading', { name: 'Your team’s roster' })).closest('div')!.parentElement!;
+    const header = (await screen.findByRole('heading', { name: /^Your team’s roster/ })).closest('div')!.parentElement!;
     expect(within(header).getByRole('button', { name: 'Update production' })).toBeInTheDocument();
     await userEvent.click(within(header).getByRole('button', { name: '+ Add agent' }));
     // The form's module is fetched on its first opening (P18.11-T16).
@@ -59,13 +59,13 @@ describe('+ Add agent on the Unit Dashboard (P18.8-T3 AC-1)', () => {
 
   it('P18.8-T3 AC-7 a leader on a unit below their own is not offered it: their grant is their own unit', async () => {
     show(SARIS, ADDER, 'mem-sari');
-    await screen.findByRole('heading', { name: 'Your team’s roster' });
+    await screen.findByRole('heading', { name: /^Your team’s roster/ });
     expect(screen.queryByRole('button', { name: '+ Add agent' })).not.toBeInTheDocument();
   });
 
   it('P18.8-T3 AC-7 nor a reader who does not hold member:invite', async () => {
     show(dashboard(), AGUS_ME);
-    await screen.findByRole('heading', { name: 'Your team’s roster' });
+    await screen.findByRole('heading', { name: /^Your team’s roster/ });
     expect(screen.queryByRole('button', { name: '+ Add agent' })).not.toBeInTheDocument();
   });
 
@@ -74,20 +74,25 @@ describe('+ Add agent on the Unit Dashboard (P18.8-T3 AC-1)', () => {
     expect(await screen.findByRole('button', { name: '+ Add agent' })).toBeInTheDocument();
   });
 
-  it('UI-009 on a tablet too, in the roster’s header row beside the chips', async () => {
+  it('UI-009, P19.18-T1 AC-8 on a tablet too, on the roster’s title row — no status chips beside it any more', async () => {
     atWidth(800);
     show();
-    const header = (await screen.findByRole('heading', { name: 'Your team’s roster' })).parentElement!;
+    const header = (await screen.findByRole('heading', { name: /^Your team’s roster/ })).parentElement!;
     expect(within(header).getByRole('button', { name: '+ Add agent' })).toBeInTheDocument();
-    expect(within(header).getByRole('group', { name: 'Filter by status' })).toBeInTheDocument();
+    expect(within(header).queryByRole('group', { name: 'Filter by status' })).not.toBeInTheDocument();
   });
 
-  it('UI-002 not on a phone — adding people lives in User Management (the owner, 30 Oct) — nor in the empty state there', async () => {
+  it('P19.18-T1 AC-8 on a phone the floating + adds an agent; no Update production — nor the + in the empty state there', async () => {
     atWidth(375);
     show();
-    await screen.findByRole('heading', { name: 'Your team’s roster' });
-    expect(screen.queryByRole('button', { name: '+ Add agent' })).not.toBeInTheDocument();
+    await screen.findByRole('heading', { name: /^Your team’s roster/ });
+    const fab = screen.getByRole('button', { name: '+ Add agent' });
+    expect(fab).toHaveAttribute('data-unit-fab', '');
+    expect(fab).toHaveClass('fixed', 'rounded-full', 'bg-primary');
     expect(screen.queryByRole('button', { name: 'Update production' })).not.toBeInTheDocument();
+    await userEvent.click(fab);
+    expect(await screen.findByRole('dialog', { name: 'Add agent' })).toBeInTheDocument();
+    cleanup();
     vi.unstubAllGlobals();
     atWidth(375);
     show(EMPTY, { ...ADDER, membership: { ...ADDER.membership!, membershipId: 'mem-rina', directCount: 0 } });

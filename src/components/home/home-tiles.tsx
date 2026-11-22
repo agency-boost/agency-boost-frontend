@@ -37,6 +37,11 @@ export const calendarToday = (today: string) => `/calendar?view=agenda&date=${to
  *   leader tiles are one height; from 768px it reads *Active Agent November*, as it did.
  * - **A chip whose count is 0 is hidden; the tile stays** (UI-100). A split chip is hidden only when its scope holds
  *   nobody: *Unit 0/4* is the Unit Dashboard's own chip.
+ * - ***Active Agent* counts the uploaded production** (P19.18-T4 AC-1; ADR-0267 §2), the Unit Dashboard's number: while
+ *   the month is not uploaded (`held` false) it reads ***–*** with no ring and no chips — never a 0 the upload has not
+ *   said (data honesty) — for every leader with somebody to count; with nobody, *0 dari –* as before.
+ * - **The KPM Owner and an Admin read the whole office** (P19.18-T4 AC-1; the brief's part B, gap 1; `home-owner-mobile`):
+ *   *Active Agent* and *Coaching 7 hari* *x dari N* over everybody, **no split chips** — the server sends `leader.office`.
  */
 export function HomeTiles({ view, className }: { view: HomeView; className?: string }) {
   const t = useMessages(homeMessages).tiles;
@@ -51,6 +56,12 @@ export function HomeTiles({ view, className }: { view: HomeView; className?: str
     n > 0 ? [{ key, label: <>{label} <b>{number(n)}</b></> }] : [];
   const of = (split: HomeSplit) => unit.of({ of: split.of > 0 ? number(split.of) : '–' });
   const ring = (split: HomeSplit) => (split.of > 0 ? { percent: percentOf(split.count, split.of) } : undefined);
+  // P19.18-T4 AC-1: the whole office for the Owner or an Admin — no split chips; everybody else keeps *Unit · AAB*.
+  const office = leader?.office != null;
+  const chips = (split: HomeSplit) => (office ? [] : splitChips(split, unit.scope.unit, number));
+  // ADR-0267 §2: *Active Agent* is the upload's — `–` while the month is not uploaded, never a 0 it has not said. With
+  // nobody to count it is *0 dari –* as before (MOB UI-166): there is nothing for an upload to say.
+  const held = (leader?.activeAgent.held ?? false) || (leader?.activeAgent.of ?? 0) === 0;
 
   return (
     <div data-home-tiles="" className={cn('grid grid-cols-2 gap-2 lg:gap-2.5', className)}>
@@ -75,10 +86,10 @@ export function HomeTiles({ view, className }: { view: HomeView; className?: str
           <StatTile
             href="/unit/dashboard"
             label={<ActiveAgentLabel short={t.activeAgent} month={formatMonthName(view.month, figures)} long={unit.activeAgent({ month: formatMonthLong(view.month, figures) })} />}
-            value={number(leader.activeAgent.count)}
+            value={held ? number(leader.activeAgent.count) : '–'}
             unit={of(leader.activeAgent)}
-            ring={ring(leader.activeAgent)}
-            chips={splitChips(leader.activeAgent, unit.scope.unit, number)}
+            ring={held ? ring(leader.activeAgent) : undefined}
+            chips={held ? chips(leader.activeAgent) : []}
           />
           <StatTile
             href="/coaching"
@@ -86,7 +97,7 @@ export function HomeTiles({ view, className }: { view: HomeView; className?: str
             value={number(leader.coached7d.count)}
             unit={of(leader.coached7d)}
             ring={ring(leader.coached7d)}
-            chips={splitChips(leader.coached7d, unit.scope.unit, number)}
+            chips={chips(leader.coached7d)}
           />
         </>
       )}

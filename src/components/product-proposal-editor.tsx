@@ -1,5 +1,6 @@
 'use client';
 
+import type { ReactNode } from 'react';
 import { DateField } from '@/components/ui/date-field';
 import {
   FaqList, PROPOSAL_CARD as CARD, PROPOSAL_H4 as H4, moveRow as move, replaceRow as replace, withoutRow as without,
@@ -7,8 +8,8 @@ import {
 import { Button, Field, Select, TextInput } from '@/components/ui/field';
 import { ReorderArrows } from '@/components/ui/reorder-arrows';
 import { TonePill } from '@/components/ui/tone-pill';
-import { useMessages } from '@/i18n/language-provider';
-import { dayInZone, OFFICE_TIME_ZONE } from '@/lib/format';
+import { useFigureLanguage, useMessages } from '@/i18n/language-provider';
+import { dayInZone, formatMoneyInFull, formatRupiahCompact, OFFICE_TIME_ZONE } from '@/lib/format';
 import { adminProductProposalMessages } from '@/i18n/messages/admin-product-proposal';
 import {
   PDF_DETAIL_BLOCKS, PRODUCT_CURRENCIES, PROPOSAL_FIELD_TYPES, PROPOSAL_LIMITS,
@@ -61,6 +62,11 @@ export function proposalToSave(settings: ProposalSettings): ProposalSettings {
 }
 
 
+/** The calculation fields *Perhitungan* reads (ADR-0255 §5). */
+type CalcFields = Partial<Pick<Product,
+  'calcType' | 'entryAge' | 'payTerms' | 'frequencies' | 'smokerRated' | 'planRule' | 'upStep' | 'upMin' | 'upMax'
+  | 'premiumMin' | 'premiumMax' | 'rateTableId' | 'needTag'>>;
+
 /** Whole rupiah as typed, as minor units; anything that is not a number is left out. */
 const amountsOf = (text: string) => text.split(',').map((part) => part.replace(/\D/g, ''))
   .filter((part) => part !== '').map((part) => Number(part) * 100);
@@ -84,8 +90,10 @@ export function ProductProposalEditor({
   value,
   onChange,
   disabled = false,
+  calculation,
+  isian = false,
 }: {
-  product: Pick<Product, 'id' | 'name'>;
+  product: Pick<Product, 'id' | 'name'> & CalcFields;
   /** The channel and category as the editor holds them now: `syariahName` is a conventional product's. */
   channel: string;
   category: string;
@@ -93,6 +101,16 @@ export function ProductProposalEditor({
   value: ProposalSettings;
   onChange: (next: ProposalSettings) => void;
   disabled?: boolean;
+  /**
+   * P19.15-T1 (ADR-0258 §7): what stands where *Perhitungan* stands — the Proposal tab's *Isian* puts its own form of the
+   * calculation fields there; absent, the read-only summary.
+   */
+  calculation?: ReactNode;
+  /**
+   * P19.15-T1: **the Proposal tab's *Isian***, which edits the fields and plans and leaves *Tanya-jawab* and page 2's blocks
+   * to the catalogue's editor and *Ilustrasi* — the same section, without those two, and no heading of its own.
+   */
+  isian?: boolean;
 }) {
   const t = useMessages(adminProductProposalMessages);
   const id = (part: string) => `proposal-${product.id}-${part}`;
@@ -104,8 +122,8 @@ export function ProductProposalEditor({
 
   return (
     <section aria-labelledby={id('title')} data-proposal-editor="">
-      <h3 id={id('title')} className="mt-5 font-display text-md font-bold text-navy">{t.title}</h3>
-      <p className="text-sm text-muted">{t.lead}</p>
+      <h3 id={id('title')} className={isian ? 'sr-only' : 'mt-5 font-display text-md font-bold text-navy'}>{t.title}</h3>
+      {!isian && <p className="text-sm text-muted">{t.lead}</p>}
 
       <div className="mt-3 flex flex-wrap gap-3">
         <Field label={t.typeLabel} htmlFor={id('type-label')} hint={t.typeLabelHint({ fallback: fallbackLabel })} className="min-w-48">
@@ -143,6 +161,8 @@ export function ProductProposalEditor({
         )}
       </div>
 
+      {calculation ?? <CalculationSummary product={product} currencies={currencies} />}
+
       {/* The fields, in the order the agent fills them in. */}
       <h4 className={`mt-4 ${H4}`}>{t.fields}</h4>
       <p className="text-sm text-muted">{t.fieldsHint({ max: PROPOSAL_LIMITS.FIELDS })}</p>
@@ -153,6 +173,32 @@ export function ProductProposalEditor({
           const fid = (part: string) => id(`field-${at}-${part}`);
           const setOption = (o: number, next: Partial<ProposalOption>) =>
             setField(at, { options: replace(field.options, o, { ...field.options[o], ...next }) });
+          // A derived field (ADR-0255 §3): its rule comes with it from the import, so it is shown and never edited here.
+          if (field.type === 'derived') {
+            return (
+              <li key={at} className={CARD} data-proposal-field={field.key} data-derived="">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-md font-semibold text-navy">{at + 1}. {field.label || field.key}</span>
+                  <TonePill tone="grey">{t.types.derived}</TonePill>
+                  <span className="ml-auto flex items-center">
+                    <ReorderArrows
+                      label={name}
+                      index={at}
+                      count={fields.length}
+                      disabled={disabled}
+                      onMove={(by) => set('proposalFields', move(fields, at, by))}
+                    />
+                  </span>
+                </div>
+                <p className="mt-1 text-sm text-muted">
+                  {t.derivedFrom({ n: product.planRule?.field === field.key ? product.planRule.rules.length : 0 })}
+                </p>
+                <p className="mt-1 text-sm text-navy">
+                  <span className="font-semibold">{t.derivedValues}:</span> {field.options.map((o) => o.label).join(' · ')}
+                </p>
+              </li>
+            );
+          }
           return (
             <li key={at} className={CARD} data-proposal-field={field.key}>
               <div className="flex flex-wrap items-center gap-2">
@@ -195,7 +241,7 @@ export function ProductProposalEditor({
                     value={field.type}
                     disabled={disabled}
                     onChange={(e) => {
-                      const type = e.target.value as ProposalFieldType;
+                      const type = e.target.value as Exclude<ProposalFieldType, 'derived'>;
                       // A type's own parts only: a money field has no options, a choice no quick amounts.
                       setField(at, type === 'money'
                         ? { type, options: [], default: null, plan: false, currency: false, paymentYears: false }
@@ -375,13 +421,16 @@ export function ProductProposalEditor({
         {t.addPlan}
       </Button>
 
+      {!isian && (
       <FaqList
         idPrefix={id('faq')}
         entries={value.faq}
         onChange={(faq) => set('faq', faq)}
         disabled={disabled}
       />
+      )}
 
+      {!isian && (<>
       {/* Page 2's detail blocks, each once, with the illustration it was read from. */}
       <h4 className={`mt-4 ${H4}`}>{t.detail}</h4>
       <p className="text-sm text-muted">{t.detailHint}</p>
@@ -476,7 +525,59 @@ export function ProductProposalEditor({
       >
         {t.addBlock}
       </Button>
+      </>)}
     </section>
   );
 }
 
+
+/**
+ * ***Perhitungan*** (P19.14-T2 AC-5; ADR-0255 §5, §10; parity I-1019): the catalogue's calculation fields, **read only
+ * here** — the import of 11 November fills them, and the API takes them on the product's own save (checked whole, as the
+ * proposal fields are). Shown so nothing the agent's card obeys is invisible to the Super Admin: the calculation type, the
+ * premium table (none yet — the agent types the premium), the entry ages, each pay term with its maximum entry age and
+ * the default (★), *Cara bayar*, the smoker rating, the plan rule, the limits and the need it ticks. One `<dl>`, the
+ * section's own type; no control.
+ */
+function CalculationSummary({ product, currencies }: { product: CalcFields; currencies: readonly ProductCurrency[] }) {
+  const t = useMessages(adminProductProposalMessages).calc;
+  const figures = useFigureLanguage();
+  /** Nothing set: a dash, as the editor's empty choices show it. */
+  const none = '—';
+  // A USD-only product's limits are cents (PRU Prosper's premium): written in its currency, never as rupiah.
+  const usd = currencies.length === 1 && currencies[0] === 'USD';
+  const money = (minor: number | null | undefined) => (minor == null ? null
+    : usd ? formatMoneyInFull(minor, 'USD', figures) : formatRupiahCompact(minor, {}, figures));
+  const limits = [
+    product.upMin != null || product.upMax != null ? t.limitUp({ min: money(product.upMin) ?? '…', max: money(product.upMax) ?? '…' }) : null,
+    product.upStep != null ? t.limitStep({ step: money(product.upStep)! }) : null,
+    product.premiumMin != null || product.premiumMax != null
+      ? t.limitPremium({ min: money(product.premiumMin) ?? '…', max: money(product.premiumMax) ?? '…' }) : null,
+  ].filter(Boolean).join(' · ');
+  const rows: [string, string][] = [
+    [t.calcType, t.calcTypes[product.calcType ?? 'manual']],
+    // The id is the API's pointer (ADR-0258 §2); a reader is told where the table lives, never its id.
+    [t.rateTable, product.rateTableId ? t.hasRateTable : t.noRateTable],
+    [t.entryAge, product.entryAge ? t.ageRange(product.entryAge) : t.noLimit],
+    [t.payTerms, (product.payTerms ?? []).map((term) => t.payTerm({ label: term.label, max: term.maxEntryAge, isDefault: term.default })).join(' · ') || none],
+    [t.frequencies, product.frequencies?.length ? product.frequencies.map((f) => t.frequencyNames[f]).join(' · ') : t.allPeriodic],
+    [t.smoker, product.smokerRated ? t.smokerRated : t.smokerNot],
+    [t.planRule, product.planRule ? t.planRuleOf({ n: product.planRule.rules.length, field: product.planRule.field }) : none],
+    [t.limits, limits || none],
+    [t.need, product.needTag ? t.needs[product.needTag] : none],
+  ];
+  return (
+    <section aria-labelledby="proposal-calc" data-proposal-calc="" className={`mt-4 ${CARD}`}>
+      <h4 id="proposal-calc" className={H4}>{t.title}</h4>
+      <p className="text-sm text-muted">{t.lead}</p>
+      <dl className="mt-2 grid grid-cols-1 gap-x-4 gap-y-1 text-md sm:grid-cols-[minmax(10rem,auto)_1fr]">
+        {rows.map(([label, value]) => (
+          <div key={label} className="contents">
+            <dt className="font-semibold text-navy">{label}</dt>
+            <dd className="text-ink">{value}</dd>
+          </div>
+        ))}
+      </dl>
+    </section>
+  );
+}

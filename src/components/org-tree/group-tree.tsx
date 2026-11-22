@@ -337,7 +337,8 @@ function TreeTable({ tree, personHref, model }: {
   };
 
   return (
-    <div className="max-w-[940px] rounded-lg bg-card py-1.5">
+    // P19.13-T1 AC-2 (UI-192): a table, the frame's full width from 1024px, where it was capped at 940px.
+    <div className="max-w-[940px] rounded-lg bg-card py-1.5 lg:max-w-none">
       <div aria-hidden="true" className={cn(GRID, 'h-9 border-b border-base px-5 text-sm font-semibold text-muted')}>
         <span>{t.columns.name}</span>
         <span>{t.columns.role}</span>

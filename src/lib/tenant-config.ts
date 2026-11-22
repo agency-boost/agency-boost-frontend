@@ -235,19 +235,117 @@ export const updateBranchInfo = (body: Partial<{
   fiscalYearStartMonth: number;
 }>) => api<BranchInfo>('/kpm/settings/branch-info', { method: 'PATCH', body });
 
+/**
+ * **The six settings published each on its own** (P19.21-T2 AC-3; ADR-0274 §5): Activity types (with its ratio
+ * benchmarks), Lead statuses, Activation checklist, Training, Capability Mapping and Events. The other five settings are
+ * saved live and have no draft.
+ */
+export const PUBLISHED_SETTINGS = [
+  'activity_types', 'lead_statuses', 'activation_checklist', 'training', 'capability_mapping', 'events',
+] as const;
+export type PublishedSetting = (typeof PUBLISHED_SETTINGS)[number];
+
+/** One setting: the version agents are on, and whether it has changes they do not see yet. */
+export interface SettingPublishState {
+  setting: PublishedSetting;
+  /** `0` when never published; for the activation checklist, the version new hires are given. */
+  version: number;
+  hasUnpublishedChanges: boolean;
+  publishedAt: string | null;
+}
+
 export interface PublishState {
   /** What agents are on. 0 when nothing is published. */
   publishedVersion: number;
   workingVersion: number;
   hasUnpublishedChanges: boolean;
   publishedAt: string | null;
+  /** Each of the six settings, in `PUBLISHED_SETTINGS` order. Optional so an older answer still reads. */
+  settings?: SettingPublishState[];
 }
 
 export const readPublishState = () => api<PublishState>('/kpm/settings/publish-state');
 
-/** Renders the live rows into the copy agents read. Until then they stay on the last one. */
-export const publishConfig = () =>
-  api<PublishState>('/kpm/settings/publish', { method: 'POST' });
+/**
+ * Renders the live rows into the copy agents read. Until then they stay on the last one. **`settings` names the
+ * settings to publish** (P19.21-T2): *Terbitkan* on one; absent or empty, every setting with changes (*Terbitkan semua*).
+ */
+export const publishConfig = (settings?: readonly PublishedSetting[]) =>
+  api<PublishState>('/kpm/settings/publish', {
+    method: 'POST', ...(settings && settings.length ? { body: { settings: [...settings] } } : {}),
+  });
+
+/**
+ * **Which setting a settings page publishes** (P19.21-T2 AC-3), from its address: a page of one of the six, its tabs
+ * and sub-pages included — *Ratio benchmarks* is Activity types', a training module's page is Training's. `null` for the
+ * hub and for every page saved live (Campaigns, Products, Recruitment pitch, Branch info, Tampilan KPM).
+ */
+export function settingOfPath(pathname: string | null | undefined): PublishedSetting | null {
+  const segment = (pathname ?? '').match(/^\/kpm\/settings\/([^/?#]+)/)?.[1] ?? null;
+  switch (segment) {
+    case 'activity-types':
+    case 'ratio-benchmarks':
+      return 'activity_types';
+    case 'lead-statuses': return 'lead_statuses';
+    case 'activation-checklist': return 'activation_checklist';
+    case 'training': return 'training';
+    case 'capability-mapping': return 'capability_mapping';
+    case 'events': return 'events';
+    default: return null;
+  }
+}
+
+/** The eleven settings behind the one *Pengaturan* item, in the hub's order (P19.21-T2 AC-1). */
+export type HubSetting =
+  | PublishedSetting | 'campaigns' | 'products' | 'recruitment_pitch' | 'branch_info' | 'branding';
+
+/** A status only when the owner must act (AC-2); a setting that is fine has none. */
+export type HubStatus =
+  | { kind: 'unpublished' }
+  | { kind: 'waiting'; count: number }
+  | { kind: 'missing'; count: number }
+  | { kind: 'no_logo' };
+
+/** What a row's one line counts; `null` on every setting that does not show it. */
+export interface HubCounts {
+  activities: number | null;
+  categories: number | null;
+  skills: number | null;
+  modules: number | null;
+  windowDays: number | null;
+  version: number | null;
+  stages: number | null;
+  skillGroups: number | null;
+  products: number | null;
+  sold: number | null;
+  materials: number | null;
+  kpmCode: string | null;
+  fiscalYearStartMonth: number | null;
+}
+
+export interface SettingsOverview {
+  settings: { setting: HubSetting; status: HubStatus | null; counts: HubCounts }[];
+  /** The settings with changes agents do not see — the hub's orange bar. */
+  unpublished: PublishedSetting[];
+}
+
+/** `GET /kpm/settings/overview` — the hub's one read: a steward's; anybody else in the KPM is answered 404. */
+export const readSettingsOverview = () => api<SettingsOverview>('/kpm/settings/overview');
+
+/** Each setting's page, where the hub's row opens it. Training, Events and Campaigns open their current pages. */
+export const SETTING_HREF: Readonly<Record<HubSetting, string>> = {
+  activity_types: '/kpm/settings/activity-types',
+  lead_statuses: '/kpm/settings/lead-statuses',
+  activation_checklist: '/kpm/settings/activation-checklist',
+  training: '/kpm/settings/training',
+  capability_mapping: '/kpm/settings/capability-mapping',
+  events: '/kpm/settings/events',
+  campaigns: '/kpm/settings/campaigns',
+  products: '/kpm/settings/products',
+  recruitment_pitch: '/kpm/settings/recruitment-pitch',
+  branch_info: '/kpm/settings/branch-info',
+  branding: '/kpm/settings/branding',
+};
 
 export type ConfigChangeOp =
   | 'category.create' | 'category.update' | 'category.archive' | 'category.restore'
@@ -280,6 +378,13 @@ export interface TrainingModuleRow {
    * replacement; `company`, the template's; `none`, no file, video or link. What *x / y modul punya materi* counts.
    */
   material?: 'own' | 'company' | 'none';
+  /**
+   * The settings list only (P19.25-T4 AC-2, ADR-0282 §2): the item the row names beside *Ganti* — the first file, else
+   * video, else link of what agents are shown; `null` draws *Unggah materi*. Absent from an older API: none read.
+   */
+  materialItem?: { label: string; kind: 'file' | 'video' | 'link'; mimeType: string | null } | null;
+  /** The settings list only (P19.25-T4 AC-2): *"n dari 30 selesai"* — counted members done, begun, and counted. */
+  completion?: { done: number; started: number; of: number };
 }
 
 export interface TrainingSkillRow {
@@ -787,27 +892,13 @@ export interface CampaignRowPoster {
   color: string;
 }
 
-export interface QualificationRuleRow {
-  id: string;
-  kind: 'moc' | 'production_club' | 'promotion_path';
-  code: string;
-  name: string;
-  appliesToOrgLevelCodes: string[];
-  criteriaGroups: { mode: string; criteria: RequirementView[] }[];
-  groupMode: string;
-  reward: string;
-  rank: number;
-  /** Metric keys the product does not compute yet. A rule with any can never pass. */
-  waitingOnMetrics: string[];
-}
+/*
+ * *The carrier rules' read* (`listQualificationRules`, `GET /kpm/settings/campaigns/rules`) went with the *Production
+ * club tiers* tab (P19.25-T5 AC-1, ADR-0282 §6: *"MOC / Club: not shown anywhere for now"*). The rules stay stored.
+ */
 
 export const listCampaigns = (includeArchived = false) =>
   api<CampaignRow[]>(`/kpm/settings/campaigns${includeArchived ? '?includeArchived=true' : ''}`);
-
-export const listQualificationRules = (kind?: string) =>
-  api<QualificationRuleRow[]>(
-    `/kpm/settings/campaigns/rules${kind ? `?kind=${kind}` : ''}`,
-  );
 
 export const createCampaign = (body: Record<string, unknown>) =>
   api<CampaignRow>('/kpm/settings/campaigns', { method: 'POST', body });

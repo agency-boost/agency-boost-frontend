@@ -39,9 +39,9 @@ const COMPLETE: PitchMaterialsView = {
 const member = { membershipId: 'mem-1', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab' as const, status: 'active' as const, isKpmOwner: true, isKpmAdmin: false, directCount: 0 };
 const OWNER = makeMe({ membership: member, permissions: ['member:read_profile', 'kpm:read_profile', 'tenant_config:read', 'tenant_config:write', 'recruitment:read'] });
 
-const card = (title: string) => screen.getByRole('article', { name: title });
+const row = (title: string) => screen.getByText(title, { selector: 'p' }).closest('li') as HTMLElement;
 const SIX_WORDS = /\boffice\b|\bKPM\b|reports to|tagged to|untagged|unassigned/i;
-const ENGLISH = /\b(Missing|Complete|Uploaded|needs confirmation|Optional|Not uploaded yet|updated|View PDF|Replace|Upload PDF|is (complete|incomplete)|needs checking|Confirm this PDF)\b/;
+const ENGLISH = /\b(Missing|Complete|Uploaded|needs confirmation|Optional|Not uploaded yet|updated|View PDF|Replace|Upload (PDF|file)|is (complete|incomplete)|needs checking|Confirm this PDF|Ready|materials ready|Any format)\b/;
 
 /**
  * **P18.10-T4, the recruitment pitch in ID mode** — *Settings › Recruitment pitch* and the agents' *Pitch Materials*,
@@ -52,29 +52,24 @@ const ENGLISH = /\b(Missing|Complete|Uploaded|needs confirmation|Optional|Not up
 describe('P18.10-T4 the recruitment pitch in Indonesian', () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it('AC-2 says the office’s page in Indonesian, its figures Indonesian and the server’s words as served', async () => {
+  it('P19.21-T3 AC-6 says the list in Indonesian — “2/6 materi siap”, Siap · Perlu dicek · Belum ada, Lihat · Ganti · Unggah file', async () => {
     stubFetch({ 'GET /recruitment/pitch-materials': { body: PITCH } });
     renderInIndonesian(<RecruitmentPitchPage />, { me: OWNER });
-    const opportunity = await screen.findByRole('article', { name: 'Opportunity Overview' });
+    await screen.findByText('FAQ');
 
     expect(screen.getByRole('heading', { name: 'Recruitment pitch', level: 1 })).toBeInTheDocument();
-    expect(screen.getByText('Recruitment Pitch belum lengkap')).toBeInTheDocument();
-    expect(screen.getByText('2 belum ada, 1 perlu dicek.')).toBeInTheDocument();
-    expect(screen.getByRole('img', { name: '1 dari 4 dokumen lengkap' })).toHaveTextContent('1/4');
-    expect(within(opportunity).getByText('Terunggah · perlu konfirmasi')).toBeInTheDocument();
-    expect(within(opportunity).getByText('Gambaran_Peluang_v3.pdf')).toBeInTheDocument();
-    expect(within(opportunity).getByText('2,4 MB · diperbarui 12 Okt 2026')).toBeInTheDocument();
-    expect(within(opportunity).getByRole('group', { name: 'Pastikan PDF ini benar-benar memuat' })).toBeInTheDocument();
-    expect(within(opportunity).getByRole('checkbox', { name: LABELS.income })).toBeChecked();
-    expect(within(opportunity).getByRole('button', { name: 'Lihat PDF, Opportunity Overview — terbuka di tab baru' }))
-      .toHaveTextContent('Lihat PDF');
-    expect(within(opportunity).getByRole('button', { name: 'Ganti, Opportunity Overview' })).toHaveTextContent('Ganti');
-    expect(within(card('Proof & Credibility')).getByText('14 KB · diperbarui 30 Agu 2026')).toBeInTheDocument();
-    expect(within(card('FAQ')).getByText('Belum ada')).toBeInTheDocument();
-    expect(within(card('FAQ')).getByText('Belum diunggah')).toBeInTheDocument();
-    expect(within(card('FAQ')).getByRole('button', { name: 'Unggah PDF, FAQ' })).toHaveTextContent('Unggah PDF');
-    expect(within(card('Company Profile')).getByText('Opsional')).toBeInTheDocument();
-    expect(within(card('Company Profile')).getByText('< 1 KB · diperbarui 26 Sep 2026')).toBeInTheDocument();
+    expect(screen.getByLabelText('2 dari 6 materi siap')).toHaveTextContent('2/6');
+    expect(screen.getAllByText('materi siap · dipakai agent di Recruitment › Pitch Materials')[0]).toBeInTheDocument();
+    expect(within(row('Opportunity Overview')).getByText('Gambaran_Peluang_v3.pdf · 12 Okt 2026')).toBeInTheDocument();
+    expect(within(row('Opportunity Overview')).getByText('Perlu dicek')).toBeInTheDocument();
+    expect(within(row('Opportunity Overview')).getByRole('button', { name: /^Lihat Opportunity Overview/ })).toHaveTextContent('Lihat');
+    expect(within(row('Proof & Credibility')).getByText('Siap')).toBeInTheDocument();
+    expect(within(row('Proof & Credibility')).getByRole('button', { name: 'Ganti, Proof & Credibility' })).toHaveTextContent('Ganti');
+    expect(within(row('FAQ')).getByText('Belum ada')).toBeInTheDocument();
+    expect(within(row('FAQ')).getByText('Belum diunggah')).toBeInTheDocument();
+    expect(within(row('FAQ')).getByRole('button', { name: 'Unggah file, FAQ' })).toHaveTextContent('Unggah file');
+    expect(screen.getByText('Format apa saja: PDF, PowerPoint, Word, gambar, video, atau link')).toBeInTheDocument();
+    expect(screen.queryByText('Opsional')).not.toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(ENGLISH);
     expect(document.body.textContent).not.toMatch(SIX_WORDS);
   });
@@ -89,19 +84,22 @@ describe('P18.10-T4 the recruitment pitch in Indonesian', () => {
     expect(screen.getAllByText('Terunggah').length).toBeGreaterThan(0);
   });
 
-  it('AC-1 refuses a file in Indonesian before anything is sent, its size in Indonesian figures', async () => {
+  it('P19.21-T3 AC-6 refuses a file in Indonesian before anything is sent, its size in Indonesian figures', async () => {
     stubFetch({ 'GET /recruitment/pitch-materials': { body: PITCH } });
     renderInIndonesian(<RecruitmentPitchPage />, { me: OWNER });
-    await screen.findByRole('article', { name: 'FAQ' });
-    const picker = card('FAQ').querySelector('input[type=file]') as HTMLInputElement;
-    const huge = new File(['%PDF'], 'besar.pdf', { type: 'application/pdf' });
+    await screen.findByText('FAQ');
+    const picker = row('FAQ').querySelector('input[type=file]') as HTMLInputElement;
+    const huge = new File(['%PDF'], 'besar.mp4', { type: 'video/mp4' });
     Object.defineProperty(huge, 'size', { value: 26 * 1024 * 1024 });
     await userEvent.upload(picker, huge);
 
-    expect(await within(card('FAQ')).findByText('“besar.pdf” berukuran 26,0 MB. Ukuran PDF maksimal 25 MB.')).toBeInTheDocument();
-    await userEvent.upload(picker, new File(['x'], 'scan.pdf', { type: 'image/png' }));
-    // P19.6-T2 (ADR-0217 §1): a page is accepted too.
-    expect(await within(card('FAQ')).findByText('“scan.pdf” bukan PDF atau halaman HTML. Hanya PDF atau halaman HTML yang dapat diunggah di sini.')).toBeInTheDocument();
+    expect(await within(row('FAQ')).findByText(
+      '“besar.mp4” berukuran 26,0 MB. Ukuran file maksimal 25 MB — berikan video yang lebih besar sebagai link.',
+    )).toBeInTheDocument();
+    await userEvent.upload(picker, new File(['x'], 'data.xlsx', { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), { applyAccept: false });
+    expect(await within(row('FAQ')).findByText(
+      '“data.xlsx” bukan format materi pitch. Unggah PDF, PowerPoint, Word, gambar, atau video — atau berikan link.',
+    )).toBeInTheDocument();
   });
 
   it('AC-1 says a stale tick in Indonesian', async () => {
@@ -112,6 +110,9 @@ describe('P18.10-T4 the recruitment pitch in Indonesian', () => {
       },
     });
     renderInIndonesian(<RecruitmentPitchPage />, { me: OWNER });
+    await screen.findByText('FAQ');
+    // P19.21-T3 AC-6: the ticks are behind *Lihat*, in the material's sheet.
+    await userEvent.click(within(row('Opportunity Overview')).getByRole('button', { name: /^Lihat Opportunity Overview/ }));
     const opportunity = await screen.findByRole('article', { name: 'Opportunity Overview' });
     await userEvent.click(within(opportunity).getByRole('checkbox', { name: LABELS.support }));
 

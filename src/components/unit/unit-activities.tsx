@@ -30,7 +30,9 @@ import {
  * - **Controls**, the row under the slider (ADR-0229 §1): `[‹] 2 – 8 Nov 2026 [›]` — ‹ › one period, › disabled on the
  *   current one, the date a picker — then *Minggu | Bulan* (a Monday-to-Sunday week by default) and *Unit | Group*. Every
  *   control 13px / 600 / 44px at every size (MOB UI-171, `HEADER_CONTROL`).
- * - **The table**: a sticky *Aktivitas* column, a sticky *Total*, then one column per person — avatar and FIRST NAME.
+ * - **The table**: a sticky *Aktivitas* column, a sticky *Total*, then one column per person — photo (initials without
+ *   one) and FIRST NAME, **no AB / AAB label** (P19.18-T2 AC-2), in the server's order: AB → AAB → agents in each unit,
+ *   and for the KPM Owner and an Admin **the whole office** (`GET /unit/dashboard/activities` reads it for them).
  *   **On a phone only the person columns slide sideways** (the one sideways scroll, ADR-0227 §6); from 1024px every column
  *   shows. **On a phone a type's name is its *Nama singkat*, on one line** (MOB UI-180) — or, with none, the office's name
  *   on up to two lines — and **a tap on it shows the name in full**; from 768px the office's name, as before. **Each
@@ -39,10 +41,14 @@ import {
  *   Counts only, never points; **every figure the server's**, a category's subtotal the sum of its types' counts.
  *   **The two sticky columns are one solid block at every scroll position** (P19.11-T6 AC-2; UX-5): the fixed layout at
  *   every width, the columns sized by a `<colgroup>` and *Total*'s `left` the *Aktivitas* width itself (`STICKY_WIDTHS`).
+ *   **Every time the tab opens, all five categories are closed** (P19.18-T2 AC-1; the brief of 19 November 2026, part A),
+ *   each still showing every person's subtotal; a tap opens one and a tap closes it; leaving the tab and coming back
+ *   closes them again — the state lives in the table and dies with it. They were the first two open (MOB UI-183).
  * - **The ratio card below** (UI-053's shared card): *Ratio · 30 hari terakhir* at the section titles' size (MOB UI-185),
  *   always the last 30 days, with **one picker, *Unit ⌄*** (MOB UI-184): *Unit*, *Group*, then *PER ORANG* and every
  *   person of the Group. A person is read again with `ratioFor`, and the card shows **their own five ratios** — the table
- *   stays as it is while it is read.
+ *   stays as it is while it is read. **From 768px it runs the width, the four ratios as four equal tiles** under the
+ *   *Selling vs Recruitment* bar (P19.18-T2 AC-3; `RatioCard`'s `tiles`); a phone keeps the rows.
  * - **A leader by role with nobody yet** (MOB UI-181, D-37): the normal table, *0* and *·*, no person column, and the
  *   ratio card with *–* — never a paragraph. Anybody else on a typed address meets the screen's `empty`.
  *
@@ -119,7 +125,8 @@ export function UnitActivities({
       />
       <ActivityTable view={view} scope={scope} />
       <RatioCard
-        className="mt-3 lg:max-w-xl"
+        className="mt-3"
+        tiles
         ratios={ratios}
         days={view.ratios.days}
         headerRight={(
@@ -274,9 +281,13 @@ function Count({ n, strong = false }: { n: number; strong?: boolean }) {
 /**
  * **The activity table** — exported for `unit-activities.browser.spec.ts` (P19.11-T6 AC-2), which draws it in a real
  * Chrome. `phone` stands in for the width where there is no window to ask (`renderToStaticMarkup`); the screen passes
- * nothing and the table asks `useMediaQuery`.
+ * nothing and the table asks `useMediaQuery`. **`opened`** names the categories drawn open from the start — the browser
+ * spec's, which measures a type's row and has no hand to tap; the screen passes nothing, and every category starts closed
+ * (P19.18-T2 AC-1).
  */
-export function ActivityTable({ view, scope, phone: drawnAsPhone }: { view: UnitActivitiesView; scope: UnitScope; phone?: boolean }) {
+export function ActivityTable({
+  view, scope, phone: drawnAsPhone, opened = [],
+}: { view: UnitActivitiesView; scope: UnitScope; phone?: boolean; opened?: readonly string[] }) {
   const t = useMessages(unitDashboardMessages);
   const figures = useFigureLanguage();
   const captionId = useId();
@@ -284,7 +295,8 @@ export function ActivityTable({ view, scope, phone: drawnAsPhone }: { view: Unit
   const phone = drawnAsPhone ?? phoneNow;
   const people = scopePeople(view, scope);
   const totals: ScopeTotals = view.totals[scope];
-  const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set(view.sections.slice(0, 2).map((s) => s.code)));
+  // P19.18-T2 AC-1: every category closed when the tab opens; a tap opens it. Never kept: leaving the tab closes them.
+  const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set(opened));
   const n = (v: number) => formatNumber(v, {}, figures);
   const toggle = (code: string) => setOpen((now) => {
     const next = new Set(now);

@@ -2,257 +2,218 @@ import { defineMessages, type MessagesOf } from '@/i18n/catalogue';
 import { kept } from '@/i18n/kept';
 
 /**
- * **The Strategic Leader Forum's own words** — the list, a meeting's head, its tab strip, the two dialogs, the states
- * and how a write is said (P18.10-T4, people and forum; `functional/leader-forum.md`, *The module's own strings*).
+ * **The Strategic Leader Forum's words** (P19.22-T8; ADR-0276; `functional/leader-forum.md`, *The module's own strings*):
+ * the list, a forum's header card, its four tabs, the agenda, the action items, the dialogs, the states and the WhatsApp
+ * message *Bagikan* sends.
  *
- * **English is the source** of the keys: the prototype's strings as built and the module's own (D-copy), **none of the
- * six words in either language** — no *office*, no *KPM*. The Indonesian is the approved glossary's (OD-237; §B.0's
- * voice: *Anda*, imperative verbs, sentence case, no exclamation mark), with the words it lacked added to the glossary
- * for approval's §B.10 — *rapat* for a meeting, *notulen* for the minutes.
- *
- * **Kept in both languages** (§A): the forum's name and the tab names, *AgencyBoost*, *Core Leader* — counted, in its
- * English plural (§B.0 rule 8) — and a new meeting's name, *Strategic Check-in — #{n}*. **Content stays as typed** (ADR-0179 §5): a meeting's title once made, its agenda,
- * its tracker, a PIC and the branch's name. **A figure is never a message's**: the caller writes a date in the figures'
- * language (`useFigureLanguage()`) and passes it in. *Link copied ✓* is the copy controls' one word
- * (`lib/confirmations.ts`), not here.
+ * **Indonesian is the 19 November mockups' words, verbatim** (`revisions/2026-11-19/files/UI/mockups/slf-*`): *Forum
+ * berikutnya*, *Siapkan agenda*, *Semua forum*, *Akan datang · Selesai*, *Belum · Proses · Selesai*, *Tenggat*, *dari
+ * forum #n*, *Hapus action item?*. **English is ours**, from the same. Kept in both: *Agenda*, *Action items*, *MAPA
+ * driver*, *Informal group*, *PIC*, *core leader* — the client's own words on the Indonesian screens. **Content stays as
+ * typed** (ADR-0179 §5): an agenda line, an action item. **A figure is never a message's**: a date and a time are written
+ * by the caller in the figures' language and passed in.
  *
  * @moved lib/leader-meetings.ts
  * @moved components/leader-forum/forum-list.tsx
  * @moved components/leader-forum/forum-states.tsx
- * @moved components/leader-forum/meeting-card.tsx
- * @moved components/leader-forum/meeting-dialog.tsx
- * @moved components/leader-forum/meeting-head.tsx
- * @moved components/leader-forum/meeting-screen.tsx
- * @moved components/leader-forum/meeting-tabs.tsx
- * @moved components/leader-forum/meeting-writer.tsx
- * @moved components/leader-forum/share-dialog.tsx
+ * @moved components/leader-forum/forum-screen.tsx
+ * @moved components/leader-forum/forum-dialog.tsx
+ * @moved components/leader-forum/forum-people.tsx
+ * @moved components/leader-forum/choice-menu.tsx
+ * @moved components/leader-forum/agenda.tsx
+ * @moved components/leader-forum/action-items.tsx
+ * @moved components/leader-forum/print-layout.tsx
  * @moved app/leader-meetings/page.tsx
  * @moved app/leader-meetings/[meetingId]/page.tsx
  * @moved app/leader-meetings/shared/[token]/page.tsx
  */
 const en = {
-  /** The page's one subtitle (P18.9-T2 AC-1). */
-  sub: 'Biweekly check-ins with your core leaders — agenda, notes, and action items',
-  /** The filter, over the one read (`:2614-2616`): a filter naming a status follows the status words (§A.3). */
-  filters: { all: 'All', upcoming: 'Upcoming', past: 'Past' },
-  newMeeting: '+ New meeting',
-  open: 'Open',
-  allClear: 'All clear',
-  noMatch: 'No meetings match this filter.',
-  noMeetings: 'No meetings yet.',
-  loadingList: 'Loading meetings…',
-  loadingMeeting: 'Loading the meeting…',
-  back: '← Back to all meetings',
-  cadence: 'Recommended: every 2 weeks · 60–90 mins',
+  /** The list's note (AC-1). */
+  note: 'Core leaders meet every 2 weeks · 60–90 minutes',
+  newForum: 'New forum',
+  next: 'Next forum',
+  forumN: ({ n }: { n: number }) => `Forum #${n}`,
+  chipN: ({ n }: { n: number }) => `#${n}`,
+  /** *Hari ini* · *Besok* · *n hari lagi*. */
+  daysToGo: ({ n }: { n: number }) => (n === 0 ? 'Today' : n === 1 ? 'Tomorrow' : `${n} days to go`),
+  coreLeaders: ({ n }: { n: number }) => `${n} core leader${n === 1 ? '' : 's'}`,
+  everyoneEdits: 'everyone can edit',
+  prepare: 'Prepare the agenda',
+  all: 'All forums',
+  agendaCount: ({ n }: { n: number }) => `Agenda ${n} item${n === 1 ? '' : 's'}`,
+  /** *Action items* before the bold *x/y*, *selesai* after it. */
+  actionsLabel: kept('Action items'),
+  doneWord: 'done',
+  state: { upcoming: 'Upcoming', completed: 'Done' },
+  open: ({ n }: { n: number }) => `Open forum #${n}`,
+  noForums: 'No forum yet.',
+  loadingList: 'Loading the forums…',
+  loadingForum: 'Loading the forum…',
+  back: 'All forums',
   share: 'Share',
-  savePdf: 'Save as PDF',
-  save: 'Save',
-  /** *Can edit this MOM* (`:2723`) in the client's words (P18.9-T2 AC-3): *MOM* is in no string of the module. */
-  canEdit: 'Can edit these minutes',
-  manageTags: 'Manage tags →',
-  /** After the reader's own name on a chip. */
-  you: '(You)',
-  /** The three tabs (`:2728-2732`), names (§A.3). */
-  tabs: { overview: kept('Overview & Stats'), agenda: kept('Agenda'), actions: kept('Action Items') },
-  /** What a write says (*Saving*, L-110). */
-  saved: 'Saved',
-  allSaved: 'All changes saved',
-  conflict: 'Someone else changed this while you were editing. It now shows what they saved.',
-  failed: "Couldn't save that change. It's still here — try again.",
-  preparingPdf: 'Preparing PDF — use your browser’s print dialog to save',
-  /** A read that failed, under the shared banner. */
-  tryAgain: 'Try again',
-  /** The not-found state's way on, for a reader with no list to go back to. */
-  home: 'Go to your home page',
-  /** The meeting dialog (OD-145, ADR-0130). */
-  dialog: {
-    newTitle: 'New meeting',
-    detailsTitle: 'Meeting details',
-    title: 'Title',
-    date: 'Date',
-    create: 'Create meeting',
-    saveChanges: 'Save changes',
+  pdf: 'PDF',
+  changeWhen: 'Change date and time',
+  tabsLabel: 'Forum sections',
+  tabs: { mapa: kept('MAPA driver'), groups: kept('Informal group'), agenda: kept('Agenda'), actions: kept('Action items') },
+  /** The note over a tab that is Advanced analytics' own (AC-2). */
+  sameAs: ({ tab }: { tab: string }) => `Same as Advanced analytics › ${tab}`,
+  agenda: {
+    add: 'Add agenda',
+    placeholder: 'New agenda line',
+    tick: ({ text }: { text: string }) => `Done: ${text}`,
+    edit: ({ text }: { text: string }) => `Edit: ${text}`,
+    picOf: ({ text }: { text: string }) => `PIC for ${text}`,
+    everyone: 'Everyone',
+    noPic: 'No PIC',
+    choosePic: 'PIC',
+    empty: 'No agenda yet.',
+  },
+  actions: {
+    headers: { item: kept('Action item'), pic: 'PIC', due: 'Due', status: 'Status' },
+    from: ({ n }: { n: number }) => `from forum #${n}`,
+    status: { todo: 'Not yet', doing: 'In progress', done: 'Done' },
+    statusOf: ({ text }: { text: string }) => `Status of ${text}`,
+    dueOf: ({ text }: { text: string }) => `Due date of ${text}`,
+    picOf: ({ text }: { text: string }) => `PIC for ${text}`,
+    edit: ({ text }: { text: string }) => `Edit: ${text}`,
+    remove: ({ text }: { text: string }) => `Delete: ${text}`,
+    noDue: 'No due date',
+    add: 'Add action item',
+    placeholder: 'New action item',
+    carryHint: 'Unfinished action items move to the next forum automatically',
+    tapHint: 'Tap a status to change it · tap a text to edit it',
+    empty: 'No action items yet.',
+    confirmTitle: 'Delete action item?',
+    confirmBody: 'Also gone from the next forum. It cannot be undone.',
     cancel: 'Cancel',
-    delete: 'Delete meeting',
+    delete: 'Delete',
+  },
+  dialog: {
+    newTitle: 'New forum',
+    whenTitle: 'Forum date and time',
+    date: 'Date',
+    time: 'Time',
+    create: 'Create forum',
+    save: 'Save',
+    cancel: 'Cancel',
+    delete: 'Delete forum',
     confirmDelete: 'Delete',
     keep: 'Keep it',
-    needTitle: 'Give the meeting a title.',
+    deleteQuestion: ({ n }: { n: number }) => `Delete forum #${n}? Nothing has been written in it yet, and it can't be brought back.`,
     needDate: 'Pick a date.',
-    completed: 'This meeting has already taken place, so its date stays.',
-    hasMinutes: "Something has been written in this meeting, so it can't be deleted.",
+    needTime: 'Pick a time.',
   },
-  /** *Share these minutes* (`:2735-2745`; P18.9-T2 AC-3; OD-146). */
-  shareDialog: {
-    title: 'Share these minutes',
-    copy: 'Copy link',
-    stop: 'Stop sharing',
-    stopped: 'Sharing stopped',
-    failed: "Couldn't make a link. Try again.",
-    close: 'Close',
-  },
+  saved: 'Saved',
+  conflict: 'Someone else changed this while you were editing. It now shows what they saved.',
+  failed: "Couldn't save that change. Try again.",
+  preparingPdf: 'Preparing the PDF — use your browser’s print dialog to save it',
+  tryAgain: 'Try again',
+  home: 'Go to your home page',
   notFound: {
-    title: "This meeting can't be found.",
+    title: "This forum can't be found.",
     body: "It may have been deleted, or it isn't one you can open.",
   },
   linkNotFound: {
     title: "This link doesn't open anything.",
-    body: 'It may have expired or been stopped. Ask whoever shared it for a new one.',
+    body: 'It may have expired. Ask whoever shared it for a new one.',
   },
-  /** A meeting's state on its card and in its head (`:2600`). */
-  state: { upcoming: 'Upcoming', completed: 'Completed' },
-  /** *"3 core leaders tagged"*, singular for one (F-186). */
-  coreLeadersTagged: ({ n }: { n: number }) => `${n} core leader${n === 1 ? '' : 's'} tagged`,
-  /** The words after the bold count in *"4 open items"* (`:2606`); 0 is *All clear*, drawn apart. */
-  openItems: ({ n }: { n: number }): string => (n === 1 ? 'open item' : 'open items'),
-  /** The date's button in the head (ADR-0130 §4). */
-  changeDate: ({ title }: { title: string }) => `Change the date of ${title}`,
-  deleteQuestion: ({ title }: { title: string }) =>
-    `Delete “${title}”? Nothing has been written in it yet, and it can't be brought back.`,
-  /** The share dialog's hint (I-256), in the answered words of OD-146; `until` the day the link stops, written. */
-  shareHint: ({ branch, until }: { branch: string; until: string }) =>
-    `Anyone signed in to AgencyBoost at ${branch} can open this meeting's minutes with this link, read-only, until ${until}.`,
-  /** A new meeting's title, one past the highest number on the list (ADR-0130 §2): the meeting's name, kept. */
-  defaultTitle: ({ n }: { n: number }) => `${kept('Strategic Check-in')} — #${n}`,
-  /** Names joined as a sentence joins them: *a*, *a and b*, *a, b and c*. */
-  list: ({ items }: { items: readonly string[] }) =>
-    (items.length <= 1 ? items.join('') : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`),
-  /**
-   * **UI V1** (2026-10-30; UI-110; `kpm-mobile` 1, 4, 5, 6): the forum on a phone in the field shell — the list's cards,
-   * the meeting's header, its *Overview*, *Agenda* and *Action Items* as the owner drew them.
-   */
-  v1: {
-    coreLeaders: ({ n }: { n: number }) => `${n} ${n === 1 ? kept('Core Leader') : kept('Core Leaders')}`,
-    openPill: ({ n }: { n: number }) => `${n} ${n === 1 ? 'item' : 'items'} not done`,
-    allMeetings: 'All meetings',
-    pdf: 'PDF',
-    editors: ({ n }: { n: number }) => `${n} ${n === 1 ? kept('leader') : kept('leaders')} can edit these minutes`,
-    overviewTab: kept('Overview'),
-    /** The branch's strip (`kpm-mobile` 4): *28 Manpower · 19 Agents · 9 Units · 5 AB · 4 AAB*. */
-    chips: { manpower: kept('Manpower'), agents: kept('Agents'), units: 'Units', ab: kept('AB'), aab: kept('AAB') },
-    asOf: ({ day }: { day: string }) => `as of ${day}`,
-    ytdHead: ({ year, last }: { year: string; last: string }) => `${kept('YTD')} ${year} vs ${last}`,
-    ofLast: ({ value }: { value: string }) => `of ${value}`,
-    waiting: 'Waiting for data',
-    metricOpen: ({ name }: { name: string }) => `${name}: every figure`,
-    addItem: 'Add item',
-    picChip: `+ Add PIC`,
-    pickPic: `Choose a PIC`,
-    picOf: ({ text }: { text: string }) => `PIC for ${text}`,
-    noPic: `No PIC`,
-    tick: ({ text }: { text: string }) => `Done: ${text}`,
-    addAction: 'Add action',
-    actionTitle: 'Action',
-    actionOpen: ({ text }: { text: string }) => `Edit: ${text}`,
-    removeAction: 'Remove action',
-    removeQuestion: 'Remove this action? It cannot be brought back.',
-    remove: 'Remove',
-    moveName: 'this action',
-    untitled: 'Untitled',
-    lockLine: ({ names, list }: { names: readonly string[]; list: (items: readonly string[]) => string }) =>
-      `Only ${list([...names, `tagged ${kept('Core Leaders')}`])} can edit`,
+  whatsapp: {
+    head: ({ n, when }: { n: number; when: string }) => `Strategic Leader Forum · Forum #${n} · ${when}`,
+    open: 'Open (read-only):',
+    sharing: 'Opening WhatsApp…',
   },
 };
 
 const id: MessagesOf<typeof en> = {
-  sub: `Rapat dua mingguan bersama para ${kept('Core Leader')} Anda — agenda, catatan, dan tindakan`,
-  filters: { all: 'Semua', upcoming: 'Akan datang', past: 'Sudah lewat' },
-  newMeeting: '+ Rapat baru',
-  open: 'Buka',
-  allClear: 'Semua selesai',
-  noMatch: 'Tidak ada rapat yang cocok dengan filter ini.',
-  noMeetings: 'Belum ada rapat.',
-  loadingList: 'Memuat daftar rapat…',
-  loadingMeeting: 'Memuat rapat…',
-  back: '← Kembali ke semua rapat',
-  cadence: 'Disarankan: setiap 2 minggu · 60–90 menit',
+  note: 'Pertemuan core leader tiap 2 minggu · 60–90 menit',
+  newForum: 'Forum baru',
+  next: 'Forum berikutnya',
+  forumN: ({ n }) => `Forum #${n}`,
+  chipN: ({ n }) => `#${n}`,
+  daysToGo: ({ n }) => (n === 0 ? 'Hari ini' : n === 1 ? 'Besok' : `${n} hari lagi`),
+  coreLeaders: ({ n }) => `${n} core leader`,
+  everyoneEdits: 'semua bisa mengedit',
+  prepare: 'Siapkan agenda',
+  all: 'Semua forum',
+  agendaCount: ({ n }) => `Agenda ${n} item`,
+  actionsLabel: kept('Action items'),
+  doneWord: 'selesai',
+  state: { upcoming: 'Akan datang', completed: 'Selesai' },
+  open: ({ n }) => `Buka forum #${n}`,
+  noForums: 'Belum ada forum.',
+  loadingList: 'Memuat daftar forum…',
+  loadingForum: 'Memuat forum…',
+  back: 'Semua forum',
   share: 'Bagikan',
-  savePdf: 'Simpan sebagai PDF',
-  save: 'Simpan',
-  canEdit: 'Dapat mengubah notulen ini',
-  manageTags: 'Kelola tag →',
-  you: '(Anda)',
-  tabs: { overview: kept('Overview & Stats'), agenda: kept('Agenda'), actions: kept('Action Items') },
+  pdf: 'PDF',
+  changeWhen: 'Ubah tanggal dan jam',
+  tabsLabel: 'Bagian forum',
+  tabs: { mapa: kept('MAPA driver'), groups: kept('Informal group'), agenda: kept('Agenda'), actions: kept('Action items') },
+  sameAs: ({ tab }) => `Sama dengan Advanced analytics › ${tab}`,
+  agenda: {
+    add: 'Tambah agenda',
+    placeholder: 'Agenda baru',
+    tick: ({ text }) => `Selesai: ${text}`,
+    edit: ({ text }) => `Ubah: ${text}`,
+    picOf: ({ text }) => `PIC untuk ${text}`,
+    everyone: 'Semua',
+    noPic: 'Tanpa PIC',
+    choosePic: 'PIC',
+    empty: 'Belum ada agenda.',
+  },
+  actions: {
+    headers: { item: kept('Action item'), pic: 'PIC', due: 'Tenggat', status: 'Status' },
+    from: ({ n }) => `dari forum #${n}`,
+    status: { todo: 'Belum', doing: 'Proses', done: 'Selesai' },
+    statusOf: ({ text }) => `Status ${text}`,
+    dueOf: ({ text }) => `Tenggat ${text}`,
+    picOf: ({ text }) => `PIC untuk ${text}`,
+    edit: ({ text }) => `Ubah: ${text}`,
+    remove: ({ text }) => `Hapus: ${text}`,
+    noDue: 'Tanpa tenggat',
+    add: 'Tambah action item',
+    placeholder: 'Action item baru',
+    carryHint: 'Action item yang belum selesai otomatis pindah ke forum berikutnya',
+    tapHint: 'Ketuk status untuk mengubah · ketuk teks untuk mengedit',
+    empty: 'Belum ada action item.',
+    confirmTitle: 'Hapus action item?',
+    confirmBody: 'Juga hilang dari forum berikutnya. Tidak bisa dibatalkan.',
+    cancel: 'Batal',
+    delete: 'Hapus',
+  },
+  dialog: {
+    newTitle: 'Forum baru',
+    whenTitle: 'Tanggal dan jam forum',
+    date: 'Tanggal',
+    time: 'Jam',
+    create: 'Buat forum',
+    save: 'Simpan',
+    cancel: 'Batal',
+    delete: 'Hapus forum',
+    confirmDelete: 'Hapus',
+    keep: 'Jangan hapus',
+    deleteQuestion: ({ n }) => `Hapus forum #${n}? Belum ada yang ditulis di forum ini, dan forum ini tidak dapat dikembalikan.`,
+    needDate: 'Pilih tanggal.',
+    needTime: 'Pilih jam.',
+  },
   saved: 'Tersimpan',
-  allSaved: 'Semua perubahan tersimpan',
   conflict: 'Orang lain mengubah ini saat Anda sedang mengubahnya. Yang tampil sekarang adalah yang mereka simpan.',
-  failed: 'Gagal menyimpan perubahan itu. Perubahannya masih di sini — coba lagi.',
+  failed: 'Gagal menyimpan perubahan itu. Coba lagi.',
   preparingPdf: 'Menyiapkan PDF — gunakan dialog cetak browser Anda untuk menyimpannya',
   tryAgain: 'Coba lagi',
   home: 'Buka beranda Anda',
-  dialog: {
-    newTitle: 'Rapat baru',
-    detailsTitle: 'Detail rapat',
-    title: 'Judul',
-    date: 'Tanggal',
-    create: 'Buat rapat',
-    saveChanges: 'Simpan perubahan',
-    cancel: 'Batal',
-    delete: 'Hapus rapat',
-    confirmDelete: 'Hapus',
-    keep: 'Jangan hapus',
-    needTitle: 'Beri judul untuk rapat ini.',
-    needDate: 'Pilih tanggal.',
-    completed: 'Rapat ini sudah berlangsung, jadi tanggalnya tetap.',
-    hasMinutes: 'Rapat ini sudah berisi catatan, jadi tidak dapat dihapus.',
-  },
-  shareDialog: {
-    title: 'Bagikan notulen ini',
-    copy: 'Salin tautan',
-    stop: 'Hentikan berbagi',
-    stopped: 'Berbagi dihentikan',
-    failed: 'Gagal membuat tautan. Coba lagi.',
-    close: 'Tutup',
-  },
   notFound: {
-    title: 'Rapat ini tidak ditemukan.',
-    body: 'Rapat ini mungkin sudah dihapus, atau bukan rapat yang dapat Anda buka.',
+    title: 'Forum ini tidak ditemukan.',
+    body: 'Forum ini mungkin sudah dihapus, atau bukan forum yang dapat Anda buka.',
   },
   linkNotFound: {
     title: 'Tautan ini tidak membuka apa pun.',
-    body: 'Tautan ini mungkin sudah kedaluwarsa atau dihentikan. Minta tautan baru kepada orang yang membagikannya.',
+    body: 'Tautan ini mungkin sudah kedaluwarsa. Minta tautan baru kepada yang membagikannya.',
   },
-  state: { upcoming: 'Akan datang', completed: 'Selesai' },
-  coreLeadersTagged: ({ n }) => `${n} ${n === 1 ? kept('Core Leader') : kept('Core Leaders')} di-tag`,
-  openItems: () => 'item belum selesai',
-  changeDate: ({ title }) => `Ganti tanggal ${title}`,
-  deleteQuestion: ({ title }) =>
-    `Hapus “${title}”? Belum ada yang ditulis di dalamnya, dan rapat ini tidak dapat dikembalikan.`,
-  shareHint: ({ branch, until }) =>
-    `Siapa pun yang masuk ke ${kept('AgencyBoost')} di ${branch} dapat membuka notulen rapat ini dengan tautan ini, hanya untuk dibaca, sampai ${until}.`,
-  defaultTitle: ({ n }) => `${kept('Strategic Check-in')} — #${n}`,
-  list: ({ items }) => {
-    if (items.length <= 1) return items.join('');
-    if (items.length === 2) return `${items[0]} dan ${items[1]}`;
-    return `${items.slice(0, -1).join(', ')}, dan ${items[items.length - 1]}`;
-  },
-  v1: {
-    coreLeaders: ({ n }) => `${n} ${n === 1 ? kept('Core Leader') : kept('Core Leaders')}`,
-    openPill: ({ n }) => `${n} item belum selesai`,
-    allMeetings: 'Semua rapat',
-    pdf: 'PDF',
-    editors: ({ n }) => `${n} ${kept('leader')} dapat mengubah notulen ini`,
-    overviewTab: kept('Overview'),
-    chips: { manpower: kept('Manpower'), agents: kept('Agents'), units: kept('Unit'), ab: kept('AB'), aab: kept('AAB') },
-    asOf: ({ day }) => `per ${day}`,
-    ytdHead: ({ year, last }) => `${kept('YTD')} ${year} vs ${last}`,
-    ofLast: ({ value }) => `dari ${value}`,
-    waiting: 'Menunggu data',
-    metricOpen: ({ name }) => `${name}: semua angkanya`,
-    addItem: 'Tambah item',
-    picChip: `+ PIC`,
-    pickPic: `Pilih PIC`,
-    picOf: ({ text }) => `PIC untuk ${text}`,
-    noPic: `Tanpa PIC`,
-    tick: ({ text }) => `Selesai: ${text}`,
-    addAction: 'Tambah tindakan',
-    actionTitle: 'Tindakan',
-    actionOpen: ({ text }) => `Ubah: ${text}`,
-    removeAction: 'Hapus tindakan',
-    removeQuestion: 'Hapus tindakan ini? Tindakan ini tidak dapat dikembalikan.',
-    remove: 'Hapus',
-    moveName: 'tindakan ini',
-    untitled: 'Tanpa judul',
-    lockLine: ({ names, list }) => `Hanya ${list([...names, `${kept('Core Leader')} yang di-tag`])} dapat mengubah`,
+  whatsapp: {
+    head: ({ n, when }) => `Strategic Leader Forum · Forum #${n} · ${when}`,
+    open: 'Buka (hanya baca):',
+    sharing: 'Membuka WhatsApp…',
   },
 };
 

@@ -83,12 +83,13 @@ afterEach(() => vi.unstubAllGlobals());
  * **The phone is the T0 baseline** (P19.1-T2 AC-13; the full report's *mobile out of scope: it must not change*). The
  * digests were taken from the build before UI-116 (P18.9-T7's technique, `test/harness.tsx`): the list and the open
  * sheet at 375 and 360, and the sheet at 768, which UI-116 keeps as the phone's. *The sheet's two were re-recorded on
- * 2026-11-10 for P19.11-T3* (the client's revision redraws the phone's sheet; the note in the test says why).
+ * 2026-11-10 for P19.11-T3, and again on 2026-11-12 for P19.14-T1* (the client's revisions redraw the phone's sheet; the
+ * note in the test says why).
  */
 const BASELINE = {
   list: '5fc92766b47f69c3dfec477dcd7bb8fe22dea562e6177775d4d62fdbea08d394',
-  sheet375: '3b805c3d3d117a5615f5adab4dd34e6e5b154d6c87ec467658a27158f1ac5ae0',
-  sheet768: '435f923493a321bb5cb1db9290b37aa8cfe26df5599509d1b1b8d2050b8c8802',
+  sheet375: '41a745a3f5ed8a428203d19eb371d22081e77dc26b096bb4af9c3c3fc53ab0cf',
+  sheet768: '54c95b2280ee6b1acf79e8cba57a3485902b4c564a6d8b8a613a7ac77b5ff6a1',
 };
 
 describe('P19.1-T2 AC-13 the phone as it was', () => {
@@ -148,6 +149,10 @@ describe('P19.1-T2 AC-13 the phone as it was', () => {
      * one gap, a *›* in the head's tag line — so the old sheet cannot be put back from this one. The two digests are
      * this build's, and pin the phone's sheet from here; `components/lead-sheet-detail.spec.tsx` and
      * `lead-sheet-spacing.browser.spec.ts` say what changed.
+     *
+     * *Re-recorded 2026-11-12 (P19.14-T1 AC-4; PR-01, ADR-0254):* *Jenis kelamin* leaves *Detail* — a lead carries no
+     * client data; the proposal's step 1 asks the age and the gender — so the sheet is *Nama*, *WhatsApp*, *Email*. The
+     * two digests are this build's; `components/lead-age-gender.spec.tsx` pins the absence.
      */
     expect(within(sheet).getByRole('group', { name: 'Details' })).toBeInTheDocument();
     expect(within(sheet).queryByRole('group', { name: 'Age at next birthday' })).not.toBeInTheDocument();
@@ -242,23 +247,27 @@ describe('P19.1-T2 AC-2 a tablet in portrait: the phone’s top block, cards two
 });
 
 describe('P19.1-T2 AC-3 from 1024px, list + detail (UI-116)', () => {
-  it('P19.1-T2 AC-3 sizes the list 360px from 1024 and 420px from 1280, the pane never under 540px', async () => {
+  /*
+   * *Amended 2026-11-12 (P19.13-T1 AC-1, AC-2; UI-192, the report's token *List + detail*, ADR-0252):* the list is 360px at
+   * every desktop width and the page keeps no gutter of its own — the frame's 32px sides are every page's. The pane is
+   * 588px at 1280 and 508px at 1024 beside the floating rail (12 + 64px).
+   */
+  it('P19.13-T1 AC-2 sizes the list 360px at every desktop width inside the page frame, with no gutter of its own', async () => {
     const { SPLIT } = await import('@/components/leads-list');
     open(1024);
     await list();
     const split = document.querySelector('[data-leads-split]')!;
-    expect(wears(split, 1024).split(' ')).toContain('grid-cols-[22.5rem_minmax(0,1fr)]');
-    expect(wears(split, 1280).split(' ')).toContain('xl:grid-cols-[26.25rem_minmax(0,1fr)]'.slice(3));
-    expect(22.5 * 16).toBe(SPLIT.listLaptop);
-    expect(26.25 * 16).toBe(SPLIT.listWide);
+    expect(wears(split, 1024).split(' ')).toContain('grid-cols-[var(--list-pane)_minmax(0,1fr)]');
+    expect(wears(split, 1280).split(' ')).toContain('grid-cols-[var(--list-pane)_minmax(0,1fr)]');
+    expect(wears(split, 1280)).not.toMatch(/26\.25rem/);
+    expect(SPLIT.list).toBe(360);
     expect(split).toHaveClass('gap-4');
-    // The page's gutter: the shell's 40px less 20 from 1024px, as the mockup's frames draw it.
+    // No gutter of the page's own: the frame's sides are the shell's (`main`, `lg:px-frame`).
     const page = document.querySelector('[data-leads-page]')!;
-    expect(wears(page, 1024).split(' ')).toContain('-mx-5');
-    expect(wears(page, 375)).toBe('');
-    // 1024: the 64px rail (P19.1-T1 AC-4); 1280: the 252px sidebar (`--sidebar-width`).
-    expect(1024 - 64 - 2 * SPLIT.gutter - SPLIT.listLaptop - SPLIT.gap).toBeGreaterThanOrEqual(SPLIT.paneMin);
-    expect(1280 - 252 - 2 * SPLIT.gutter - SPLIT.listWide - SPLIT.gap).toBeGreaterThanOrEqual(SPLIT.paneMin);
+    expect(page.getAttribute('class')).toBeNull();
+    // 1024: the floating 64px rail 12px off the edge; 1280: the 240px panel 12px off it — the page starts at 252px.
+    expect(1024 - SPLIT.rail - 2 * SPLIT.gutter - SPLIT.list - SPLIT.gap).toBe(SPLIT.paneMin);
+    expect(1280 - 252 - 2 * SPLIT.gutter - SPLIT.list - SPLIT.gap).toBe(588);
   });
 
   it.each([1024, 1280])('P19.1-T2 AC-3 at %ipx: the list scrolls on its own, a long note ends in “…”, the first lead open in the pane', async (px) => {
@@ -399,7 +408,9 @@ describe('P19.1-T2 AC-4 at 1280px: open, save, and never lose an edit silently (
     await userEvent.type(remarks, 'Hot button: the eldest starts university in two years.');
     await userEvent.keyboard('{Escape}');
     await waitFor(() => expect(screen.queryByRole('region', { name: 'Felicia Elvina' })).not.toBeInTheDocument());
-    expect(screen.getByText('Choose a lead to open it here.')).toBeInTheDocument();
+    // P19.13-T1 AC-5 (O-2, OD-321): the empty pane's two lines.
+    expect(screen.getByText('Choose a lead to see its details')).toBeInTheDocument();
+    expect(screen.getByText('The lead you choose shows here.')).toBeInTheDocument();
     expect(card('Felicia Elvina')).not.toHaveClass('shadow-[inset_0_0_0_2px_var(--color-primary)]');
   });
 

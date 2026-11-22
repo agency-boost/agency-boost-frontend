@@ -65,15 +65,15 @@ describe('/training/[categoryCode]/[moduleCode], a module’s page (P18.2-T1)', 
       expect(screen.queryByRole('navigation', { name: 'Training' })).not.toBeInTheDocument();
     });
 
-    it('P18.2-T1 AC-5, P18.7-T9 AC-2 links back to the category’s list by that page’s title, Back to Training Modules', async () => {
+    it('P18.2-T1 AC-5, P18.7-T9 AC-2 links back to the category’s list by that page’s title, Back to Training (UI-197 since P19.13-T4)', async () => {
       show();
       await ready();
-      const back = screen.getByRole('link', { name: 'Back to Training Modules' });
+      const back = screen.getByRole('link', { name: 'Back to Training' });
       expect(back).toHaveAttribute('href', '/training/SALES');
       // UI-067: *‹ Training Modules* in a 48px row below 1024px, the long words from 1024px.
       expect(wears(back, 375)).toContain('min-h-12');
-      expect(within(back).getByText('Training Modules')).toHaveClass('lg:hidden');
-      expect(within(back).getByText('Back to Training Modules')).toHaveClass('max-lg:hidden');
+      expect(within(back).getByText('Training')).toHaveClass('lg:hidden');
+      expect(within(back).getByText('Back to Training')).toHaveClass('max-lg:hidden');
     });
 
     it('UI-067 heads the navy lesson card with Skill: {label} and the module’s place in its skill', async () => {

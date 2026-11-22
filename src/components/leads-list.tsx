@@ -1,7 +1,9 @@
 'use client';
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { Boost } from '@/components/boost';
 import { LeadCard } from '@/components/lead-card';
+import { LeadSearch, LeadTypeChips } from '@/components/lead-list-controls';
 import { LeadPane, LeadSheet } from '@/components/lead-sheet';
 import { ClosedLeads, loadClosed, SORT_CHOICES, type List, type Sort } from '@/components/leads-table';
 import { Dialog } from '@/components/ui/dialog';
@@ -28,12 +30,15 @@ import { useTenantConfig } from '@/lib/tenant-config-cache';
 const ORDERS = SORT_CHOICES.filter((choice) => choice.sort?.key !== 'type');
 
 /**
- * **The list beside the pane, from 1024px** (P19.1-T2 AC-3; UI-116; `leads-tablet-desktop` frames 1 and 1b), in px: the
- * list 360 from 1024 to 1279 beside the 64px rail and 420 from 1280, a 16px gap, and the page's 20px gutter
- * (`app/(agent)/leads/page.tsx`). So the pane is 1024 − 64 − 2×20 − 360 − 16 = **544px** at 1024 and 1280 − 252 − 2×20 −
- * 420 − 16 = **552px** at 1280: never under the report's ~540. The classes below are these numbers in rem.
+ * **The list beside the pane, from 1024px** (P19.1-T2 AC-3; UI-116; `leads-tablet-desktop` frames 1 and 1b), in px.
+ *
+ * *Changed 2026-11-12 (P19.13-T1 AC-1, AC-2; UI-192, the report's token *List + detail*; ADR-0252):* **the list 360 at
+ * every desktop width, a 16px gap, inside the page frame's 32px sides** — where it was 360 then 420 from 1280, with a
+ * 20px gutter of the page's own (`lg:-mx-5`). So the pane is 1280 − 252 − 2×32 − 360 − 16 = **588px** at 1280 and grows
+ * with the frame to 880px; beside the floating 64px rail at 1024 it is 1024 − 76 − 2×32 − 360 − 16 = **508px**, under
+ * the report's ~540 — the frame's sides are every page's now, and the pane is the phone's sheet, drawn for 375px.
  */
-export const SPLIT = { listLaptop: 360, listWide: 420, gap: 16, gutter: 20, paneMin: 540 } as const;
+export const SPLIT = { list: 360, gap: 16, gutter: 32, rail: 76, paneMin: 508 } as const;
 
 /** The pane's lead: one of the list's, a new one, or none. */
 type Selection = { id: string } | 'new' | null;
@@ -355,55 +360,26 @@ export function LeadsList({ split = false, addRequest = 0 }: {
   } : undefined);
 
   const search = (
-    <div role="search" className="flex gap-2" aria-label={t.searchAndFilter}>
-      <label className="flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-pill bg-card px-3.5 text-muted focus-within:outline focus-within:outline-2 focus-within:outline-focus-ring">
-        <LineIcon name="search" className="h-[18px] w-[18px] shrink-0" />
-        <span className="sr-only">{t.list.search}</span>
-        <input
-          type="search"
-          value={term}
-          placeholder={t.list.search}
-          onChange={(e) => { setTerm(e.target.value); setExpanded(false); }}
-          className="min-w-0 flex-1 bg-transparent text-md text-ink outline-none placeholder:text-signal-grey"
-        />
-      </label>
-      <button
-        type="button"
-        onClick={() => setFiltersOpen(true)}
-        aria-label={filterOn ? t.list.filterOn : t.list.filter}
-        aria-haspopup="dialog"
-        className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-card text-navy hover:bg-hover-row"
-      >
-        <LineIcon name="adjust" className="h-5 w-5" />
-        {filterOn && <span aria-hidden="true" className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-primary" />}
-      </button>
-    </div>
+    <LeadSearch
+      value={term}
+      onChange={(next) => { setTerm(next); setExpanded(false); }}
+      filter={(
+        <button
+          type="button"
+          onClick={() => setFiltersOpen(true)}
+          aria-label={filterOn ? t.list.filterOn : t.list.filter}
+          aria-haspopup="dialog"
+          className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-card text-navy hover:bg-hover-row"
+        >
+          <LineIcon name="adjust" className="h-5 w-5" />
+          {filterOn && <span aria-hidden="true" className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-primary" />}
+        </button>
+      )}
+    />
   );
 
-  const chips = (
-    <div role="group" aria-label={t.list.chips} className="my-2.5 flex gap-1.5">
-      {(['all', 'sales', 'recruitment'] as const).map((type) => (
-        <button
-          key={type}
-          type="button"
-          aria-pressed={chip === type}
-          aria-label={t.list.chipSaid({ label: typeName(type), n: counts[type] })}
-          onClick={() => chooseChip(type)}
-          className={cn(
-            // Already a header control — 13px / 600 / 44px (P19.8-T1 AC-1; R6, MOB UI-171: *Semua · Sales · Recruit*, ok) —
-            // and written as it was, so the phone's list is drawn to the byte as before (`HEADER_CONTROL`'s three in it).
-            'flex min-h-11 items-center gap-1.5 rounded-pill px-3.5 text-base font-semibold',
-            chip === type ? 'bg-secondary text-secondary-contrast' : 'bg-card text-navy hover:bg-hover-row',
-          )}
-        >
-          {typeName(type)}
-          <span className={cn('text-xs font-semibold', chip === type ? 'text-secondary-muted' : 'text-muted')}>
-            {open ? counts[type] : ''}
-          </span>
-        </button>
-      ))}
-    </div>
-  );
+  // The search pill and the chips are `lead-list-controls.tsx`'s (P19.16-T4 AC-2): a coachee's *Leads* tab draws them too.
+  const chips = <LeadTypeChips chip={chip} onChip={chooseChip} counts={counts} counted={open !== null} />;
 
   const strip = chip !== 'all' && ladder.length > 0 && (
     <div
@@ -521,7 +497,8 @@ export function LeadsList({ split = false, addRequest = 0 }: {
         data-leads-split=""
         className={cn(
           'grid h-[calc(100dvh-7.5rem)] min-h-[28rem] gap-4 -mb-8',
-          'grid-cols-[22.5rem_minmax(0,1fr)] xl:grid-cols-[26.25rem_minmax(0,1fr)]',
+          // P19.13-T1 (UI-192): the token's 360px list (`--list-pane`) at every desktop width, the pane the rest.
+          'grid-cols-[var(--list-pane)_minmax(0,1fr)]',
         )}
       >
         <div className="flex min-h-0 min-w-0 flex-col" data-leads-column="">
@@ -555,8 +532,17 @@ export function LeadsList({ split = false, addRequest = 0 }: {
               onDirtyChange={onPaneDirty}
             />
           ) : open && held.length > 0 ? (
-            <div className="flex h-full items-center justify-center rounded-lg bg-card px-6 text-center text-md text-muted" data-lead-pane-empty="">
-              {t.list.choose}
+            /*
+             * *Changed 2026-11-12 (P19.13-T1 AC-5; O-2, OD-321's default; the approved mockup's `.det`):* thinking Boost,
+             * *Pilih lead untuk melihat detailnya* in the ink and *Lead yang dipilih tampil di sini.* in grey, centred.
+             */
+            <div
+              className="flex h-full flex-col items-center justify-center gap-2.5 rounded-lg bg-card px-6 text-center text-md text-muted"
+              data-lead-pane-empty=""
+            >
+              <Boost pose="thinking" size={120} />
+              <b className="font-bold text-ink">{t.list.choose}</b>
+              <span>{t.list.chosenHere}</span>
             </div>
           ) : null}
         </div>

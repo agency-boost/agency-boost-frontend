@@ -54,6 +54,23 @@ const PATHS = {
   plane: <path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z" />,
   /** ↶ — put the automatic figure back: Goal Settings' *Pakai otomatis* (P19.8-T5, MOB UI-190). */
   undo: <><path d="M9 14 4 9l5-5" /><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" /></>,
+  /** The Pengaturan hub's rows (P19.21-T2; the mockup's Tabler glyphs): Lead statuses ⇉, Capability Mapping's stairs, Tampilan KPM's palette. */
+  arrowsRight: <><path d="M21 17H3" /><path d="m18 4 3 3-3 3" /><path d="m18 20 3-3-3-3" /><path d="M21 7H3" /></>,
+  stairs: <path d="M22 5h-5v5h-5v5H7v5H2" />,
+  palette: <><path d="M12 21a9 9 0 0 1 0-18c4.97 0 9 3.58 9 8 0 1.06-.47 2.08-1.32 2.83-.84.75-1.99 1.17-3.18 1.17H14a2 2 0 0 0-1 3.75A1.3 1.3 0 0 1 12 21" /><circle cx="8.5" cy="10.5" r="1" /><circle cx="12.5" cy="7.5" r="1" /><circle cx="16.5" cy="10.5" r="1" /></>,
+  /** A picture — *Tampilan KPM*'s logo, square logo and mascot rows (P19.21-T4 AC-2). */
+  photo: <><rect x="4" y="4" width="16" height="16" rx="3" /><circle cx="9" cy="9" r="1.5" /><path d="m4 16 4.5-4.5a2 2 0 0 1 2.8 0L16 16" /><path d="m14 14 1.5-1.5a2 2 0 0 1 2.8 0L20 14" /></>,
+  /** *Aa* — *Tampilan KPM*'s *Nama sistem* row (P19.21-T4 AC-1). */
+  letterCase: <><path d="M3 19 7.5 6 12 19" /><path d="M4.6 14.5h5.8" /><circle cx="17.5" cy="15.5" r="3.5" /><path d="M21 12v7" /></>,
+  /** A phone's status bar, in *Tampilan KPM*'s live preview (P19.21-T4 AC-2). */
+  wifi: <><path d="M5 10.5a10 10 0 0 1 14 0" /><path d="M8 13.5a5.5 5.5 0 0 1 8 0" /><path d="M12 17h.01" /></>,
+  battery: <><rect x="3" y="8" width="16" height="9" rx="2" /><path d="M21 11v3" /><path d="M6 11v3M9 11v3M12 11v3" /></>,
+  /** Tabler's `ti-folder`: a training category's square in Pengaturan › Training (P19.25-T4 AC-1). */
+  folder: <path d="M5 4h4l3 3h7a2 2 0 0 1 2 2v8a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2v-11a2 2 0 0 1 2 -2" />,
+  /** Tabler's `ti-file-text`: a training module's row (P19.25-T4 AC-1). */
+  fileText: <><path d="M14 3v4a1 1 0 0 0 1 1h4" /><path d="M17 21h-10a2 2 0 0 1 -2 -2v-14a2 2 0 0 1 2 -2h7l5 5v11a2 2 0 0 1 -2 2z" /><path d="M9 9h1M9 13h6M9 17h6" /></>,
+  /** Tabler's `ti-paperclip`: the file a module's row names beside *Ganti* (P19.25-T4 AC-2). */
+  paperclip: <path d="M15 7l-6.5 6.5a1.5 1.5 0 0 0 3 3l6.5 -6.5a3 3 0 0 0 -6 -6l-6.5 6.5a4.5 4.5 0 0 0 9 9l6.5 -6.5" />,
 } as const;
 
 export type LineIconName = keyof typeof PATHS | NavIconName;

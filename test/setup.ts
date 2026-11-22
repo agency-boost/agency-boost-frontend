@@ -76,11 +76,13 @@ afterEach(() => {
     // No storage, nothing kept.
   }
   /*
-   * **The tab's view stays with the test that chose it** (P19.2-T1; ADR-0198 §5): opening an office page as an Owner
-   * remembers the office view in `sessionStorage`, which jsdom keeps per spec file, so the next test would start in it.
+   * *Removed 2026-11-20 (P19.17-T3; ADR-0269):* the tab's view (`ab.view`, ADR-0198 §5) — there is no view any more.
+   *
+   * **The sidebar's folded groups stay with the test that folded them** (P19.13-T2 AC-5, P19.17-T3 AC-5): a group the
+   * reader folds is remembered for the tab's session, in `sessionStorage`, so the next test would start with it folded.
    */
   try {
-    window.sessionStorage.removeItem('ab.view');
+    window.sessionStorage.removeItem('ab.sidebar.closed');
   } catch {
     // No storage, nothing kept.
   }

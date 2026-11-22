@@ -38,7 +38,11 @@ export function HomeChart({ activity, className }: { activity: HomeActivity; cla
       <SectionHead id="home-chart" title={t.heading}>
         {highest > 0 && <span className="text-md font-semibold text-muted">{t.total({ n: activity.total })}</span>}
       </SectionHead>
-      <Link href="/activity/log" className="block rounded-lg bg-card px-3 pb-2.5 pt-3 lg:px-3.5 lg:hover:bg-hover-row">
+      {/* From 1024px the card fills its column's last space, its content centred (P19.13-T4 AC-2; UI-195). */}
+      <Link
+        href="/activity/log"
+        className="block rounded-lg bg-card px-3 pb-2.5 pt-3 lg:flex lg:flex-1 lg:flex-col lg:justify-center lg:px-3.5 lg:hover:bg-hover-row"
+      >
         {highest === 0 ? (
           <span className="flex flex-col items-center py-2 text-center">
             <Boost pose="sleeping" size={120} />

@@ -42,8 +42,10 @@ function unitsUnder(choices: RoutingChoice[], request: PendingRequest): RoutingC
  * Declining leaves them in the office, free to ask somebody else — a refusal, not a removal. An approval the leader
  * limit refused may be asked of AgencyBoost (ADR-0157). `onCount` hears how many are waiting, each time it changes.
  */
-export function RequestInbox({ today, onCount, empty }: {
+export function RequestInbox({ today, onCount, empty, scope }: {
   today?: string;
+  /** P19.20-T6 AC-1: `'mine'` — only the requests to join the reader's own unit (User Management's *Pending Requests*). */
+  scope?: 'mine';
   onCount?: (n: number) => void;
   /** What an empty inbox shows in place of the shared line — User Management's Boost (UI-089, Phase 18.11 T9). */
   empty?: React.ReactNode;
@@ -77,7 +79,7 @@ export function RequestInbox({ today, onCount, empty }: {
 
   const load = useCallback(async () => {
     try {
-      const [inbox, choices] = await Promise.all([readInbox(), readRoutingChoices()]);
+      const [inbox, choices] = await Promise.all([readInbox(scope), readRoutingChoices()]);
       show(inbox);
       setRouting(choices);
       if (mayAsk) setAsks(await readLeaderLimitRequests().catch(() => []));
@@ -85,7 +87,7 @@ export function RequestInbox({ today, onCount, empty }: {
       setError(toDisplayError(err));
       setRequests([]);
     }
-  }, [mayAsk, show]);
+  }, [mayAsk, show, scope]);
 
   useEffect(() => {
     void load();

@@ -90,7 +90,8 @@ describe('P18.10-T4 Settings › Ratio benchmarks in Indonesian', () => {
     renderInIndonesian(page(), { me: OWNER });
     await screen.findByRole('heading', { name: 'Selling success rate' });
 
-    expect(screen.getByRole('heading', { name: 'Ratio benchmarks', level: 1 })).toBeInTheDocument();
+    // P19.21-T3 AC-1: the setting's name, its tab Ratio benchmarks.
+    expect(screen.getByRole('heading', { name: 'Activity types', level: 1 })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Activity types' })).toBeInTheDocument();
     expect(screen.getByText('Yang dihitung setiap ratio, dan apa yang dianggap sesuai target.')).toBeInTheDocument();
     expect(screen.getByText('Dihitung dari aktivitas 30 hari terakhir.')).toBeInTheDocument();

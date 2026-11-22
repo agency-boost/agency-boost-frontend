@@ -32,6 +32,9 @@ export const KEPT_ENGLISH = {
     'Overview', 'Data upload', 'Activity types', 'Lead statuses', 'Activation checklist', 'Capability Mapping',
     'Events', 'Campaigns', 'Products', 'Recruitment pitch', 'Branch info', 'All members', 'Import people', 'Org tree',
     'Manage KPM admins',
+    // P19.23-T4 (ADR-0278): *Perusahaan & template*'s words the 20 Nov mockups keep English — the first card, a product's
+    // tab and a row of *Pengaturan template*.
+    'Default template', 'Sales attack plan', 'Objection handling',
     // UI V1 (UI-004, D-13, D-20; ADR-0180): the field shell's tab bar, its *Lainnya* sheet and its regrouped sidebar — the
     // report's own words, which it gives in English inside the Indonesian UI (`lib/field-nav.ts`). The groups' headings
     // (*Saya*, *Aktivitas*, *Tim saya*, *Program*) are Indonesian words, translated (`shellMessages`); *KPM* is above.
@@ -42,9 +45,17 @@ export const KEPT_ENGLISH = {
     'Companies', 'KPMs', 'Platform admin',
     'Manage companies', 'Org role ladder', 'All KPMs', 'Pending KPM requests', 'Leaders past the limit',
     'Billing & subscription', 'KPM Owners & Admins', 'Audit / role change log', 'Cross-platform analytics',
+    // P19.13-T3 (UI-199, ADR-0253 §8; `glossary.md`): People's fifth item, and the page's title — the report's own words,
+    // the same in the Indonesian UI (Appendix A: *Menu/title "Core leaders & groups"*).
+    'Core leaders & groups',
     // The Super Admin's bottom bar (P19.2-T1 AC-9; UI-127, the owner's of 2026-11-02, *Overview · KPMs · Perusahaan ·
     // Analytics · Lainnya*): its fourth item, which the owner gives in English inside the Indonesian bar.
     'Analytics',
+    // P19.17-T3 (ADR-0269; the brief of 19 November, part E: *KPM admins (user-shield)*): People's fourth item.
+    'KPM admins',
+    // P19.23-T6 (ADR-0279; the Super Admin mockups' frames f52–f55): the console's *Platform* item and title, and its first
+    // section, English in the Indonesian UI.
+    'Platform', 'Audit log',
   ],
   /**
    * §A.2 — a destination's title, its menu item in title case, and the other titles that are names. The titles that
@@ -83,6 +94,8 @@ export const KEPT_ENGLISH = {
     // UI V1 (UI-109, the report's own word): KPM Analytics' second tab, *Overview | Compliance*, in both languages.
     'Compliance',
     'Activity Mgmt', 'Events', 'Campaigns',
+    // P19.19-T3 (ADR-0272 §6; the brief's §6): the KPM Overview's new compliance card, and *Performa vs target*'s navy line.
+    'Leads Mgmt', 'Total KPM',
     'Overview & Stats', 'Agenda', 'Action Items',
     'Activity types', 'Ratio benchmarks',
     'Categories', 'Skills', 'Modules',
@@ -117,9 +130,13 @@ export const KEPT_ENGLISH = {
     'Appointments to hold this month', 'Leads to contact this month', 'On-track / pace status',
     'Selling vs Recruitment balance', 'Selling success rate', 'Recruitment success rate', 'Leads per activity',
     'Set appointment to meeting', 'Your logged leads-to-appointment rate', 'Your logged closing rate',
-    'This month’s APE target', 'Closings over the last 30 days', 'Closings needed per week',
+    'APE target per month', 'Closings over the last 30 days', 'Closings needed per week',
     'Activity target for the period', 'Logged against the activity target',
     'Activity target for the last 7 days, pro-rated', 'Activation completion', 'Activation day', 'Training completion',
+    // P19.25-T4 (ADR-0282 §2): `TRAINING_MODULE_DONE_COUNT`.
+    'Members who finished a module',
+    // P19.25 (ADR-0281; `metrics-and-definitions.md`, `EVENT_KEHADIRAN`): an event's roll call, hadir or tidak hadir.
+    'Kehadiran — hadir or tidak hadir',
     'Event attendance status', 'Event attendance rate', 'Event NPS', 'Campaign qualification',
     'Maintenance of Contract', 'Production club tier', 'Recruitment pipeline now', 'Expected to close',
     'Open sales leads', 'Sales leads closing this month', 'Recruitment candidates nominated this month',
@@ -134,13 +151,16 @@ export const KEPT_ENGLISH = {
     'MOC rolling persistency', 'Activation cohort', 'Annual Active Agents', 'Avg. Monthly AA', 'Case submission',
     'Average Case Size', 'Cases/producing agents', 'Activation completion rate', 'Goal set', 'First sale',
     'Counts for production', '3M activation', '3M activation %',
-    // P19.1-T6 (ADR-0193): the Unit Dashboard's *Potensi* tab — a lead's switch, the tab's AA, a kandidat's rekrut.
-    'Potensi', 'AA (the Potensi tab’s)', 'Rekrut',
+    // P19.1-T6 (ADR-0193): the Unit Dashboard's *Potensi* tab — a lead's switch. Its AA and rekrut retired with
+    // `AA_THIS_MONTH` and `REKRUT_THIS_MONTH` (P19.18-T3, ADR-0271 §8); *Rekrut*, the tile's word, is a KPI name below.
+    'Potensi',
     // P19.3-T1 (ADR-0201 to ADR-0203): a leader row's uploaded unit persistency, and the forum's D7 and recruitment rows.
     'Unit persistency', '3M new agent %', 'Recruitment, avg. monthly',
     // P19.5-T4 (ADR-0216 §4): the surveys' six (`metrics-and-definitions.md` §A.15).
     'Survey NPS', 'Survey responses', 'Item with an issue', 'Items with an issue, per person', 'Leader support',
     'Coaching downline',
+    // P19.22-T6, T7 (ADR-0276 §1, §5): NPS's headline and *Per orang*'s *n item*.
+    'Survey NPS, whole KPM', 'Problem items, per person',
     // P19.5-T2 (ADR-0214 §10, §11): the Data upload's two (`metrics-and-definitions.md`, *Month complete*, *Year to date
     // (calculated)*).
     'Month complete', 'Year to date (calculated)',
@@ -150,6 +170,11 @@ export const KEPT_ENGLISH = {
     'Your open leads',
     // P19.12-T6 (ADR-0249 §4): *Grup informal*'s line (`metrics-and-definitions.md` §A.18).
     'ABs not in your group',
+    // P19.17-T1 (ADR-0267): the owner's 19 November definitions (`metrics-and-definitions.md` §A.20, §A.3) — three of them
+    // the owner's own Indonesian words, the same in both languages.
+    'Recruitment', 'Pakai', 'Pernah pakai', 'Pakai 14 hari terakhir', 'Power user', 'Coaching status',
+    // P19.19-T3 (ADR-0272 §6): the KPM Overview's *Leads Mgmt* card (`metrics-and-definitions.md` §A.21).
+    'Leads managed',
     // P19.5-T3 (ADR-0215): the *Advanced analytics* page's nineteen (`metrics-and-definitions.md` §A.15) — Demographics, the
     // events' NPS for a period, Quant's seven, the peers' two and Sub-group's eight.
     'Demographics', 'Event NPS, for a period', 'A1 Recruitment per leader', 'A2 Net growth in annual active agents',
@@ -163,6 +188,9 @@ export const KEPT_ENGLISH = {
    * (Rp Jt)* keep their names; the unit in brackets is a format, which P18.10-T3 writes in each language (§E).
    */
   kpis: [
+    // The *Potensi* tab's second tile and the AB group targets' *Target Rekrut* (P19.18-T3, ADR-0271 §8; ADR-0270): the
+    // client's word for `RECRUITS_JOINED`, kept in both languages — a metric's name until `REKRUT_THIS_MONTH` retired.
+    'Rekrut',
     // The forum's *Overview & Stats*.
     'Manpower', '# of agents', '# of units', '# of AB', '# of AAB', 'Metrics', 'Full Year & YTD View', 'Monthly View',
     'Full Year', 'YTD', 'This Month, Last Year', 'Last Month', 'This Month', 'Monthly Target', 'APE (Rp M)',
@@ -274,6 +302,19 @@ export const KEPT_ENGLISH = {
     // P19.5-T1 (the glossary's *MAPA driver*, OD-266 Q1: never expanded): a section of *Advanced analytics*, the same in
     // both languages as the template mockup writes it. *Sub-group* and *Power user*, the spec's own words in the ID UI.
     'MAPA driver', 'Sub-group', 'Power user',
+    // P19.13-T3 (UI-199, Appendix A; ADR-0253; `glossary.md`): *Core leaders & groups*' words that the report writes in
+    // English inside the Indonesian UI — a group's ★ *Group leader*, the row's ★ *Core* button, and Perbaikan sub-group's
+    // *Grouping* entry.
+    'Group leader', 'Core', 'Grouping',
+    // P19.17-T4 (ADR-0270; `glossary.md`, *Group Leader*): the owner's 19 November words — the plain orange tag under an
+    // AB's group chip and in a group card's subtitle, written in English inside the Indonesian UI.
+    'Group Leader',
+    // P19.22-T8 (ADR-0276; `slf-*` mockups): the Strategic Leader Forum's tabs and its table's first column, as the 19
+    // November screens write them inside the Indonesian UI — *Action items*, *Action item*, *Informal group*.
+    'Action items', 'Action item', 'Informal group',
+    // P19.22-T6, T7 (ADR-0276; `advanced-analytics-*` mockups): the navy panel's *Response rate*, as the 19 November screens
+    // write it inside the Indonesian UI (*SURVEY_RESPONSE_RATE*).
+    'Response rate',
   ],
   /**
    * For approval (§B.10, P18.10-T4, public and account): *Your account*'s *Pronoun* options — English pronouns, which only
@@ -316,6 +357,9 @@ export const SAME_IN_INDONESIAN = [
   'No.', 'Format', 'File', 'Video',
   // P19.6-T1 (§B7): *Tampilan KPM*'s first field, and its preview's second frame — the same word in Indonesian.
   'Logo', 'Laptop',
+  // For approval (§B.10, P19.23-T3): *Anggota*'s detail, as the Super Admin mockup writes it in Indonesian (the glossary's
+  // *Upline*, the direct leader).
+  'Upline',
   // For approval (§B.10, P18.10-T6, company templates): a company's web-address name, the column and the field on
   // *Manage Companies* — as the API's refusals write it (*Slug "…" sudah dipakai*).
   'Slug',
@@ -336,6 +380,19 @@ export const SAME_IN_INDONESIAN = [
   // product list — its *Filter* button, the word §B.10 already approved for the calendar's *Filters* (2026-10-29) —
   // and two marks that are not words: the *#* column and the *–* a product not in a new office's catalogue shows.
   'Filter', '#', '–',
+  // For approval (§B.10, P19.23-T5; ADR-0279 §4): *Langganan per KPM*'s *Trial* pill and *Paket & harga*'s row, as the
+  // Super Admin mockups write it in the Indonesian UI (the glossary's *Trial*).
+  'Trial',
+  // For approval (§B.10, P19.22-T2 to T5; `revisions/2026-11-19/files/UI/mockups/advanced-analytics-*`): Advanced
+  // analytics' labels as the approved mockups write them in the Indonesian UI — Demografi's *Total manpower* and its
+  // *Upload data* steps, MAPA driver's and Analisa kuantitatif's letter groups, the Informal group drivers' *MAA* and *MTD*.
+  'Total manpower', 'Upload data', 'Upload',
+  'M · Manpower', 'A · Activation', 'P · Productivity', 'A · Average case size',
+  'A · Manpower', 'B · Activation', 'C · Productivity', 'D · Case size',
+  'MAA', 'MTD', 'MTD vs target', 'vs target',
+  // For approval (§B.10, P19.19-T1; `kpm-overview-v2-*` mockups): KPM Overview's numbered section titles, as the approved
+  // mockups write them in the Indonesian UI.
+  '3 · Coaching', '4 · Compliance',
 ] as const;
 
 /**
@@ -390,4 +447,10 @@ export const KEPT_ELSEWHERE = [
   // two of the template editor's *Ambang & benchmark* labels, translated as the template mockup writes them — *Demografi*,
   // *Target aktivitas mingguan* (P19.5-T1).
   'Demographics', 'Weekly activity target',
+  // P19.16-T3 (ADR-0262 §3; the client's request of 17 November): *APE target per month* is `MONTHLY_APE_TARGET`'s name
+  // (§A.4) and Goal Settings' tile, which the client asked to read *Target APE per bulan*.
+  'APE target per month',
+  // P19.22-T8 (ADR-0276): *Informal group* is the forum's tab, kept as the 19 November screens write it (`kept()`), and
+  // the Unit Dashboard's view and the account menu's line, translated there (*Group informal*).
+  'Informal group',
 ] as const;

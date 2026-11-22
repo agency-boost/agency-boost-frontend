@@ -48,6 +48,8 @@ const en = {
     registeredLine: 'You are registered to this office. Next, ask a leader to take you on.',
     activeLine: 'You are an active member of this office.',
     moving: 'Moving to a different office is not something you can do yourself — ask whoever administers your office.',
+    /** P19.20-T6 AC-1: the Owner's own office, in place of *ask whoever administers it*. */
+    ownerLine: ({ office }: { office: string }) => `You are the KPM Owner · ${office}`,
     noneTitle: 'No office registered yet',
     noneLine: 'Find the office your branch belongs to. You will need this before you can find a leader.',
     searchTitle: 'Search for your office',
@@ -114,6 +116,8 @@ const en = {
     noMatch: 'No leaders match that search.',
     /** `ab` and `aab` the company's rungs' short names. */
     noLeaders: ({ ab, aab }: { ab: string; aab: string }) => `This office has no ${ab}s or ${aab}s yet.`,
+    /** P19.20-T6 AC-1: the KPM Owner, at the top, has no leader to find. */
+    topOfKpm: 'You are at the top of the KPM — you have no leader',
     oneAtATime: 'One request at a time. Asking somebody else replaces it rather than adding a second — two open requests '
       + 'could both be approved.',
   },
@@ -212,6 +216,7 @@ const id: MessagesOf<typeof en> = {
     registeredLine: `Anda sudah terdaftar di ${kept('KPM')} ini. Berikutnya, minta ${kept('leader')} menerima Anda.`,
     activeLine: `Anda anggota aktif ${kept('KPM')} ini.`,
     moving: `Pindah ke ${kept('KPM')} lain tidak dapat Anda lakukan sendiri — minta kepada pengelola ${kept('KPM')} Anda.`,
+    ownerLine: ({ office }) => `Anda ${kept('KPM Owner')} · ${office}`,
     noneTitle: `Belum ada ${kept('KPM')} yang terdaftar`,
     noneLine: `Temukan ${kept('KPM')} tempat cabang Anda berada. Anda memerlukannya sebelum dapat mencari ${kept('leader')}.`,
     searchTitle: `Cari ${kept('KPM')} Anda`,
@@ -273,6 +278,7 @@ const id: MessagesOf<typeof en> = {
     sending: 'Mengirim…',
     noMatch: `Tidak ada ${kept('leader')} yang cocok dengan pencarian itu.`,
     noLeaders: ({ ab, aab }) => `${kept('KPM')} ini belum punya ${ab} atau ${aab}.`,
+    topOfKpm: `Anda di puncak ${kept('KPM')} — tidak punya ${kept('leader')}`,
     oneAtATime: 'Satu permintaan dalam satu waktu. Meminta kepada orang lain akan menggantikannya, bukan menambah yang kedua '
       + '— dua permintaan terbuka bisa sama-sama disetujui.',
   },

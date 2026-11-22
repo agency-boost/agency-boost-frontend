@@ -7,9 +7,10 @@ import { SectionLoading } from '@/components/advanced-analytics/shared';
 import { isSectionSlug } from '@/lib/advanced-analytics-page';
 
 /**
- * **`/kpm/advanced-analytics/[section]`** — *Demografi KPM*, *MAPA driver*, *Analitik kuantitatif*, *Perbaikan
- * sub-group* and *Event* (P19.5-T3; ADR-0215 §1). *NPS* and *Kualitatif* have their own routes (P19.5-T4). **A section
- * the template has off goes to the first that is on** (AC-11); its read would answer 404, and its data is kept.
+ * **`/kpm/advanced-analytics/[section]`** — *Demografi*, *MAPA driver*, *Analisa kuantitatif*, *Informal group* (slug
+ * `subgroup`) and *Event* (P19.5-T3, P19.22; ADR-0215 §1, ADR-0275 §1). *NPS* and *Kualitatif* have their own routes
+ * (P19.5-T4). **A section the template has off goes to the first that is on** (AC-11); its read would answer 404, and its
+ * data is kept.
  */
 export default function AdvancedAnalyticsSectionPage({ params }: { params: Promise<{ section: string }> }) {
   const { section } = use(params);

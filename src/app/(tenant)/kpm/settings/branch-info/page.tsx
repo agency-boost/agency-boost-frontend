@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { SettingsScreen } from '@/components/settings-screen';
 import { SettingsReviewed } from '@/components/settings-reviewed';
 import {
-  Button, Card, Field, ReadOnlyField, Select, TextInput, Textarea,
+  Button, Card, Field, ReadOnlyField, Select, TextInput,
 } from '@/components/ui/field';
 import { SkeletonText } from '@/components/ui/skeleton';
 import { kept } from '@/i18n/kept';
@@ -19,7 +19,8 @@ import { readBranchInfo, updateBranchInfo, type BranchInfo } from '@/lib/tenant-
 const MONTHS = Array.from({ length: 12 }, (_, at) => at + 1);
 
 /**
- * What this office is (P4-T5, `KPM_Owner.html:1807-1812`).
+ * What this office is (P4-T5, `KPM_Owner.html:1807-1812`; **P19.21-T3 AC-7**, `data-upload-pengaturan-*` frame 23: a
+ * simple two-column form, the platform's fields grey).
  *
  * **Two fields are read-only, and the prototype is where that came from.** It disables
  * Company and labels it *"tagged by Superadmin"*, and disables KPM Owner. Those are the
@@ -84,26 +85,32 @@ export default function BranchInfoPage() {
     }
   }
 
+  /** A field the platform sets: grey, its value as stored, and who sets it under it (frame 23). */
+  const fixed = (label: React.ReactNode, value: string, reason: string) => (
+    <ReadOnlyField layout="field" label={label} value={value} reason={reason} />
+  );
+
   return (
     <SettingsScreen
       title={kept('Branch info')}
-      subtitle={t.subtitle}
       permission="kpm:read_profile"
       // P19.3-T2 AC-5 (UI-149): *Sudah sesuai*, step 1 of the KPM setup card.
       actions={<SettingsReviewed page="branch-info" />}
       error={error}
     >
-
-      <Card>
+      {/*
+        * P19.21-T3 AC-7 (frame 23): **a simple two-column form** — one column on a phone — in the mockup's order: *Kode
+        * KPM*, *Nama cabang*; *Perusahaan*, *KPM Owner*; *Alamat*, *Telepon kontak*; *Tahun buku dimulai*, *Zona waktu ·
+        * bahasa · mata uang*; *Simpan*. The platform's four grey, each saying so. Saved live: nothing here waits on
+        * *Terbitkan*. From 1024px the two columns keep the form layout, at most 720px from the frame's left edge
+        * (P19.13-T4 AC-3, UI-198; parity I-996).
+        */}
+      <Card className="lg:max-w-form">
         {office === null ? (
-          <SkeletonText lines={6} />
+          <SkeletonText lines={8} />
         ) : (
-          <form onSubmit={submit} className="flex max-w-xl flex-col gap-4" noValidate>
-            <ReadOnlyField
-              label={t.kpmCode}
-              value={office.code}
-              reason={t.kpmCodeReason}
-            />
+          <form onSubmit={submit} className="grid gap-x-4 gap-y-4 md:grid-cols-2" noValidate>
+            {fixed(t.kpmCode, office.code, t.kpmCodeReason)}
 
             <Field label={t.branchName} htmlFor="branchName">
               <TextInput
@@ -114,18 +121,12 @@ export default function BranchInfoPage() {
               />
             </Field>
 
-            {/* Disabled and labelled, exactly as the prototype has it: the label is the
-                answer to "why can't I change this". */}
-            <ReadOnlyField
-              label={t.company}
-              value={office.companyName}
-              reason={t.companyReason}
-            />
+            {fixed(t.company, office.companyName, t.companyReason)}
+            {fixed(kept('KPM Owner'), office.ownerName ?? t.nobodyYet, t.ownerReason)}
 
             <Field label={t.address} htmlFor="address">
-              <Textarea
+              <TextInput
                 id="address"
-                rows={2}
                 value={form.address}
                 disabled={!canWrite}
                 onChange={(e) => setForm({ ...form, address: e.target.value })}
@@ -135,17 +136,12 @@ export default function BranchInfoPage() {
             <Field label={t.contactPhone} htmlFor="contactPhone">
               <TextInput
                 id="contactPhone"
+                type="tel"
                 value={form.contactPhone}
                 disabled={!canWrite}
                 onChange={(e) => setForm({ ...form, contactPhone: e.target.value })}
               />
             </Field>
-
-            <ReadOnlyField
-              label={kept('KPM Owner')}
-              value={office.ownerName ?? t.nobodyYet}
-              reason={t.ownerReason}
-            />
 
             {/* No hint. It said "Used by the reporting periods that arrive in a later phase.": our
                 schedule, which a reader can do nothing with (ADR-0062 §3, P10.1-T2). */}
@@ -164,14 +160,10 @@ export default function BranchInfoPage() {
               </Select>
             </Field>
 
-            <ReadOnlyField
-              label={t.timeLanguageCurrency}
-              value={`${office.timezone} · ${office.locale} · ${office.currency}`}
-              reason={t.timeLanguageCurrencyReason}
-            />
+            {fixed(t.timeLanguageCurrency, `${office.timezone} · ${office.locale} · ${office.currency}`, t.timeLanguageCurrencyReason)}
 
             {canWrite && (
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 md:col-span-2">
                 <Button type="submit" disabled={busy || !form.branchName.trim()}>
                   {busy ? s.saving : s.save}
                 </Button>

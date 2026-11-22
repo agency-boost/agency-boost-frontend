@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { stubFetch } from '@test/harness';
 import {
-  attachPitchDocument, formatFileSize, PDF_MAX_BYTES, PITCH_COPY, PITCH_OWN_COPY, pitchDocumentUrl,
-  readPitchMaterials, requestPitchUpload, setPitchConfirmation, UNDER_A_KILOBYTE,
+  attachPitchDocument, formatFileSize, PDF_MAX_BYTES, PITCH_ACCEPT, PITCH_COPY, PITCH_FILE_TYPES, PITCH_OWN_COPY,
+  pitchDocumentUrl, pitchFileType, pitchOpening, readPitchMaterials, requestPitchUpload, setPitchConfirmation,
+  setPitchLink, UNDER_A_KILOBYTE,
 } from './recruitment-pitch';
 
 const SIX_WORDS = /\boffice\b|\bKPM\b|reports to|tagged to|untagged|unassigned/i;
@@ -112,5 +113,67 @@ describe('the pitch’s words', () => {
       PITCH_COPY.needsConfirmation, PITCH_COPY.optional, UNDER_A_KILOBYTE,
     ];
     for (const text of own) expect(text).not.toMatch(SIX_WORDS);
+  });
+});
+
+/**
+ * **P19.21-T3 AC-6 — any format, or a link** (ADR-0274): the type a chosen file is sent as, how a material opens, and the
+ * link's own route. The list mirrors the backend's `PITCH_MATERIAL_MIME_TYPES`, read from its source so the two cannot
+ * drift.
+ */
+describe('P19.21-T3 AC-6 a pitch material is any format, or a link', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('P19.21-T3 AC-6 offers exactly the types the API signs for a pitch material (backend PITCH_MATERIAL_MIME_TYPES)', () => {
+    // Two repositories, so nothing can enforce this: pinned here, as the backend's `assets.spec.ts` pins its own list.
+    expect(PITCH_FILE_TYPES.map((t) => t.mimeType)).toEqual([
+      'application/pdf',
+      'text/html',
+      'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+      'application/vnd.ms-powerpoint',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/msword',
+      'image/jpeg', 'image/png', 'image/webp',
+      'video/mp4', 'video/webm', 'video/quicktime',
+    ]);
+  });
+
+  it.each([
+    [{ type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation', name: 'deck.pptx' }, 'application/vnd.openxmlformats-officedocument.presentationml.presentation'],
+    [{ type: '', name: 'FAQ.DOCX' }, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
+    [{ type: '', name: 'old.ppt' }, 'application/vnd.ms-powerpoint'],
+    [{ type: 'video/quicktime', name: 'clip.mov' }, 'video/quicktime'],
+    [{ type: 'image/jpeg', name: 'poster.jpg' }, 'image/jpeg'],
+    [{ type: 'application/x-msdownload', name: 'setup.exe' }, null],
+    [{ type: '', name: 'notes.txt' }, null],
+    [{ type: 'application/vnd.ms-excel', name: 'figures.xls' }, null],
+  ])('P19.21-T3 AC-6 sends %j as %s', (file, type) => {
+    expect(pitchFileType(file)).toBe(type);
+  });
+
+  it('P19.21-T3 AC-6 a picker offers every pitch type and extension', () => {
+    for (const ext of ['.pdf', '.html', '.pptx', '.ppt', '.docx', '.doc', '.jpg', '.png', '.webp', '.mp4', '.webm', '.mov']) {
+      expect(PITCH_ACCEPT.split(',')).toContain(ext);
+    }
+  });
+
+  it('P19.21-T3 AC-6 opens a link in a tab, a page in the window, an office file as a download, the rest in a tab', () => {
+    const file = (mimeType: string) => ({ name: 'x', bytes: 1, uploadedOn: '2026-11-20', mimeType });
+    expect(pitchOpening({ file: null, link: { url: 'https://x.y', addedOn: '2026-11-20' } })).toBe('link');
+    expect(pitchOpening({ file: file('text/html'), link: null })).toBe('sandboxed');
+    expect(pitchOpening({ file: file('application/vnd.openxmlformats-officedocument.wordprocessingml.document'), link: null })).toBe('download');
+    expect(pitchOpening({ file: file('application/msword'), link: null })).toBe('download');
+    expect(pitchOpening({ file: file('application/vnd.ms-powerpoint'), link: null })).toBe('download');
+    expect(pitchOpening({ file: file('application/pdf'), link: null })).toBe('tab');
+    expect(pitchOpening({ file: file('video/mp4'), link: null })).toBe('tab');
+    expect(pitchOpening({ file: null, link: null })).toBeNull();
+  });
+
+  it('P19.21-T3 AC-6 sets a link by the slot’s code alone', async () => {
+    const { calls } = stubFetch({ '/kpm/settings/recruitment-pitch/faq/link': { body: {} } });
+    await setPitchLink('faq', 'https://www.youtube.com/watch?v=abc123');
+    expect(calls[0].init.method).toBe('PUT');
+    expect(calls[0].url).toMatch(/\/kpm\/settings\/recruitment-pitch\/faq\/link$/);
+    expect(JSON.parse(calls[0].init.body as string)).toEqual({ url: 'https://www.youtube.com/watch?v=abc123' });
   });
 });

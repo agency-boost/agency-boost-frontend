@@ -4,6 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { api } from './api-client';
 import { hasNoKpm } from './no-kpm';
 import { SessionContext } from './session';
+import { insideKpm } from './super-admin-kpm';
 import type {
   ActivityCategoryRow, LeadPipelineRow, RatioRow, TrainingCategoryRow,
 } from './tenant-config';
@@ -175,7 +176,14 @@ export function TenantConfigProvider({ children }: { children: React.ReactNode }
    * and a person who has joined none would only draw two refusals on every page. They read the seeded ladder meanwhile.
    */
   const inOffice = session === null || !hasNoKpm(session.me);
-  const ready = settled && signedIn && inOffice;
+  /*
+   * **Nor for a Super Admin outside every KPM** (found 2026-11-20): they belong to no office until they enter one
+   * (`super-admin-kpm.ts`), and an owner page's address opened from outside drew a `403` on `/kpm/config` before the shell
+   * sent them on. Entering re-reads the session, and the read goes out then.
+   */
+  const platformOutside = session !== null && session.me !== null
+    && session.me.user.platformRole === 'super_admin' && !insideKpm(session.me);
+  const ready = settled && signedIn && inOffice && !platformOutside;
 
   useEffect(() => {
     if (ready) void refresh();

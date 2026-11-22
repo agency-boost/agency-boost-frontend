@@ -53,28 +53,25 @@ afterEach(() => {
 });
 
 describe('P19.12-T2 AC-2 All members › Akun terdaftar (ADR-0245 §1)', () => {
-  it('P19.12-T2 AC-2 the page has two tabs in the address; Registered accounts reads every account', async () => {
+  // *Changed 2026-11-20 (P19.23-T3; ADR-0277 §6):* *Anggota* replaced the two tabs; *Akun terdaftar* is one link under
+  // its list, `?tab=accounts`, with its way back.
+  it('P19.23-T3 Akun terdaftar at ?tab=accounts: its way back to Anggota, and every account read', async () => {
     atWidth(1280);
     const { calls } = show();
-    const tabs = await screen.findByRole('navigation', { name: 'All members' });
-    expect(within(tabs).getByRole('link', { name: 'KPM members' })).toHaveAttribute('href', '/admin/members');
-    const accounts = within(tabs).getByRole('link', { name: 'Registered accounts' });
-    expect(accounts).toHaveAttribute('href', '/admin/members?tab=accounts');
-    expect(accounts).toHaveAttribute('aria-current', 'page');
+    expect(await screen.findByRole('link', { name: 'Back to members' })).toHaveAttribute('href', '/admin/members');
     await screen.findByRole('table', { name: 'Every registered account' });
-    expect(calls.map((c) => c.url).filter((u) => u.includes('/admin/'))).toEqual([expect.stringMatching(/\/admin\/users\?$/)]);
+    expect(calls.map((c) => c.url).filter((u) => u.includes('/admin/users'))).toEqual([expect.stringMatching(/\/admin\/users\?$/)]);
   });
 
-  it('P19.12-T2 AC-2 KPM members stays the default tab, and reads the memberships as before', async () => {
+  it('P19.23-T3 the page without ?tab=accounts is Anggota, which never reads the accounts', async () => {
     atWidth(1280);
     nav.search = '';
     const stub = stubFetch({
-      '/admin/members': { body: EMPTY }, '/admin/users': { body: PAGE },
+      '/admin/members': { body: { ...EMPTY, kpmCount: 0 } }, '/admin/users': { body: PAGE },
       '/admin/companies': { body: [] }, '/admin/tenants': { body: [] },
     });
     renderInLayout(AdminLayout, <AllMembersPage />, { me: SUPER_ADMIN });
-    expect(await screen.findByRole('link', { name: 'KPM members' })).toHaveAttribute('aria-current', 'page');
-    await screen.findByText('No members yet. Members appear here once a KPM imports people.');
+    await waitFor(() => expect(stub.calls.some((c) => c.url.includes('/admin/members'))).toBe(true));
     expect(stub.calls.some((c) => c.url.includes('/admin/users'))).toBe(false);
   });
 
@@ -177,23 +174,12 @@ describe('P19.12-T2 AC-2 All members › Akun terdaftar (ADR-0245 §1)', () => {
     expect(calls.some((c) => c.url.includes('/admin/users'))).toBe(false);
   });
 
-  it('P19.12-T2 AC-2 a KPM members search that finds nobody offers the same search in Registered accounts', async () => {
-    atWidth(1280);
-    nav.search = 'q=hadi.leader%40contoh.test';
-    stubFetch({ '/admin/members': { body: EMPTY }, '/admin/companies': { body: [] }, '/admin/tenants': { body: [] } });
-    renderInLayout(AdminLayout, <AllMembersPage />, { me: SUPER_ADMIN });
-    expect(await screen.findByText('No member matches these filters.')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Search in Registered accounts' }))
-      .toHaveAttribute('href', `/admin/members?tab=accounts&q=${encodeURIComponent('hadi.leader@contoh.test')}`);
-  });
-
   it('P19.12-T2 AC-2 in Indonesian: Akun terdaftar, Tanpa KPM, Belum punya KPM, Terverifikasi — no English left', async () => {
     atWidth(1280);
     stubFetch({ '/admin/users': { body: PAGE } });
     renderInIndonesian(<AllMembersPage />, { me: SUPER_ADMIN });
     const table = await screen.findByRole('table', { name: 'Semua akun terdaftar' });
-    expect(screen.getByRole('link', { name: 'Akun terdaftar' })).toHaveAttribute('aria-current', 'page');
-    expect(screen.getByRole('link', { name: 'Anggota KPM' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Kembali ke anggota' })).toHaveAttribute('href', '/admin/members');
     expect(within(table).getAllByRole('columnheader').map((h) => h.textContent)).toEqual([
       'Nama', 'Perusahaan', 'Terdaftar', 'Email', 'Terakhir masuk', 'KPM',
     ]);

@@ -20,7 +20,8 @@ const en = {
   tiles: 'Active Agent or Rekrut',
   /**
    * The first tile's label, ***Active Agent*** since the owner's review of 7 November (MOB UI-186, ADR-0229 §8: *"AA →
-   * Active Agent"*); the figure is still `AA_THIS_MONTH`, and a card's header still says *AA*.
+   * Active Agent"*). *Changed 2026-11-20 (P19.18-T3; ADR-0271 §8):* the figure is `MONTHLY_ACTIVE_AGENT` from the uploaded
+   * production — `AA_THIS_MONTH` is retired; a card's header still says *AA*.
    */
   aa: kept('Active Agent'),
   rekrut: kept('Rekrut'),
@@ -32,9 +33,14 @@ const en = {
    */
   legend: 'What the marks mean',
   legendDone: kept('Active Agent'),
-  legendNumber: ({ rekrut }: { rekrut: boolean }) => (rekrut ? 'potensi rekrut' : 'potensi'),
+  /** P19.18-T3 AC-2 (the Rekrut mockup's legend): *potensi rekrut (kandidat)* — the orange number on *Rekrut*. */
+  legendNumber: ({ rekrut }: { rekrut: boolean }) => (rekrut ? 'potensi rekrut (kandidat)' : 'potensi'),
+  /** P19.18-T3 AC-2: the green number's words on *Rekrut* — how many a person recruited this month. */
+  legendRecruited: 'recruited this month',
   /** A person's ✓, as a screen reader hears it: *Active Agent* on the first tile, *rekrut ✓* on the second. */
   done: ({ rekrut }: { rekrut: boolean }) => (rekrut ? 'rekrut ✓' : 'Active Agent'),
+  /** P19.18-T3 AC-2: the Rekrut view's green number, as a screen reader hears it. */
+  recruited: ({ n }: { n: number }) => `${n} recruited this month`,
   /** A row's pills, left to right: *n potensi*, then the ✓ — *AA ✓*, *n rekrut ✓* — or ✕. */
   potensi: ({ n }: { n: number }) => `${n} potensi`,
   /** ✕'s name: a person with neither. */
@@ -44,8 +50,10 @@ const en = {
    * (*Unit Anda*, *Unit Sari Puspita*; MOB UI-179), where they read *UNIT AAB SARI PUSPITA* and *LANGSUNG KE AB AGUS*.
    */
   unit: ({ role, name }: { role: string; name: string }) => `Unit ${role} ${name}`,
+  /** A card's header on *Active Agent* (P19.18-T3 AC-1): `potensi` the **people** with a sales potensi, never their sum. */
   aaCounts: ({ potensi, aa }: { potensi: number; aa: number }) => `${potensi} potensi · ${aa} AA`,
-  rekrutCounts: ({ potensi, rekrut }: { potensi: number; rekrut: number }) => `${potensi} potensi · ${rekrut} rekrut`,
+  /** A card's header on *Rekrut* (P19.18-T3 AC-2): *n rekrut · potensi m*, both sums. */
+  rekrutCounts: ({ potensi, rekrut }: { potensi: number; rekrut: number }) => `${rekrut} rekrut · potensi ${potensi}`,
   /** An earlier month's row (AC-9): *x* of the *y* people with a potensi got the ✓. */
   aaPast: ({ x, y, n }: { x: number; y: number; n: number }) => (y > 0 ? `potensi ${x}/${y} · ${n} AA` : `${n} AA`),
   rekrutPast: ({ x, y, n }: { x: number; y: number; n: number }) => (y > 0 ? `potensi ${x}/${y} rekrut` : `${n} rekrut`),
@@ -79,13 +87,16 @@ const id: MessagesOf<typeof en> = {
   tilePotensi: ({ n }) => `potensi ${n}`,
   legend: 'Arti tanda',
   legendDone: kept('Active Agent'),
-  legendNumber: ({ rekrut }) => (rekrut ? 'potensi rekrut' : 'potensi'),
+  // P19.18-T3 AC-2, the 19 Nov Rekrut mockup verbatim: *potensi rekrut (kandidat)*, *jumlah berhasil rekrut*.
+  legendNumber: ({ rekrut }) => (rekrut ? 'potensi rekrut (kandidat)' : 'potensi'),
+  legendRecruited: 'jumlah berhasil rekrut',
   done: ({ rekrut }) => (rekrut ? 'rekrut ✓' : 'Active Agent'),
+  recruited: ({ n }) => `${n} berhasil rekrut`,
   potensi: ({ n }) => `${n} potensi`,
   neither: 'Belum ada potensi dan belum ada ✓',
   unit: ({ role, name }) => `Unit ${role} ${name}`,
   aaCounts: ({ potensi, aa }) => `${potensi} potensi · ${aa} ${kept('AA')}`,
-  rekrutCounts: ({ potensi, rekrut }) => `${potensi} potensi · ${rekrut} rekrut`,
+  rekrutCounts: ({ potensi, rekrut }) => `${rekrut} rekrut · potensi ${potensi}`,
   aaPast: ({ x, y, n }) => (y > 0 ? `potensi ${x}/${y} · ${n} ${kept('AA')}` : `${n} ${kept('AA')}`),
   rekrutPast: ({ x, y, n }) => (y > 0 ? `potensi ${x}/${y} rekrut` : `${n} rekrut`),
   open: ({ name }) => `Buka ${name}`,

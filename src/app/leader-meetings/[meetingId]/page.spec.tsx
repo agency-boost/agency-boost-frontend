@@ -1,413 +1,272 @@
-import { act, screen, waitFor, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderWithSession, routeParams, stubFetch, type StubReply } from '@test/harness';
 import LeaderMeetingPage from './page';
 import {
-  CORE_LEADER_CAN, CORE_LEADER_ME, editors, FIELD_ME, LINK_CAN, MAYA, meetingView, notFound, OWNER_ME, refusal,
-  SHELL_STUBS, WILSON, AGUS, SARI, YOSEF,
+  ACTION_ITEMS, AGENDA, CORE_LEADER_ME, meetingView, notFound, OWNER_ME, refusal, SHELL_STUBS,
 } from '../forum-fixtures';
 import type { MeetingView } from '@/lib/leader-meetings';
 
-const nav = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn(), pathname: '/leader-meetings/m-14' }));
+const nav = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn(), pathname: '/leader-meetings/m-14', search: '' }));
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: nav.push, replace: nav.replace, back: vi.fn() }),
   usePathname: () => nav.pathname,
+  useSearchParams: () => new URLSearchParams(nav.search),
+}));
+// Advanced analytics' own sections, as the forum's first two tabs draw them: stood in for, as their own specs cover them.
+vi.mock('@/components/advanced-analytics/mapa-section', () => ({
+  MapaSection: ({ canUpload }: { canUpload: boolean }) => <div data-testid="mapa-section" data-can-upload={String(canUpload)} />,
+}));
+vi.mock('@/components/advanced-analytics/subgroup-section', () => ({
+  SubgroupSection: () => <div data-testid="subgroup-section" />,
 }));
 
-const page = (meetingId = 'm-14') => <LeaderMeetingPage params={routeParams({ meetingId })} />;
+const page = () => <LeaderMeetingPage params={routeParams({ meetingId: 'm-14' })} />;
 
 function open(meeting: MeetingView = meetingView(), routes: Record<string, StubReply | StubReply[]> = {}, me = OWNER_ME) {
   const stub = stubFetch({ ...SHELL_STUBS, 'GET /leader-meetings/m-14': { body: meeting }, ...routes });
-  const rendered = renderWithSession(page(), { me });
-  return { ...stub, ...rendered };
+  renderWithSession(page(), { me });
+  return stub;
 }
-
-const head = () => within(screen.getByRole('region', { name: /Strategic Check-in/ }));
-const toast = () => screen.getAllByRole('status').find((el) => el.getAttribute('aria-live') === 'polite')!;
 const writes = (calls: { url: string; init: RequestInit }[]) => calls.filter((c) => (c.init.method ?? 'GET') !== 'GET');
+const bodyOf = (call: { init: RequestInit }) => JSON.parse(String(call.init.body));
+const row = (id: string) => within(document.querySelector(`[data-action-item="${id}"]`) as HTMLElement);
+const line = (id: string) => within(document.querySelector(`[data-agenda-line="${id}"]`) as HTMLElement);
 
-describe('/leader-meetings/[meetingId] — a meeting (P18.1-T2, P18.1-T3)', () => {
-  beforeEach(() => { nav.push.mockReset(); nav.replace.mockReset(); });
+describe('/leader-meetings/[meetingId] — one forum (P19.22-T8 AC-2 to AC-4)', () => {
+  beforeEach(() => {
+    nav.push.mockReset();
+    nav.replace.mockReset();
+    nav.search = '';
+  });
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
-    vi.useRealTimers();
   });
 
-  describe('the head (P18.1-T2 AC-3)', () => {
-    it('P18.1-T2 AC-3: ← Back, the title, the date and state, the cadence note, Share · Save as PDF · Save', async () => {
+  describe('P19.22-T8 AC-2 the header card and the tabs', () => {
+    it('P19.22-T8 AC-2 ‹ All forums, Forum #14, date · time · state, the core leaders, Share and PDF; four tabs, Agenda open', async () => {
       open();
-      expect(await screen.findByRole('heading', { level: 2, name: 'Strategic Check-in — #14' })).toBeInTheDocument();
-      // Opening a meeting changes neither the page's title nor its line (flow doc §2.1).
-      expect(screen.getByRole('heading', { level: 1, name: 'Strategic Leader Forum' })).toBeInTheDocument();
-      expect(screen.getByRole('link', { name: '← Back to all meetings' })).toHaveAttribute('href', '/leader-meetings');
-      expect(head().getByText(/· Upcoming$/)).toBeInTheDocument();
-      expect(head().getByText('Recommended: every 2 weeks · 60–90 mins')).toBeInTheDocument();
-      const buttons = ['Share', 'Save as PDF', 'Save'].map((name) => head().getByRole('button', { name }));
-      // *Save* is an action, so amber with navy words; *Share* and *Save as PDF* keep their navy outline (ADR-0137).
-      expect(buttons[2]).toHaveClass('bg-primary', 'text-primary-contrast');
-      expect(buttons[2]).not.toHaveClass('bg-secondary');
-      for (const outlined of buttons.slice(0, 2)) expect(outlined).toHaveClass('border-secondary', 'text-navy');
+      expect(await screen.findByRole('heading', { level: 2, name: 'Forum #14' })).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: 'All forums' })).toHaveAttribute('href', '/leader-meetings');
+      expect(screen.getByText(/15 Nov 2026 · 14[.:]00 · Done$/)).toBeInTheDocument();
+      expect(screen.getByText('3 core leaders · everyone can edit')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Share' })).toHaveClass('bg-success');
+      expect(screen.getByRole('button', { name: 'PDF' })).toBeInTheDocument();
+      expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['MAPA driver', 'Informal group', 'Agenda', 'Action items']);
+      expect(screen.getByRole('tab', { name: 'Agenda' })).toHaveAttribute('aria-selected', 'true');
+      // A forum held, written in: nothing to move or delete.
+      expect(screen.queryByRole('button', { name: 'Change date and time' })).not.toBeInTheDocument();
     });
 
-    it('P18.1-T2 AC-3: the date is a button for whoever may move the meeting, named for what it does (ADR-0130 §4)', async () => {
+    it('P19.22-T8 AC-2 MAPA driver and Informal group are Advanced analytics’ own, each under its note; the tab is the address’s', async () => {
       open();
-      const date = await screen.findByRole('button', { name: 'Change the date of Strategic Check-in — #14, 13 Oct 2026' });
-      expect(date).toHaveTextContent('13 Oct 2026');
+      await userEvent.click(await screen.findByRole('tab', { name: 'MAPA driver' }));
+      expect(await screen.findByTestId('mapa-section')).toHaveAttribute('data-can-upload', 'true');
+      expect(screen.getByText('Same as Advanced analytics › MAPA driver')).toBeInTheDocument();
+      expect(nav.replace).toHaveBeenCalledWith('/leader-meetings/m-14?tab=mapa', { scroll: false });
+      await userEvent.click(screen.getByRole('tab', { name: 'Informal group' }));
+      expect(await screen.findByTestId('subgroup-section')).toBeInTheDocument();
+      expect(screen.getByText('Same as Advanced analytics › Informal group')).toBeInTheDocument();
     });
 
-    it('P18.1-T2 AC-3, P18.9-T2 AC-3: Can edit these minutes — the Owner first, then the Admins, then the Core Leaders, "(You)" after the reader', async () => {
+    it('P19.22-T8 AC-1 ?tab=actions opens on the action items (Siapkan agenda opens on the agenda)', async () => {
+      nav.search = 'tab=actions';
       open();
-      const label = await screen.findByText('Can edit these minutes');
-      expect(screen.queryByText(/\bMOM\b/)).toBeNull();
-      const chips = within(screen.getByRole('list', { name: 'Can edit these minutes' })).getAllByRole('listitem');
-      expect(label).toBeInTheDocument();
-      expect(chips.map((c) => c.textContent)).toEqual([
-        'WTWilson Tanoto (You) · AB', 'MHMaya Halim · AAB', 'ASAgus Santoso · AB', 'SDSari Dewanti · AAB', 'YPYosef Pratama · AB',
-      ]);
-      // The Owner's avatar is amber (`:659`).
-      expect(chips[0].querySelector('[aria-hidden="true"]')).toHaveClass('bg-primary');
-      expect(chips[1].querySelector('[aria-hidden="true"]')).toHaveClass('bg-secondary-hover');
-      expect(screen.getByRole('link', { name: 'Manage tags →' })).toHaveAttribute('href', '/people/members');
+      expect(await screen.findByRole('tab', { name: 'Action items' })).toHaveAttribute('aria-selected', 'true');
     });
 
-    it('P18.1-T2 AC-3: the three tabs, Overview & Stats first and selected; arrows move between them', async () => {
-      open();
-      const tabs = within(await screen.findByRole('tablist', { name: 'Strategic Check-in — #14' })).getAllByRole('tab');
-      expect(tabs.map((t) => t.textContent)).toEqual(['Overview & Stats', 'Agenda', 'Action Items']);
-      expect(tabs[0]).toHaveAttribute('aria-selected', 'true');
-      expect(screen.getByRole('tabpanel')).toHaveAccessibleName('Overview & Stats');
-
-      await userEvent.click(tabs[2]);
-      expect(tabs[2]).toHaveAttribute('aria-selected', 'true');
-      expect(screen.getByRole('tabpanel')).toHaveAccessibleName('Action Items');
-
-      tabs[2].focus();
-      await userEvent.keyboard('{ArrowRight}');
-      expect(tabs[0]).toHaveFocus();
-      expect(tabs[0]).toHaveAttribute('aria-selected', 'true');
-      await userEvent.keyboard('{End}');
-      expect(tabs[2]).toHaveAttribute('aria-selected', 'true');
-    });
-
-    it('all three panels stay mounted, the two not selected hidden, so a tab’s writes in flight survive a switch', async () => {
-      const { container } = open();
-      const tabs = within(await screen.findByRole('tablist')).getAllByRole('tab');
-      const panels = [...container.querySelectorAll('[role="tabpanel"]')];
-      expect(panels).toHaveLength(3);
-      expect(panels.map((p) => p.hasAttribute('hidden'))).toEqual([false, true, true]);
-      tabs.forEach((tab, i) => {
-        expect(tab).toHaveAttribute('aria-controls', panels[i].id);
-        expect(panels[i]).toHaveAttribute('aria-labelledby', tab.id);
-      });
-
-      await userEvent.click(tabs[1]);
-      expect(panels.map((p) => p.hasAttribute('hidden'))).toEqual([true, false, true]);
-      // The same elements: nothing was unmounted by the switch.
-      expect([...container.querySelectorAll('[role="tabpanel"]')]).toEqual(panels);
-      expect(screen.getAllByRole('tabpanel')).toEqual([panels[1]]);
-    });
-
-    it('P18.1-T2 AC-1: a Core Leader edits and shares, with no date control and no Manage tags →, in their own shell', async () => {
-      open(meetingView({ can: CORE_LEADER_CAN, editors: editors({ coreLeaders: [{ ...AGUS, isReader: true }, SARI, YOSEF] }) }), {}, CORE_LEADER_ME);
-      await screen.findByRole('heading', { level: 2, name: 'Strategic Check-in — #14' });
-      expect(head().queryByRole('button', { name: /Change the date/ })).not.toBeInTheDocument();
-      expect(head().getByText('13 Oct 2026 · Upcoming')).toBeInTheDocument();
-      expect(screen.queryByRole('link', { name: 'Manage tags →' })).not.toBeInTheDocument();
-      for (const name of ['Share', 'Save as PDF', 'Save']) expect(head().getByRole('button', { name })).toBeInTheDocument();
-      expect(screen.getByText('Agus Santoso (You) · AB')).toBeInTheDocument();
-      expect(screen.queryByText('KPM OWNER')).not.toBeInTheDocument();
-    });
-
-    it('P18.1-T2 AC-1: a read-only support session draws no write control — only Save as PDF', async () => {
-      open(meetingView({ can: LINK_CAN }));
-      await screen.findByRole('heading', { level: 2, name: 'Strategic Check-in — #14' });
-      expect(head().getByRole('button', { name: 'Save as PDF' })).toBeInTheDocument();
-      for (const name of ['Share', 'Save', /Change the date/]) {
-        expect(head().queryByRole('button', { name })).not.toBeInTheDocument();
-      }
-      expect(screen.queryByRole('link', { name: 'Manage tags →' })).not.toBeInTheDocument();
-    });
-
-    it('P18.1-T2 AC-3: a past meeting shows its frozen editors and reads Completed', async () => {
-      open(meetingView({
-        state: 'completed', date: '2026-09-26', title: 'Strategic Check-in — #13',
-        editors: editors({ owner: { ...WILSON, isReader: true }, coreLeaders: [AGUS, SARI], coreLeaderCount: 2, frozen: true }),
-        can: { ...meetingView().can, reschedule: false, delete: false },
-      }));
-      await screen.findByRole('heading', { level: 2, name: 'Strategic Check-in — #13' });
-      expect(head().getByText('26 Sep 2026 · Completed')).toBeInTheDocument();
-      expect(within(screen.getByRole('list', { name: 'Can edit these minutes' })).getAllByRole('listitem')).toHaveLength(4);
-    });
-  });
-
-  describe('saving (P18.1-T2 AC-7)', () => {
-    it('P18.1-T2 AC-7: Save waits for every write and says All changes saved', async () => {
-      const { calls } = open();
-      await userEvent.click(await screen.findByRole('button', { name: 'Save' }));
-      await waitFor(() => expect(toast()).toHaveTextContent('All changes saved'));
-      // Save itself writes nothing: there was nothing in flight.
-      expect(writes(calls)).toEqual([]);
-    });
-  });
-
-  describe('the meeting dialog (OD-145, I-254)', () => {
-    it('P18.1-T2 AC-2: Meeting details moves the date, sending only what changed with the head’s version, then reads the meeting again', async () => {
-      const moved = meetingView({ date: '2026-10-20', version: 4 });
-      const { calls } = open(meetingView(), {
-        'GET /leader-meetings/m-14': [{ body: meetingView() }, { body: moved }],
-        'PATCH /leader-meetings/m-14': { body: { ...moved } },
-      });
-      await userEvent.click(await screen.findByRole('button', { name: /^Change the date of/ }));
-      const dialog = within(await screen.findByRole('dialog', { name: 'Meeting details' }));
-      expect(dialog.getByRole('textbox', { name: 'Title' })).toHaveValue('Strategic Check-in — #14');
-      const date = dialog.getByLabelText('Date');
-      expect(date).toHaveValue('2026-10-13');
-      await userEvent.clear(date);
-      await userEvent.type(date, '2026-10-20');
-      await userEvent.click(dialog.getByRole('button', { name: 'Save changes' }));
-
-      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
-      const patch = writes(calls).find((c) => c.init.method === 'PATCH')!;
-      expect(JSON.parse(String(patch.init.body))).toEqual({ date: '2026-10-20', version: 3 });
-      expect(await head().findByRole('button', { name: /20 Oct 2026$/ })).toBeInTheDocument();
-    });
-
-    it('P18.1-T2 AC-9: a move refused once the meeting has taken place says so under the date', async () => {
-      open(meetingView(), {
-        'PATCH /leader-meetings/m-14': refusal(409, 'LEADER_MEETING_COMPLETED', 'This meeting is completed.'),
-      });
-      await userEvent.click(await screen.findByRole('button', { name: /^Change the date of/ }));
-      const dialog = within(await screen.findByRole('dialog', { name: 'Meeting details' }));
-      await userEvent.clear(dialog.getByLabelText('Date'));
-      await userEvent.type(dialog.getByLabelText('Date'), '2026-10-20');
-      await userEvent.click(dialog.getByRole('button', { name: 'Save changes' }));
-      expect(await dialog.findByText('This meeting has already taken place, so its date stays.')).toBeInTheDocument();
-      expect(dialog.getByLabelText('Date')).toHaveAccessibleDescription('This meeting has already taken place, so its date stays.');
-    });
-
-    it('P18.1-T2 AC-7: a move against a head changed since it was read reads it again and says so', async () => {
-      const theirs = meetingView({ title: 'Renamed by Maya', version: 5 });
-      open(meetingView(), {
-        'GET /leader-meetings/m-14': [{ body: meetingView() }, { body: theirs }],
-        'PATCH /leader-meetings/m-14': refusal(409, 'VERSION_CONFLICT', 'Changed since read.'),
-      });
-      await userEvent.click(await screen.findByRole('button', { name: /^Change the date of/ }));
-      const dialog = within(await screen.findByRole('dialog', { name: 'Meeting details' }));
-      await userEvent.type(dialog.getByRole('textbox', { name: 'Title' }), '!');
-      await userEvent.click(dialog.getByRole('button', { name: 'Save changes' }));
-      expect(await dialog.findByText('Someone else changed this while you were editing. It now shows what they saved.')).toBeInTheDocument();
-      await waitFor(() => expect(dialog.getByRole('textbox', { name: 'Title' })).toHaveValue('Renamed by Maya'));
-    });
-
-    it('P18.1-T2 AC-2: a meeting nobody has written in can be deleted, asked first in the dialog; Keep it goes back', async () => {
-      const { calls } = open(meetingView({ writtenIn: false, can: { ...meetingView().can, delete: true } }), {
-        'DELETE /leader-meetings/m-14': { status: 204 },
-      });
-      await userEvent.click(await screen.findByRole('button', { name: /^Change the date of/ }));
-      const dialog = within(await screen.findByRole('dialog', { name: 'Meeting details' }));
-      await userEvent.click(dialog.getByRole('button', { name: 'Delete meeting' }));
-      expect(dialog.getByText("Delete “Strategic Check-in — #14”? Nothing has been written in it yet, and it can't be brought back."))
-        .toBeInTheDocument();
-      expect(dialog.getByRole('button', { name: 'Keep it' })).toHaveFocus();
-      await userEvent.click(dialog.getByRole('button', { name: 'Keep it' }));
-      expect(dialog.getByRole('textbox', { name: 'Title' })).toBeInTheDocument();
-      expect(writes(calls)).toEqual([]);
-
-      await userEvent.click(dialog.getByRole('button', { name: 'Delete meeting' }));
-      await userEvent.click(dialog.getByRole('button', { name: 'Delete' }));
-      await waitFor(() => expect(nav.replace).toHaveBeenCalledWith('/leader-meetings'));
-      expect(writes(calls)[0].url).toMatch(/\/leader-meetings\/m-14\?version=3$/);
-    });
-
-    it('P18.1-T2 AC-9: a delete refused because something was written says so; a written meeting offers no delete', async () => {
-      open(meetingView({ writtenIn: false, can: { ...meetingView().can, delete: true } }), {
-        'DELETE /leader-meetings/m-14': refusal(409, 'LEADER_MEETING_HAS_MINUTES', 'Has minutes.'),
-      });
-      await userEvent.click(await screen.findByRole('button', { name: /^Change the date of/ }));
-      const dialog = within(await screen.findByRole('dialog', { name: 'Meeting details' }));
-      await userEvent.click(dialog.getByRole('button', { name: 'Delete meeting' }));
-      await userEvent.click(dialog.getByRole('button', { name: 'Delete' }));
-      expect(await dialog.findByText("Something has been written in this meeting, so it can't be deleted.")).toBeInTheDocument();
-      expect(nav.replace).not.toHaveBeenCalled();
-    });
-
-    it('a past meeting nobody wrote in: its date stays (read-only), and Delete meeting is still offered', async () => {
-      open(meetingView({ state: 'completed', writtenIn: false, can: { ...meetingView().can, reschedule: false, delete: true } }));
-      await userEvent.click(await screen.findByRole('button', { name: /^Change the date of/ }));
-      const dialog = within(await screen.findByRole('dialog', { name: 'Meeting details' }));
-      expect(dialog.getByLabelText('Date')).toHaveAttribute('readonly');
-      expect(dialog.getByRole('textbox', { name: 'Title' })).toHaveAttribute('readonly');
-      expect(dialog.queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument();
-      expect(dialog.getByRole('button', { name: 'Delete meeting' })).toBeInTheDocument();
-    });
-
-    it('a written meeting that is upcoming may be moved but offers no delete', async () => {
-      open();
-      await userEvent.click(await screen.findByRole('button', { name: /^Change the date of/ }));
-      const dialog = within(await screen.findByRole('dialog', { name: 'Meeting details' }));
-      expect(dialog.queryByRole('button', { name: 'Delete meeting' })).not.toBeInTheDocument();
-      expect(dialog.getByRole('button', { name: 'Save changes' })).toBeInTheDocument();
-    });
-  });
-
-  describe('Share these minutes (P18.1-T3, I-256; P18.9-T2 AC-3)', () => {
-    const link = { token: 'tok_abc-123', expiresAt: '2026-10-23T18:00:00.000Z' };
-
-    it('P18.1-T3 AC-1: each opening makes a fresh link, shows its address read-only and the hint, dated in Jakarta', async () => {
-      const { calls } = open(meetingView(), {
-        'POST /leader-meetings/m-14/share-links': [{ status: 201, body: link }, { status: 201, body: { ...link, token: 'tok_second' } }],
-      });
+    it('P19.22-T8 AC-2 Share: a link, then WhatsApp with the forum’s text and the link, in the window opened at the tap', async () => {
+      const win = { location: { href: '' }, close: vi.fn() };
+      vi.spyOn(window, 'open').mockReturnValue(win as unknown as Window);
+      open(meetingView(), { 'POST /leader-meetings/m-14/share-links': { status: 201, body: { token: 'tok_abc', expiresAt: '2026-12-04T03:00:00.000Z' } } });
       await userEvent.click(await screen.findByRole('button', { name: 'Share' }));
-      const dialog = within(await screen.findByRole('dialog', { name: 'Share these minutes' }));
-      const field = await dialog.findByRole('textbox', { name: 'Share these minutes' });
-      expect(field).toHaveValue(`${window.location.origin}/leader-meetings/shared/tok_abc-123`);
-      expect(field).toHaveAttribute('readonly');
-      // 18:00 UTC on the 23rd is the 24th in Jakarta.
-      expect(screen.getByRole('dialog')).toHaveAccessibleDescription(
-        "Anyone signed in to AgencyBoost at BSD City Branch can open this meeting's minutes with this link, read-only, until 24 Oct 2026.",
-      );
-
-      await userEvent.click(dialog.getByRole('button', { name: 'Close' }));
-      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-      await userEvent.click(screen.getByRole('button', { name: 'Share' }));
-      expect(await screen.findByDisplayValue(`${window.location.origin}/leader-meetings/shared/tok_second`)).toBeInTheDocument();
-      expect(writes(calls).filter((c) => c.init.method === 'POST')).toHaveLength(2);
+      await waitFor(() => expect(win.location.href).toMatch(/^https:\/\/wa\.me\/\?text=/));
+      const text = decodeURIComponent(win.location.href.replace('https://wa.me/?text=', ''));
+      expect(text).toContain('Strategic Leader Forum · Forum #14 · ');
+      expect(text).toContain('✓ Review angka MAPA driver dan informal group (Wilson)');
+      expect(text).toContain('✓ Update action items forum #13 (Everyone)');
+      expect(text).toMatch(/• Siapkan Closing Clinic Desember — Sari · 2 De[sc] · Not yet/);
+      expect(text).toContain('/leader-meetings/shared/tok_abc');
     });
 
-    it('P18.1-T3 AC-1, P18.7-T1 AC-6: Copy link says "Link copied ✓"', async () => {
-      const writeText = vi.fn(async () => undefined);
-      Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
-      open(meetingView(), { 'POST /leader-meetings/m-14/share-links': { status: 201, body: link } });
-      await userEvent.click(await screen.findByRole('button', { name: 'Share' }));
-      await userEvent.click(await screen.findByRole('button', { name: 'Copy link' }));
-      expect(writeText).toHaveBeenCalledWith(`${window.location.origin}/leader-meetings/shared/tok_abc-123`);
-      await waitFor(() => expect(toast()).toHaveTextContent('Link copied ✓'));
-    });
-
-    it('P18.1-T3 AC-1: Stop sharing stops every live link and says "Sharing stopped"', async () => {
-      const { calls } = open(meetingView(), {
-        'POST /leader-meetings/m-14/share-links': { status: 201, body: link },
-        'DELETE /leader-meetings/m-14/share-links': { body: { revoked: 2 } },
-      });
-      await userEvent.click(await screen.findByRole('button', { name: 'Share' }));
-      await screen.findByRole('button', { name: 'Copy link' });
-      await userEvent.click(screen.getByRole('button', { name: 'Stop sharing' }));
-      await waitFor(() => expect(toast()).toHaveTextContent('Sharing stopped'));
-      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-      expect(writes(calls).some((c) => c.init.method === 'DELETE' && c.url.endsWith('/leader-meetings/m-14/share-links'))).toBe(true);
-    });
-
-    it('a link that could not be made says so, and Try again makes one', async () => {
-      open(meetingView(), {
-        'POST /leader-meetings/m-14/share-links': [refusal(500, 'INTERNAL_ERROR'), { status: 201, body: link }],
-      });
-      await userEvent.click(await screen.findByRole('button', { name: 'Share' }));
-      expect(await screen.findByText("Couldn't make a link. Try again.")).toBeInTheDocument();
-      await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
-      expect(await screen.findByRole('button', { name: 'Copy link' })).toBeInTheDocument();
-    });
-  });
-
-  describe('Save as PDF (P18.1-T3 AC-4)', () => {
-    it('P18.1-T3 AC-4: says the prototype’s line, then prints under the meeting’s name, and writes nothing', async () => {
+    it('P19.22-T8 AC-2 PDF: the print layout of the agenda and the action items, then the browser’s print', async () => {
       const print = vi.spyOn(window, 'print').mockImplementation(() => undefined);
-      const { calls } = open();
-      const button = await screen.findByRole('button', { name: 'Save as PDF' });
-      vi.useFakeTimers({ shouldAdvanceTime: true });
-      await userEvent.click(button);
-      expect(toast()).toHaveTextContent('Preparing PDF — use your browser’s print dialog to save');
-      expect(print).not.toHaveBeenCalled();
-      let titled = '';
-      print.mockImplementation(() => { titled = document.title; });
-      act(() => { vi.advanceTimersByTime(400); });
-      expect(print).toHaveBeenCalledTimes(1);
-      expect(titled).toBe('Strategic Check-in — #14 – 13 Oct 2026');
-      expect(writes(calls)).toEqual([]);
-    });
-
-    it('P18.1-T3 AC-4: the screen’s chrome is hidden in print as `:756-765` hides it', async () => {
       open();
-      await screen.findByRole('heading', { level: 2, name: 'Strategic Check-in — #14' });
-      expect(screen.getByRole('link', { name: '← Back to all meetings' })).toHaveClass('print:hidden');
-      expect(screen.getByRole('tablist').closest('.print\\:hidden')).toContainElement(screen.getByRole('tabpanel'));
-      expect(head().getByText('Recommended: every 2 weeks · 60–90 mins').parentElement).toHaveClass('print:hidden');
-      expect(screen.getByRole('link', { name: 'Manage tags →' })).toHaveClass('print:hidden');
-      // The head itself prints: the title, the date and who can edit, as the prototype prints them.
-      expect(screen.getByRole('region', { name: /Strategic Check-in/ })).not.toHaveClass('print:hidden');
+      await userEvent.click(await screen.findByRole('button', { name: 'PDF' }));
+      await waitFor(() => expect(document.querySelector('[data-forum-print]')).not.toBeNull());
+      const sheet = within(document.querySelector('[data-forum-print]') as HTMLElement);
+      expect(sheet.getByText('Rencana Closing Clinic Desember')).toBeInTheDocument();
+      expect(sheet.getAllByText('from forum #13')).toHaveLength(2);
+      await waitFor(() => expect(print).toHaveBeenCalled());
     });
-  });
 
-  describe('states (L-110)', () => {
-    it('the wait is a skeleton of the head and a tab, named', () => {
-      stubFetch({ ...SHELL_STUBS, 'GET /leader-meetings/m-14': () => new Promise(() => undefined) as never });
+    it('P19.22-T8 AC-1 a forum to come moves its time in the dialog; one nobody wrote in can be deleted', async () => {
+      const fresh = meetingView({ state: 'upcoming', writtenIn: false, can: { edit: true, share: true, reschedule: true, delete: true, print: true } });
+      const { calls } = open(fresh, {
+        'PATCH /leader-meetings/m-14': { body: { ...fresh, time: '15:30' } },
+      });
+      await userEvent.click(await screen.findByRole('button', { name: 'Change date and time' }));
+      const dialog = within(await screen.findByRole('dialog', { name: 'Forum date and time' }));
+      await userEvent.clear(dialog.getByLabelText('Time'));
+      await userEvent.type(dialog.getByLabelText('Time'), '15:30');
+      await userEvent.click(dialog.getByRole('button', { name: 'Save' }));
+      await waitFor(() => expect(writes(calls)).toHaveLength(1));
+      expect(bodyOf(writes(calls)[0])).toEqual({ time: '15:30', version: 1 });
+    });
+
+    it('P19.22-T8 AC-2 a forum not there is one not-found state', async () => {
+      stubFetch({ ...SHELL_STUBS, 'GET /leader-meetings/m-14': notFound });
       renderWithSession(page(), { me: OWNER_ME });
-      expect(screen.getByRole('status')).toHaveTextContent('Loading the meeting…');
-    });
-
-    it('an error is the banner with Try again', async () => {
-      open(meetingView(), { 'GET /leader-meetings/m-14': [refusal(500, 'INTERNAL_ERROR', 'Something went wrong.'), { body: meetingView() }] });
-      expect(await screen.findByRole('alert')).toHaveTextContent('Something went wrong.');
-      await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
-      expect(await screen.findByRole('heading', { level: 2, name: 'Strategic Check-in — #14' })).toBeInTheDocument();
-    });
-
-    it('P18.1-T2 AC-1: not found — the Owner is offered the list back', async () => {
-      open(meetingView(), { 'GET /leader-meetings/m-14': notFound });
-      expect(await screen.findByRole('heading', { name: "This meeting can't be found." })).toBeInTheDocument();
-      expect(screen.getByRole('link', { name: '← Back to all meetings' })).toHaveAttribute('href', '/leader-meetings');
-    });
-
-    it('P18.1-T2 AC-1: not found — a field member is offered where they land', async () => {
-      open(meetingView(), { 'GET /leader-meetings/m-14': notFound }, FIELD_ME);
-      expect(await screen.findByRole('heading', { name: "This meeting can't be found." })).toBeInTheDocument();
-      expect(screen.getByRole('link', { name: 'Go to your home page' })).toHaveAttribute('href', '/home');
-    });
-
-    it('a reader not signed in is sent to sign in, and back to this meeting after', async () => {
-      // Sent by the shell since P18.5-T15 AC-2, from the address the browser is on.
-      window.history.replaceState(null, '', '/leader-meetings/m-14');
-      onTestFinished(() => window.history.replaceState(null, '', '/'));
-      stubFetch({});
-      renderWithSession(page(), { me: null });
-      await waitFor(() => expect(nav.replace).toHaveBeenCalledWith('/login?next=%2Fleader-meetings%2Fm-14'));
+      expect(await screen.findByText("This forum can't be found.")).toBeInTheDocument();
     });
   });
 
-  describe('safety and phones (P18.1-T2 AC-8)', () => {
-    it('P18.1-T2 AC-8: <b> and <script> in a title are drawn as typed, in the head and in the dialog’s question', async () => {
-      const title = '<b>Bold</b><script>alert(1)</script>';
-      const { container } = open(meetingView({ title, writtenIn: false, can: { ...meetingView().can, delete: true } }));
-      expect(await screen.findByRole('heading', { level: 2, name: title })).toBeInTheDocument();
-      await userEvent.click(screen.getByRole('button', { name: /^Change the date of/ }));
-      await userEvent.click(screen.getByRole('button', { name: 'Delete meeting' }));
-      expect(screen.getByText(`Delete “${title}”? Nothing has been written in it yet, and it can't be brought back.`)).toBeInTheDocument();
-      expect(container.querySelector('main b, main script')).toBeNull();
-      expect(document.querySelector('[role="dialog"] b, [role="dialog"] script')).toBeNull();
-    });
-
-    it('P18.1-T2 AC-8: at 360px the head wraps — the title, then the note and the buttons — rather than widening the page', async () => {
+  describe('P19.22-T8 AC-3 the agenda: one checklist', () => {
+    it('P19.22-T8 AC-3 each line: its box, its text, its PIC (photo and first name, or Everyone)', async () => {
       open();
-      const title = await screen.findByRole('heading', { level: 2, name: 'Strategic Check-in — #14' });
-      expect(title).toHaveClass('break-words');
-      expect(title.parentElement).toHaveClass('min-w-0');
-      expect(title.parentElement?.parentElement).toHaveClass('flex-wrap');
-      expect(head().getByRole('button', { name: 'Save' }).parentElement).toHaveClass('flex-wrap');
-      expect(screen.getByRole('tabpanel')).toHaveClass('min-w-0');
+      await screen.findByText('Rencana Closing Clinic Desember');
+      expect(line('a-1').getByRole('checkbox', { name: 'Done: Review angka MAPA driver dan informal group' })).toBeChecked();
+      expect(line('a-1').getByRole('button', { name: /^PIC for/ })).toHaveTextContent('Wilson');
+      expect(line('a-2').getByRole('button', { name: /^PIC for/ })).toHaveTextContent('Everyone');
+      expect(line('a-5').getByRole('button', { name: /^PIC for/ })).toHaveTextContent('+ PIC');
     });
 
-    it('P18.1-T2 AC-8: at 360px the three tabs stay on one line, scrolling inside their own strip', async () => {
+    it('P19.22-T8 AC-3 ticked during the forum: the box is one write with the line’s version', async () => {
+      const { calls } = open(meetingView(), { 'PATCH /leader-meetings/m-14/agenda-items/a-4': { body: { ...AGENDA[3], done: true, version: 2 } } });
+      await userEvent.click(await screen.findByRole('checkbox', { name: 'Done: Rencana Closing Clinic Desember' }));
+      await waitFor(() => expect(line('a-4').getByRole('checkbox')).toBeChecked());
+      expect(bodyOf(writes(calls)[0])).toEqual({ done: true, version: 1 });
+    });
+
+    it('P19.22-T8 AC-3 a PIC chosen from the editors, or Everyone; a text edited on a tap', async () => {
+      const { calls } = open(meetingView(), {
+        'PATCH /leader-meetings/m-14/agenda-items/a-5': [
+          { body: { ...AGENDA[4], picMembershipId: 'mem-yosef', version: 2 } },
+          { body: { ...AGENDA[4], picMembershipId: 'mem-yosef', text: 'Kesepakatan baru', version: 3 } },
+        ],
+      });
+      await userEvent.click(await screen.findByRole('button', { name: 'PIC for Kesepakatan dan action items baru' }));
+      const menu = within(screen.getByRole('menu'));
+      // The editors, Everyone, No PIC — never a PIC no longer an editor.
+      expect(menu.getAllByRole('menuitemradio')).toHaveLength(7);
+      for (const name of ['Wilson', 'Maya', 'Agus', 'Sari', 'Yosef', 'Everyone', 'No PIC']) {
+        expect(menu.getByRole('menuitemradio', { name })).toBeInTheDocument();
+      }
+      expect(menu.queryByRole('menuitemradio', { name: 'Hendra' })).not.toBeInTheDocument();
+      await userEvent.click(menu.getByRole('menuitemradio', { name: 'Yosef' }));
+      await waitFor(() => expect(line('a-5').getByRole('button', { name: /^PIC for/ })).toHaveTextContent('Yosef'));
+      expect(bodyOf(writes(calls)[0])).toEqual({ pic: 'mem-yosef', version: 1 });
+
+      await userEvent.click(line('a-5').getByRole('button', { name: 'Edit: Kesepakatan dan action items baru' }));
+      const field = line('a-5').getByRole('textbox');
+      await userEvent.clear(field);
+      await userEvent.type(field, 'Kesepakatan baru{Enter}');
+      await waitFor(() => expect(writes(calls)).toHaveLength(2));
+      expect(bodyOf(writes(calls)[1])).toEqual({ text: 'Kesepakatan baru', version: 2 });
+    });
+
+    it('P19.22-T8 AC-3 + Add agenda types a line in place, then sends it', async () => {
+      const { calls } = open(meetingView(), {
+        'POST /leader-meetings/m-14/agenda-items': { status: 201, body: { id: 'a-6', text: 'Persiapan Q1', picMembershipId: null, picAll: false, done: false, version: 1 } },
+      });
+      await userEvent.click(await screen.findByRole('button', { name: 'Add agenda' }));
+      await userEvent.type(screen.getByRole('textbox', { name: 'New agenda line' }), 'Persiapan Q1{Enter}');
+      expect(await screen.findByText('Persiapan Q1')).toBeInTheDocument();
+      expect(bodyOf(writes(calls)[0])).toEqual({ text: 'Persiapan Q1' });
+    });
+
+    it('P19.22-T8 AC-3 a line somebody changed first: the forum is read again and the reader told', async () => {
+      const { calls } = open(meetingView(), {
+        'PATCH /leader-meetings/m-14/agenda-items/a-4': refusal(409, 'VERSION_CONFLICT', 'Changed.'),
+      });
+      await userEvent.click(await screen.findByRole('checkbox', { name: 'Done: Rencana Closing Clinic Desember' }));
+      expect(await screen.findByText(/Someone else changed this/)).toBeInTheDocument();
+      expect(calls.filter((c) => c.url.endsWith('/leader-meetings/m-14') && (c.init.method ?? 'GET') === 'GET')).toHaveLength(2);
+    });
+  });
+
+  describe('P19.22-T8 AC-4 the action items', () => {
+    const toActions = async () => {
+      await userEvent.click(await screen.findByRole('tab', { name: 'Action items' }));
+      await screen.findByText('Siapkan Closing Clinic Desember');
+    };
+
+    it('P19.22-T8 AC-4 each row: the item, from forum #n when carried, PIC, due, the state pill, a trash; the two hints', async () => {
       open();
-      const strip = await screen.findByRole('tablist');
-      expect(strip).toHaveClass('flex', 'overflow-x-auto', 'whitespace-nowrap');
-      expect(strip).not.toHaveClass('flex-wrap');
-      for (const tab of within(strip).getAllByRole('tab')) expect(tab).toHaveClass('shrink-0');
+      await toActions();
+      expect(row('x-1').getByText('from forum #13')).toBeInTheDocument();
+      expect(row('x-2').queryByText(/from forum/)).not.toBeInTheDocument();
+      expect(row('x-1').getByRole('button', { name: /^PIC for/ })).toHaveTextContent('Yosef');
+      // A PIC no longer an editor is still drawn.
+      expect(row('x-5').getByRole('button', { name: /^PIC for/ })).toHaveTextContent('Hendra');
+      expect(row('x-1').getByRole('button', { name: /^Status / })).toHaveTextContent('In progress');
+      expect(row('x-1').getByRole('button', { name: /^Status / })).toHaveClass('bg-pill-amber');
+      expect(row('x-3').getByRole('button', { name: /^Status / })).toHaveClass('bg-pill-green');
+      expect(row('x-4').getByRole('button', { name: /^Status / })).toHaveClass('bg-pill-red');
+      expect(row('x-1').getByRole('button', { name: 'Delete: Aktifkan 3 agent yang belum aktif di Tanpa group' })).toBeInTheDocument();
+      expect(screen.getByText('Unfinished action items move to the next forum automatically')).toBeInTheDocument();
+      expect(screen.getByText('Tap a status to change it · tap a text to edit it')).toBeInTheDocument();
     });
 
-    it('an Admin is named among the editors as the server lists them', async () => {
-      open(meetingView({ editors: editors({ owner: WILSON, admins: [{ ...MAYA, isReader: true }] }) }));
-      expect(await screen.findByText('Maya Halim (You) · AAB')).toBeInTheDocument();
+    it('P19.22-T8 AC-4 the status: tapped, a menu of Not yet · In progress · Done, one write', async () => {
+      const { calls } = open(meetingView(), { 'PATCH /leader-meetings/m-14/action-items/x-4': { body: { ...ACTION_ITEMS[3], status: 'doing', version: 2 } } });
+      await toActions();
+      await userEvent.click(row('x-4').getByRole('button', { name: /^Status / }));
+      const menu = within(screen.getByRole('menu'));
+      expect(menu.getAllByRole('menuitemradio').map((m) => m.textContent)).toEqual(['Not yet', 'In progress', 'Done']);
+      await userEvent.click(menu.getByRole('menuitemradio', { name: 'In progress' }));
+      await waitFor(() => expect(row('x-4').getByRole('button', { name: /^Status / })).toHaveTextContent('In progress'));
+      expect(bodyOf(writes(calls)[0])).toEqual({ status: 'doing', version: 1 });
+    });
+
+    it('P19.22-T8 AC-4 the text edited on a tap; Escape puts it back and sends nothing', async () => {
+      const { calls } = open(meetingView(), { 'PATCH /leader-meetings/m-14/action-items/x-2': { body: { ...ACTION_ITEMS[1], text: '2 presentasi rekrut', version: 2 } } });
+      await toActions();
+      await userEvent.click(row('x-2').getByRole('button', { name: 'Edit: 1 presentasi rekrut per AB per minggu' }));
+      await userEvent.keyboard('{Escape}');
+      expect(writes(calls)).toHaveLength(0);
+      await userEvent.click(row('x-2').getByRole('button', { name: 'Edit: 1 presentasi rekrut per AB per minggu' }));
+      const field = row('x-2').getByRole('textbox');
+      await userEvent.clear(field);
+      await userEvent.type(field, '2 presentasi rekrut{Enter}');
+      expect(await screen.findByText('2 presentasi rekrut')).toBeInTheDocument();
+      expect(bodyOf(writes(calls)[0])).toEqual({ text: '2 presentasi rekrut', version: 1 });
+    });
+
+    it('P19.22-T8 AC-4 the trash asks Delete action item?, Cancel keeps it, Delete removes it (and from the next forum)', async () => {
+      const { calls } = open(meetingView(), { 'DELETE /leader-meetings/m-14/action-items/x-4': { status: 204, body: null } });
+      await toActions();
+      await userEvent.click(row('x-4').getByRole('button', { name: 'Delete: Siapkan Closing Clinic Desember' }));
+      let dialog = within(await screen.findByRole('dialog', { name: 'Delete action item?' }));
+      expect(dialog.getByText('“Siapkan Closing Clinic Desember”')).toBeInTheDocument();
+      expect(dialog.getByText('Also gone from the next forum. It cannot be undone.')).toBeInTheDocument();
+      await userEvent.click(dialog.getByRole('button', { name: 'Cancel' }));
+      expect(writes(calls)).toHaveLength(0);
+      await userEvent.click(row('x-4').getByRole('button', { name: 'Delete: Siapkan Closing Clinic Desember' }));
+      dialog = within(await screen.findByRole('dialog', { name: 'Delete action item?' }));
+      expect(dialog.getByRole('button', { name: 'Delete' })).toHaveClass('bg-alert');
+      await userEvent.click(dialog.getByRole('button', { name: 'Delete' }));
+      await waitFor(() => expect(document.querySelector('[data-action-item="x-4"]')).toBeNull());
+      expect(writes(calls)[0].url).toMatch(/\/action-items\/x-4\?version=1$/);
+    });
+
+    it('P19.22-T8 AC-4 + Add action item types one in place, then sends it', async () => {
+      const added = { id: 'x-6', lineageId: 'x-6', text: 'Jadwalkan JFW', picMembershipId: null, dueOn: null, status: 'todo', fromNumber: null, version: 1 };
+      const { calls } = open(meetingView(), { 'POST /leader-meetings/m-14/action-items': { status: 201, body: added } });
+      await toActions();
+      await userEvent.click(screen.getByRole('button', { name: 'Add action item' }));
+      await userEvent.type(screen.getByRole('textbox', { name: 'New action item' }), 'Jadwalkan JFW{Enter}');
+      expect(await screen.findByText('Jadwalkan JFW')).toBeInTheDocument();
+      expect(bodyOf(writes(calls)[0])).toEqual({ text: 'Jadwalkan JFW' });
+    });
+
+    it('P19.22-T8 AC-4 a core leader edits as the Owner does', async () => {
+      open(meetingView(), {}, CORE_LEADER_ME);
+      await toActions();
+      expect(screen.getByRole('button', { name: 'Add action item' })).toBeInTheDocument();
+      expect(row('x-1').getByRole('button', { name: /^Status / })).toBeEnabled();
     });
   });
 });

@@ -107,13 +107,13 @@ describe('P19.12-T6 the Unit Dashboard’s views', () => {
       .toEqual(['Direct group', 'Informal group', 'All downline']);
     await userEvent.click(within(menu).getByRole('option', { name: 'All downline' }));
     expect(nav.replace).toHaveBeenCalledWith('/unit/dashboard?scope=downline', { scroll: false });
-    await waitFor(() => expect(reads(calls)).toContain('http://api.test/api/v1/unit/dashboard?period=month&scope=downline'));
+    await waitFor(() => expect(reads(calls)).toContain('http://api.test/api/v1/unit/dashboard?period=year&scope=downline'));
     expect(window.localStorage.getItem(KEY)).toBe('downline');
   });
 
   it('P19.12-T6 AC-2 one view offered — an AAB with no AB below — draws no picker', async () => {
     render({ routes: { 'GET /unit/dashboard': { body: dashboard() } } });
-    await screen.findByRole('table', { name: 'Your team’s roster' });
+    await screen.findByRole('region', { name: /^Your team’s roster/ });
     expect(picker()).toBeNull();
   });
 
@@ -128,20 +128,20 @@ describe('P19.12-T6 the Unit Dashboard’s views', () => {
     window.localStorage.setItem(KEY, 'informal');
     const { calls } = render({ search: 'scope=downline' });
     await screen.findByRole('button', { name: 'View All downline' });
-    expect(reads(calls)).toEqual(['http://api.test/api/v1/unit/dashboard?period=month&scope=downline']);
+    expect(reads(calls)).toEqual(['http://api.test/api/v1/unit/dashboard?period=year&scope=downline']);
   });
 
   it('P19.12-T6 AC-3 then the view last chosen on this browser, then the server’s default', async () => {
     window.localStorage.setItem(KEY, 'informal');
     const kept = render();
     await screen.findByRole('button', { name: 'View Informal group' });
-    expect(reads(kept.calls)).toEqual(['http://api.test/api/v1/unit/dashboard?period=month&scope=informal']);
+    expect(reads(kept.calls)).toEqual(['http://api.test/api/v1/unit/dashboard?period=year&scope=informal']);
   });
 
   it('P19.12-T6 AC-3 nothing kept: no view asked for — the server’s default', async () => {
     const { calls } = render();
     await screen.findByRole('button', { name: 'View Direct group' });
-    expect(reads(calls)).toEqual(['http://api.test/api/v1/unit/dashboard?period=month']);
+    expect(reads(calls)).toEqual(['http://api.test/api/v1/unit/dashboard?period=year']);
   });
 
   it('P19.12-T6 AC-3 storage refused (a private window): the default, and a choice still reads', async () => {
@@ -150,7 +150,7 @@ describe('P19.12-T6 the Unit Dashboard’s views', () => {
     const { calls } = render();
     await userEvent.click(await screen.findByRole('button', { name: 'View Direct group' }));
     await userEvent.click(within(screen.getByRole('listbox', { name: 'View' })).getByRole('option', { name: 'Informal group' }));
-    await waitFor(() => expect(reads(calls)).toContain('http://api.test/api/v1/unit/dashboard?period=month&scope=informal'));
+    await waitFor(() => expect(reads(calls)).toContain('http://api.test/api/v1/unit/dashboard?period=year&scope=informal'));
   });
 
   it('P19.12-T6 AC-3 a view of another leader’s unit neither reads nor writes the reader’s kept view', async () => {
@@ -162,7 +162,7 @@ describe('P19.12-T6 the Unit Dashboard’s views', () => {
     });
     renderWithSession(<UnitBelowPage params={routeParams({ membershipId: 'mem-sari' })} />, { me: LEADER_ME });
     await userEvent.click(await screen.findByRole('button', { name: 'View Direct group' }));
-    expect(reads(calls)).toEqual(['http://api.test/api/v1/unit/dashboard?period=month&for=mem-sari']);
+    expect(reads(calls)).toEqual(['http://api.test/api/v1/unit/dashboard?period=year&for=mem-sari']);
     await userEvent.click(within(screen.getByRole('listbox', { name: 'View' })).getByRole('option', { name: 'All downline' }));
     expect(window.localStorage.getItem(KEY)).toBe('informal');
   });
@@ -179,30 +179,11 @@ describe('P19.12-T6 the Unit Dashboard’s views', () => {
     expect(picker()).toBeNull();
   });
 
-  it('P19.12-T6 AC-1 Tim Anda’s chips: an AB below is its own chip, never in AAB', async () => {
-    render({
-      routes: {
-        'GET /unit/dashboard': {
-          body: viewed('downline', {
-            tiles: {
-              ...dashboard().tiles,
-              team: { total: 29, direct: 1, units: 4, underUnits: 24, aab: 0, ab: 28, newHires: 0 },
-              potentialActive: { count: 5, of: 29, unit: { count: 1, of: 1 }, aab: { count: 0, of: 0 }, ab: { count: 4, of: 28 } },
-              potentialRecruits: { yourUnit: 0, aabs: 0, abs: 2 },
-            },
-          }),
-        },
-      },
-    });
-    await screen.findByRole('table', { name: 'Your team’s roster' });
-    const tiles = document.querySelector('[data-unit-tiles]')!;
-    // Tim Anda: 1 direct · 0 AAB · 28 AB; Active Agent: … · AB 4/28; Recruitment: … · AB 2.
-    expect(tiles).toHaveTextContent('1 direct');
-    expect(tiles).toHaveTextContent('0 AAB');
-    expect(tiles).toHaveTextContent('28 AB');
-    expect(tiles).toHaveTextContent('AB 4/28');
-    expect(tiles).toHaveTextContent('AB 2');
-  });
+  /*
+   * P19.12-T6 AC-1's *Tim Anda* chips (an AB below its own chip, never in AAB) were pinned here: the chips went with
+   * P19.18-T1 AC-3 (ADR-0271 §3) — one number per tile, the downline filter splits it. That an AB below is never an AAB
+   * is the server's, pinned by `unit-views.tenancy.spec.ts`.
+   */
 
   describe('AC-4 Grup informal’s line, and + Add to group', () => {
     it('P19.12-T6 AC-4 a leader reads the line, and is offered no add — the API refuses them too', async () => {
@@ -239,7 +220,7 @@ describe('P19.12-T6 the Unit Dashboard’s views', () => {
         routes: {
           'GET /unit/dashboard': { body: viewed('informal', { informal: { ...INFORMAL, groups: [] } }) },
           'POST /members/groups/g-new/members': { body: { groupId: 'g-new', name: 'Group Agus', added: 1, memberCount: 1 } },
-          'POST /members/groups': { body: [{ groupId: 'g-new', name: 'Group Agus', ownerMembershipId: 'mem-agus', ownerName: 'Agus Santoso', ownerHasLeft: false, memberCount: 0 }] },
+          'POST /members/groups': { body: { groupId: 'g-new', view: { groups: [], ungrouped: { abs: [], counts: { leaders: 0, people: 0, abGroups: 0 } }, unplaced: 0, canWrite: true } } },
         },
       });
       await userEvent.click(await screen.findByRole('button', { name: '+ Add to group' }));
@@ -252,7 +233,8 @@ describe('P19.12-T6 the Unit Dashboard’s views', () => {
       expect(posts.map((c) => c.url)).toEqual([
         'http://api.test/api/v1/members/groups', 'http://api.test/api/v1/members/groups/g-new/members',
       ]);
-      expect(JSON.parse(posts[0].init.body as string)).toEqual({ name: 'Group Agus', ownerMembershipId: 'mem-agus' });
+      // P19.17-T4 (ADR-0270 §1): a name, with the head — an AB — in it.
+      expect(JSON.parse(posts[0].init.body as string)).toEqual({ name: 'Group Agus', abMembershipId: 'mem-agus' });
     });
 
     it('P19.12-T6 AC-4 a refusal stays in the sheet, nothing claimed', async () => {

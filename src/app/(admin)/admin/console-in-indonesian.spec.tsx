@@ -7,34 +7,32 @@ import { ImpersonationBanner } from '@/components/impersonation-banner';
 import { SubscriptionDialog } from '@/components/subscription-dialog';
 import { InLanguage, browserChose, makeMe, makeSession, renderInIndonesian, renderWithLanguage, resetLanguage, routeParams, stubFetch } from '@test/harness';
 import { englishOnly, englishShown } from '@test/english-left';
-import { adminAnalyticsMessages } from '@/i18n/messages/admin-analytics';
 import { adminAuditMessages } from '@/i18n/messages/admin-audit';
 import { adminOfficesMessages } from '@/i18n/messages/admin-offices';
-import { adminOverviewMessages } from '@/i18n/messages/admin-overview';
-import { adminRequestsMessages } from '@/i18n/messages/admin-requests';
+import { adminApprovalsMessages } from '@/i18n/messages/admin-approvals';
 import { billingMessages } from '@/i18n/messages/billing';
 import { officeSubscriptionMessages } from '@/i18n/messages/office-subscription';
 import { supportBannerMessages } from '@/i18n/messages/support-banner';
 import { supportSessionMessages } from '@/i18n/messages/support-session';
 import { leadersSaid, subscriptionLine, tenantStatusLabels, tenantStatusWord, type TenantRow } from '@/lib/admin';
-import { officeState, platformHeadings, signedInWords } from '@/lib/admin-analytics';
-import { costMissingWords, maskAmount, perLeaderDiscount, priceQuote, saveWordsIn, validateQuote, type BillingTier } from '@/lib/billing';
+import { costMissingWords, policiesText, type BillingPrices } from '@/lib/billing';
 import { SessionContext } from '@/lib/session';
-import AdminOverviewPage from './page';
-import PlatformAnalyticsPage from './analytics/page';
-import AuditPage from './audit/page';
+// P19.23-T6 (ADR-0279): the audit log moved under *Platform*.
+import AuditPage from './platform/audit/page';
 import BillingPage from './billing/page';
-import { KpmBillingTab } from '@/components/admin/kpm-billing-tab';
 import ImpersonatePage from './impersonate/[userId]/page';
 import RetiredApprovalAddress from './impersonation/[sessionId]/page';
-import KpmRequestsPage from './kpm-requests/page';
-import LeaderLimitRequestsPage from './leader-limit-requests/page';
+import ApprovalsPage from './approvals/page';
 import TenantAdminsPage from './tenant-admins/page';
-import TenantsPage from './tenants/page';
-import NewTenantPage from './tenants/new/page';
-import TenantDetailPage from './tenants/[kpmId]/page';
 import AssignOwnerPage from './tenants/[kpmId]/owner/page';
 import RetiredRosterAddress from './tenants/[kpmId]/roster/page';
+// P19.23 (ADR-0277 §7, §8; ADR-0279): the console's moved and retired addresses, each a redirect.
+import RetiredAnalyticsAddress from './analytics/page';
+import MovedAuditAddress from './audit/page';
+import RetiredKpmRequestsAddress from './kpm-requests/page';
+import RetiredLeaderLimitAddress from './leader-limit-requests/page';
+import PlatformIndex from './platform/page';
+import RetiredNewKpmAddress from './tenants/new/page';
 
 /**
  * **The Super Admin's console in Indonesian** (P18.10-T6 AC-1, as T4's AC-1 to AC-4): every screen of the console this
@@ -56,7 +54,7 @@ vi.mock('next/navigation', () => ({
 }));
 
 const AREAS = [
-  adminOverviewMessages, adminOfficesMessages, adminAnalyticsMessages, adminAuditMessages, adminRequestsMessages,
+  adminOfficesMessages, adminAuditMessages, adminApprovalsMessages,
   billingMessages, officeSubscriptionMessages, supportSessionMessages, supportBannerMessages,
 ];
 const ENGLISH = englishOnly(...AREAS);
@@ -95,11 +93,33 @@ const KPM = {
 };
 
 const rp = (major: number) => major * 100;
-const TIERS: BillingTier[] = [
-  { code: 'TIER_1_10', minLeaders: 1, maxLeaders: 10, standardMinor: rp(500_000), sixMonthMinor: rp(400_000), annualMinor: rp(380_000), customPricing: false },
-  { code: 'TIER_11_20', minLeaders: 11, maxLeaders: 20, standardMinor: rp(475_000), sixMonthMinor: rp(375_000), annualMinor: rp(356_250), customPricing: false },
-  { code: 'TIER_101_PLUS', minLeaders: 101, maxLeaders: null, standardMinor: rp(375_000), sixMonthMinor: rp(250_000), annualMinor: rp(237_500), customPricing: true },
-];
+/** `GET /admin/billing/prices` (P19.23-T5; ADR-0279 §1): the price list and the calculator's numbers. */
+const PRICES: BillingPrices = {
+  currency: 'IDR',
+  tiers: [
+    { code: 'TIER_1_10', minLeaders: 1, maxLeaders: 10, standardMinor: rp(500_000), offerMinor: rp(400_000), customPricing: false },
+    { code: 'TIER_11_20', minLeaders: 11, maxLeaders: 20, standardMinor: rp(475_000), offerMinor: rp(375_000), customPricing: false },
+    { code: 'TIER_101_PLUS', minLeaders: 101, maxLeaders: null, standardMinor: null, offerMinor: null, customPricing: true },
+  ],
+  annualDiscountPct: 5, trialDays: 30, graceDays: 7, endingSoonDays: 30, daysPerMonth: 30, perDayRoundingMinor: rp(100),
+  bulkPercentMax: 100, noteMax: 500, kpmNameMax: 120, countMax: 10_000, rateMaxMinor: rp(100_000_000),
+  breakEven: { policyApeMinor: rp(20_000_000), commissionPct: 20, overridingPct: 10, bonusPct: 10, incomePerPolicyMinor: rp(8_000_000) },
+};
+const BILLING_ROW = {
+  kpmId: 'kpm-1', code: '0417', branch: 'BSD City Branch', company: { id: 'co-1', name: 'Prudential' }, kpmStatus: 'active',
+  owner: { fullName: 'Rina Wijaya', phone: null }, leadersUsed: 9, maxLeaders: 10,
+  tier: { code: 'TIER_1_10', minLeaders: 1, maxLeaders: 10 }, rateMinor: rp(350_000), customPrice: true, plan: 'annual',
+  trial: false, startDate: '2026-01-06', endDate: '2027-01-05', perMonthMinor: rp(3_325_000), periodTotalMinor: rp(39_900_000),
+  graceEndsOn: null, attention: null, needsAction: false, agents: null, bulkDiscount: null, note: null,
+};
+const BILLING_LIST = {
+  summary: { monthlyRevenueMinor: rp(3_325_000), payingKpms: 1, leadersBilled: 10, endingSoon: 0, needsAction: 1, kpms: 2 },
+  total: { kpms: 2, leadersUsed: 10, weightedRateMinor: rp(350_000), perMonthMinor: rp(3_325_000), periodTotalMinor: rp(39_900_000), needsAction: 1 },
+  rows: [
+    BILLING_ROW,
+    { ...BILLING_ROW, kpmId: 'kpm-2', code: '0601', branch: 'Cikarang Branch', leadersUsed: 1, endDate: '2026-11-10', graceEndsOn: '2026-11-17', attention: 'ended', needsAction: true },
+  ],
+};
 
 beforeEach(() => {
   nav.search = new URLSearchParams();
@@ -112,90 +132,17 @@ afterEach(() => {
 
 describe('P18.10-T6 the Super Admin’s console in Indonesian', () => {
   it('reads the English it is looking for, so a silent zero cannot pass: the same page in English shows it', async () => {
-    expect(ENGLISH.length).toBeGreaterThan(250);
-    stubFetch({ ...SHELL, '/admin/tenants': { body: [KPM] } });
-    nav.pathname = '/admin/tenants';
+    expect(ENGLISH.length).toBeGreaterThan(150);
+    stubFetch({ ...SHELL, '/admin/accounts': { body: [] }, '/admin/tenants/kpm-1': { body: KPM } });
+    nav.pathname = '/admin/tenants/kpm-1/owner';
     render(
       <SessionContext.Provider value={makeSession({ me: SUPER_ADMIN })}>
-        <AdminLayout><TenantsPage /></AdminLayout>
+        <AdminLayout><AssignOwnerPage params={routeParams({ kpmId: 'kpm-1' })} /></AdminLayout>
       </SessionContext.Provider>,
     );
-    await screen.findByRole('table');
-    expect(englishShown(document.body, ENGLISH)).toEqual(expect.arrayContaining(['New office', 'Edit subscription', 'Active']));
+    await screen.findByRole('heading', { level: 1 });
+    expect(englishShown(document.body, ENGLISH).length).toBeGreaterThan(0);
   });
-
-  it('AC-1, AC-2 the Overview: the queue’s frame, the tiles kept, the figures and the server’s items as sent', async () => {
-    stubFetch({
-      ...SHELL,
-      '/admin/overview': {
-        body: {
-          tiles: { companies: 1, kpms: 8, totalMembers: 1340, agencyBuilders: 61 },
-          attention: [{
-            tag: 'Owner KPM', severity: 'structural', title: '2 KPM belum punya Owner',
-            detail: 'Tidak ada yang dapat mengelola KPM sampai Owner ditetapkan.', href: '/admin/tenants', actionLabel: 'Tinjau',
-          }],
-          companies: [{ companyId: 'co-1', name: 'Prudential', initials: 'PR', kpmCount: 8, memberCount: 1340, ladder: ['Agent', 'AAB', 'AB'] }],
-        },
-      },
-    });
-    inIndonesian('/admin', <AdminOverviewPage />);
-    expect(await screen.findByText('2 KPM belum punya Owner')).toBeInTheDocument();
-    expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent))
-      .toEqual(['Perlu perhatian Anda', 'Sekilas', 'Perusahaan']);
-    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^Overview$/);
-    expect(screen.getByText(/^1 item memerlukan tindakan Superadmin — tidak ada yang dapat didelegasikan ke KPM Owner atau Admin\.$/)).toBeInTheDocument();
-    // The tiles' names kept (§A.4), *ABs* in its English plural; the figures Indonesian.
-    for (const tile of ['Companies', 'Total members', 'ABs']) expect(screen.getAllByText(tile, { selector: 'main p' }).length).toBe(1);
-    expect(screen.getAllByText('1.340').length).toBeGreaterThan(0);
-    expect(screen.getByText('Susunan jenjang: Agent → AAB → AB')).toBeInTheDocument();
-    expect(screen.getByText('Anggota')).toBeInTheDocument();
-    noEnglishLeft();
-  });
-
-  it('AC-1 to AC-4 All KPMs: the columns, the states, past the limit, and Edit subscription named for its office', async () => {
-    stubFetch({
-      ...SHELL,
-      '/admin/tenants': {
-        body: [KPM, { ...KPM, _id: 'kpm-2', code: '0555', branchName: 'Kelapa Gading Branch', ownerName: null, ownerUserId: null, ownerEmail: null, subscriptionState: 'ended_kept_active', leadersUsed: 2 }],
-      },
-    });
-    inIndonesian('/admin/tenants', <TenantsPage />);
-    const table = await screen.findByRole('table', { name: 'KPM di platform' });
-    expect(within(table).getAllByRole('columnheader').map((h) => h.textContent)).toEqual([
-      // P19.4-T3 AC-8 (A2): *KPM · Pemilik · Anggota · Data terakhir · Perlu tindakan*, beside the client's earlier columns.
-      'KPM', 'Perusahaan', 'Owner', 'Anggota', 'Data terakhir', 'Perlu tindakan', 'Status', 'Tanggal berakhir', 'Jumlah leader',
-      'Langganan',
-    ]);
-    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^All KPMs$/);
-    expect(screen.getByRole('link', { name: 'KPM baru' })).toHaveAttribute('href', '/admin/tenants/new');
-    const first = within(table).getByRole('row', { name: /^0417/ });
-    expect(within(first).getByText('Aktif')).toBeInTheDocument();
-    expect(within(first).getByText('5 Jan 2027')).toBeInTheDocument();
-    expect(within(first).getByText('lebih 3')).toBeInTheDocument();
-    expect(within(first).getByText('13 leaders dari batas 10, lebih 3')).toHaveClass('sr-only');
-    // A branch, a company and a person as typed.
-    expect(within(first).getByText('BSD City Branch')).toBeInTheDocument();
-    expect(within(first).getByText('Rina Wijaya')).toBeInTheDocument();
-    const second = within(table).getByRole('row', { name: /^0555/ });
-    expect(within(second).getByText('Berakhir — tetap aktif')).toBeInTheDocument();
-    expect(within(second).getByRole('link', { name: 'Tetapkan Owner' })).toBeInTheDocument();
-    noEnglishLeft();
-
-    await userEvent.click(within(first).getByRole('button', { name: 'Ubah langganan untuk KPM 0417 · BSD City Branch' }));
-    const dialog = screen.getByRole('dialog', { name: 'Ubah langganan' });
-    expect(within(dialog).getByLabelText('Harga per leader per bulan')).toHaveValue('350.000');
-    expect(within(dialog).getByLabelText('Jumlah maksimal leader')).toHaveValue('10');
-    expect(dialog).toHaveTextContent('Per bulan untuk 10 leadersRp 3.500.000');
-    expect(dialog).toHaveTextContent('Durasi12 bulan');
-    expect(dialog).toHaveTextContent('Jumlah leader saat ini: 13');
-    expect(dialog).toHaveTextContent(
-      'KPM ini kini memiliki 13 leaders, lebih dari 10. Tidak ada yang diturunkan, dan setiap AB atau AAB baru setelah 10 menunggu persetujuan AgencyBoost.',
-    );
-    expect(within(dialog).getByRole('switch', { name: 'Tetap aktif setelah tanggal berakhir' })).toBeInTheDocument();
-    expect(within(dialog).getByRole('button', { name: 'Simpan' })).toBeInTheDocument();
-    noEnglishLeft();
-  });
-
   it('AC-1 Edit subscription: its own refusals, the cost lines it cannot work out, and a passed end date', async () => {
     stubFetch({});
     render(
@@ -213,54 +160,6 @@ describe('P18.10-T6 the Super Admin’s console in Indonesian', () => {
     expect(dialog).toHaveTextContent('Tanggal berakhir ini, 31 Jan 2020, sudah lewat. Setelah Anda menyimpan');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Simpan' }));
     expect(dialog).toHaveTextContent('Tanggal berakhir harus sama dengan atau setelah tanggal mulai.');
-    noEnglishLeft();
-  });
-
-  it('AC-1 New office: the fields, Start from with a company’s templates as named, and what each gives', async () => {
-    stubFetch({
-      ...SHELL,
-      '/admin/companies/co-1/templates': {
-        body: [{ id: 't-default', companyId: 'co-1', name: 'Prudential template', isDefault: true, status: 'active', archivedAt: null, origin: { kind: 'empty' }, publishedVersions: {}, officeCount: 0, createdAt: '2026-10-07T03:00:00.000Z', updatedAt: '2026-10-07T03:00:00.000Z' }],
-      },
-      '/admin/companies': { body: [{ _id: 'co-1', name: 'Prudential', slug: 'prudential' }] },
-    });
-    inIndonesian('/admin/tenants/new', <NewTenantPage />);
-    const select = await screen.findByRole('combobox', { name: 'Mulai dari' });
-    await vi.waitFor(() => expect(select).toHaveDisplayValue('Prudential template · Default'));
-    expect([...(select as HTMLSelectElement).options].map((o) => o.textContent)).toEqual(['Prudential template · Default', 'Kosong']);
-    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^KPM baru$/);
-    expect(screen.getByText('Bagian yang sudah terbit disalin; bagian yang belum terbit dimulai kosong.')).toBeInTheDocument();
-    await userEvent.type(screen.getByLabelText('Kode KPM'), 'has space');
-    expect(screen.getByText('2–16 karakter: huruf, angka, dan tanda hubung.')).toBeInTheDocument();
-    expect(screen.getByLabelText('Nama cabang')).toBeInTheDocument();
-    expect(screen.getByText('Asia/Jakarta')).toBeInTheDocument();
-    // *Changed 2026-11-06 (P19.2-T2 AC-3; UI-133):* the main button is enabled; pressed, each field says what it needs
-    // in Indonesian and nothing is sent, where the button was disabled.
-    expect(screen.getByRole('button', { name: 'Buat KPM' })).toBeEnabled();
-    await userEvent.click(screen.getByRole('button', { name: 'Buat KPM' }));
-    expect(screen.getByLabelText('Nama cabang')).toHaveAccessibleDescription(expect.stringContaining('Wajib diisi.'));
-    await userEvent.selectOptions(select, 'empty');
-    // ADR-0185 §5: Kosong says, once, that it cannot be filled later.
-    expect(screen.getByText('Hanya tiga jenis aktivitas yang dihitung rencana goal. Tidak dapat diisi dari template nanti.'))
-      .toBeInTheDocument();
-    noEnglishLeft();
-  });
-
-  it('AC-1 an office’s page: its four cards, the lifecycle in Indonesian, the subscription line’s date Indonesian', async () => {
-    stubFetch({ ...SHELL, '/admin/tenants/kpm-1': { body: { ...KPM, subscriptionState: 'ended_kept_active', subscription: { ...SUBSCRIPTION, endDate: '2026-10-02', keepActiveAfterEnd: true }, suspendedReason: 'tagihan belum dibayar' } } });
-    inIndonesian('/admin/tenants/kpm-1', <TenantDetailPage params={routeParams({ kpmId: 'kpm-1' })} />);
-    expect(await screen.findByText('Berakhir 2 Okt 2026 — tetap aktif')).toBeInTheDocument();
-    // P19.4-T3 AC-9: *Ringkasan*'s cards — the Owner, the Admins, the members — then the KPM's profile and lifecycle.
-    expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual(['Owner', 'Admin', 'Anggota', 'Profil', 'Siklus hidup']);
-    expect(screen.getByText('ID KPM')).toBeInTheDocument();
-    expect(screen.getByText('Mata uang')).toBeInTheDocument();
-    expect(screen.getByText('Ditangguhkan: tagihan belum dibayar')).toBeInTheDocument();
-    expect([...(screen.getByLabelText('Status') as HTMLSelectElement).options].map((o) => o.textContent))
-      .toEqual(['Aktif', 'Ditangguhkan', 'Diarsipkan']);
-    // P19-T3 (UI-168 point 4), P19.4-T3 AC-9: the Owner's card's *Ganti pemilik*; and *Buka sebagai Owner*, which only
-    // looks (P19.4-T2 AC-1) — for a reader whose grants open them.
-    expect(screen.queryByRole('link', { name: 'Impor roster' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Terapkan' })).toBeInTheDocument();
     noEnglishLeft();
   });
 
@@ -302,6 +201,29 @@ describe('P18.10-T6 the Super Admin’s console in Indonesian', () => {
     noEnglishLeft();
   });
 
+  /*
+   * **P19.23: the console's moved and retired addresses** (ADR-0277 §7, §8; ADR-0279) — *Cross-platform analytics* to the
+   * Dashboard, the two queues to *Persetujuan*, the old audit address and *Platform*'s index to its audit log, the
+   * three-step *KPM baru* to the list with the sheet open — say nothing in either language while they redirect.
+   */
+  it('P19.23 the moved and retired console addresses: a skeleton, nothing in English, while they redirect', () => {
+    stubFetch({ ...SHELL });
+    const addresses: [string, React.ReactElement][] = [
+      ['/admin/analytics', <RetiredAnalyticsAddress key="analytics" />],
+      ['/admin/audit', <MovedAuditAddress key="audit" />],
+      ['/admin/kpm-requests', <RetiredKpmRequestsAddress key="kpm-requests" />],
+      ['/admin/leader-limit-requests', <RetiredLeaderLimitAddress key="leader-limit" />],
+      ['/admin/platform', <PlatformIndex key="platform" />],
+      ['/admin/tenants/new', <RetiredNewKpmAddress key="new" />],
+    ];
+    for (const [path, page] of addresses) {
+      const { unmount } = inIndonesian(path, page);
+      expect(screen.queryByRole('heading', { level: 2 })).toBeNull();
+      noEnglishLeft();
+      unmount();
+    }
+  });
+
   it('AC-1 KPM Owners & Admins: the columns, the roles kept, an Owner’s access with the office, a date Indonesian', async () => {
     stubFetch({
       ...SHELL,
@@ -323,141 +245,59 @@ describe('P18.10-T6 the Super Admin’s console in Indonesian', () => {
     noEnglishLeft();
   });
 
-  it('P19.4-T3 AC-10 Billing & subscription: the tiers strip and the KPMs, with no “Tingkat Anda”', async () => {
-    stubFetch({
-      ...SHELL,
-      '/admin/billing/prices': { body: { currency: 'IDR', tiers: TIERS, annualDiscountPct: 5 } },
-      '/admin/billing/kpms': {
-        body: [
-          { kpmId: 'kpm-1', code: '0417', branch: 'BSD City Branch', company: { id: 'co-1', name: 'Prudential' }, leadersUsed: 9, tier: { code: 'TIER_1_10', minLeaders: 1, maxLeaders: 10 }, plan: 'annual', renewalDate: '2027-01-05', status: 'active' },
-          { kpmId: 'kpm-2', code: '0601', branch: 'Cikarang Branch', company: { id: 'co-1', name: 'Prudential' }, leadersUsed: 1, tier: { code: 'TIER_1_10', minLeaders: 1, maxLeaders: 10 }, plan: 'six_months', renewalDate: '2026-09-25', status: 'ended' },
-          { kpmId: 'kpm-3', code: '0100', branch: 'Sudirman', company: { id: 'co-2', name: 'Manulife' }, leadersUsed: 0, tier: { code: 'TIER_1_10', minLeaders: 1, maxLeaders: 10 }, plan: null, renewalDate: null, status: 'none' },
-        ],
-      },
-    });
+  it('P19.23-T5 AC-1, AC-2 Langganan & akses: the calculator, its result and its buttons, in the mockups’ words', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-11-20T03:00:00Z'));
+    stubFetch({ ...SHELL, '/admin/billing/prices': { body: PRICES }, '/admin/billing/kpms': { body: BILLING_LIST } });
     inIndonesian('/admin/billing', <BillingPage />);
-    const table = await screen.findByRole('table');
-    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^Billing & subscription$/);
-    expect(within(table).getAllByRole('columnheader').map((h) => h.textContent?.replace(/[▲▼⇅]/g, '').trim()))
-      .toEqual(['KPM', 'Perusahaan', 'Leader', 'Tingkat', 'Paket', 'Perpanjangan', 'Status']);
-    expect(within(table).getByText('Tahunan')).toBeInTheDocument();
-    expect(within(table).getByText('6 bulan')).toBeInTheDocument();
-    expect(within(table).getByText('Berakhir')).toBeInTheDocument();
-    expect(within(table).getByText('Belum ada langganan')).toBeInTheDocument();
-    expect(within(table).getByText('5 Jan 2027')).toBeInTheDocument();
-    expect(screen.getByRole('list', { name: 'Tingkat harga' })).toBeInTheDocument();
-    expect(screen.queryByText('Tingkat Anda')).not.toBeInTheDocument();
-    expect(screen.getByLabelText('Perusahaan')).toHaveDisplayValue('Semua perusahaan');
+    expect(await screen.findByRole('heading', { name: 'Kalkulator harga' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^Langganan & akses$/);
+    expect(screen.getByRole('combobox', { name: 'KPM' })).toHaveAttribute('placeholder', 'Pilih atau tulis KPM baru');
+    expect(screen.getByText('HEMAT 5%')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'isi total' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Harga' })).toHaveTextContent('Hemat Rp 21.375.000 (25%) dari harga standar');
+    for (const name of ['Pakai untuk KPM', 'Buat PDF']) expect(screen.getByRole('button', { name })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Kirim penawaran' })).toBeInTheDocument();
+    expect(screen.getByText('PAKET INI')).toBeInTheDocument();
     noEnglishLeft();
   });
 
-  it('AC-1, AC-3 a KPM’s Billing tab: the cards, the estimate, a refusal, the dialog and the quote', async () => {
-    vi.useFakeTimers({ toFake: ['Date'] });
-    vi.setSystemTime(new Date('2026-10-07T18:30:00Z'));
-    stubFetch({ ...SHELL, '/admin/billing/prices': { body: { currency: 'IDR', tiers: TIERS, annualDiscountPct: 5 } } });
-    // P19.4-T3 AC-10 (ADR-0211 §4): the calculator moved to the KPM's *Billing* tab, filled with its 8 leaders.
-    inIndonesian('/admin/tenants/kpm-1', <KpmBillingTab kpm={{ ...KPM, leadersUsed: 8, subscription: null } as unknown as TenantRow} />);
-    expect(await screen.findByText('Perkirakan harga Anda')).toBeInTheDocument();
-    const grid = screen.getByText('Tingkat Anda').closest('ul') as HTMLElement;
-    const cards = within(grid).getAllByRole('listitem').map((c) => c.textContent);
-    expect(cards[0]).toBe('1–10 leadersRp 500.000/blnRp 400.000 /leader/blnHemat 20%Tingkat Anda');
-    expect(cards[2]).toBe('101+ leadersHarga khusus berdasarkan struktur unit Anda.Hubungi kami');
-    expect(screen.getByText(/masuk tingkat/)).toHaveTextContent('8 leaders masuk tingkat 1–10.');
-    expect(screen.getByText('Total 6 bulan (semua leader)', { selector: 'dt' }).nextElementSibling).toHaveTextContent('Rp 19.200.000');
-    expect(screen.getByText('Tidak berlaku — pilih Tahunan di atas')).toBeInTheDocument();
+  it('P19.23-T5 AC-4 Langganan per KPM and a KPM’s Atur, in Indonesian', async () => {
+    nav.search = new URLSearchParams('tab=kpm');
+    stubFetch({ ...SHELL, '/admin/billing/prices': { body: PRICES }, '/admin/billing/kpms': { body: BILLING_LIST } });
+    inIndonesian('/admin/billing', <BillingPage />);
+    const table = await screen.findByRole('table', { name: 'Langganan per KPM' });
+    expect(within(table).getAllByRole('columnheader').map((h) => h.textContent))
+      .toEqual(['KPM', 'Leader dipakai', 'Harga / leader', 'Per bulan', 'Tagihan per periode', 'Berlaku hingga', 'Tindakan']);
+    expect(table).toHaveTextContent('harga khusus · paket 1–10 leader');
+    expect(table).toHaveTextContent('Berakhir');
     noEnglishLeft();
-
-    await userEvent.click(screen.getByText('Penyesuaian manual'));
-    await userEvent.selectOptions(screen.getByLabelText('Jenis diskon'), 'Rp/leader');
-    const discount = screen.getByLabelText('Diskon bebas (internal, per leader)');
-    await userEvent.clear(discount);
-    await userEvent.type(discount, '400001');
-    expect(discount).toHaveValue('400.001');
-    expect(screen.getByRole('alert')).toHaveTextContent('Masukkan jumlah dari Rp 0 sampai Rp 400.000.');
-    await userEvent.clear(discount);
-
-    await userEvent.click(screen.getByRole('button', { name: 'Kirim penawaran' }));
-    const dialog = screen.getByRole('dialog', { name: 'Kirim penawaran' });
-    expect(within(dialog).getByLabelText('Tanggal mulai')).toHaveAttribute('placeholder', 'HH/BB/TTTT');
-    // The KPM's own name, read-only, and its Owner as the PIC (ADR-0211 §4).
-    expect(within(dialog).getByLabelText('Nama KPM')).toHaveValue('KPM 0417 · BSD City Branch');
-    await userEvent.clear(within(dialog).getByLabelText('Nama PIC'));
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Buat penawaran' }));
-    expect(within(dialog).getByText('Isi nama PIC.')).toBeInTheDocument();
-    noEnglishLeft();
-
-    await userEvent.type(within(dialog).getByLabelText('Nama PIC'), 'Andi Wijaya');
-    await userEvent.type(within(dialog).getByLabelText('Diisi oleh sales'), 'Maya');
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Buat penawaran' }));
-    const quote = screen.getByRole('article');
-    expect(within(quote).getByRole('heading', { name: 'Penawaran langganan' })).toBeInTheDocument();
-    expect(quote).toHaveTextContent('Dibuat 8 Okt 2026');
-    expect(within(quote).getByText('Tanggal mulai paket').nextElementSibling).toHaveTextContent('15 Okt 2026');
-    expect(within(quote).getByText('Tingkat').nextElementSibling).toHaveTextContent('1–10 leaders');
-    expect(within(quote).getByText('Periode tagihan').nextElementSibling).toHaveTextContent('Paket 6 bulan');
-    // The client's names as typed; the product's name kept.
-    expect(within(quote).getByText('Penanggung jawab (PIC)').nextElementSibling).toHaveTextContent('Andi Wijaya');
-    expect(quote).toHaveTextContent('AgencyBoost');
-    expect(screen.getByRole('button', { name: 'Cetak / simpan sebagai PDF' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Kirim ke Rina Wijaya' })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Atur langganan BSD City Branch' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Langganan BSD City Branch' });
+    expect(within(dialog).getByRole('button', { name: 'Konfirmasi paket' })).toBeInTheDocument();
     noEnglishLeft();
   });
 
   it('AC-1 billing: an amount typed is grouped again in the new marks when the reader switches language', async () => {
-    stubFetch({ '/admin/billing/prices': { body: { currency: 'IDR', tiers: TIERS, annualDiscountPct: 5 } } });
+    stubFetch({ '/admin/billing/prices': { body: PRICES }, '/admin/billing/kpms': { body: BILLING_LIST } });
     const session = makeSession({ me: SUPER_ADMIN });
     const at = (language: 'id' | 'en') => (
       <SessionContext.Provider value={session}>
-        <Suspense fallback={null}><InLanguage language={language}><KpmBillingTab kpm={{ ...KPM, leadersUsed: 8, subscription: null } as unknown as TenantRow} /></InLanguage></Suspense>
+        <Suspense fallback={null}><InLanguage language={language}><BillingPage /></InLanguage></Suspense>
       </SessionContext.Provider>
     );
     const { rerender } = render(at('id'));
-    await screen.findByText('Perkirakan harga Anda');
-    await userEvent.click(screen.getByText('Penyesuaian manual'));
-    await userEvent.selectOptions(screen.getByLabelText('Jenis diskon'), 'flat');
-    await userEvent.clear(screen.getByLabelText('Diskon bebas (internal, per leader)'));
-    await userEvent.type(screen.getByLabelText('Diskon bebas (internal, per leader)'), '25000');
-    expect(screen.getByLabelText('Diskon bebas (internal, per leader)')).toHaveValue('25.000');
+    const price = await screen.findByLabelText('Harga / leader / bulan');
+    await userEvent.clear(price);
+    await userEvent.type(price, '360000');
+    expect(price).toHaveValue('360.000');
 
     rerender(at('en'));
-    expect(await screen.findByText('Estimate your price')).toBeInTheDocument();
-    await vi.waitFor(() => expect(screen.getByLabelText('Arbitrary discount (internal, per leader)')).toHaveValue('25,000'));
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-    expect(screen.getByText('Monthly total (all leaders)', { selector: 'dt' }).nextElementSibling).toHaveTextContent('IDR 3,000,000');
+    await vi.waitFor(() => expect(screen.getByLabelText('Price / leader / month')).toHaveValue('360,000'));
+    expect(screen.getByRole('region', { name: 'The price' })).toHaveTextContent('IDR 61,560,000');
   });
 
-  it('AC-1 Cross-platform analytics: the headings with the month, the totals counted in Indonesian, a state as All KPMs says it', async () => {
-    const ladder = (agent: number, aab: number, ab: number) => [
-      { code: 'AGENT', label: 'Agent', count: agent }, { code: 'AAB', label: 'AAB', count: aab }, { code: 'AB', label: 'AB', count: ab },
-    ];
-    const figures = { members: 1340, byRung: ladder(1300, 28, 12), joinedThisMonth: 14, leftThisMonth: 2, signedIn7d: 1072, signedIn30d: 1206 };
-    stubFetch({
-      ...SHELL,
-      '/admin/analytics': {
-        body: {
-          month: '2026-10',
-          offices: [{ kpmId: 'kpm-0417', code: '0417', branch: 'BSD City Branch', company: { id: 'co-1', name: 'Prudential' }, state: 'suspended', ...figures }],
-          companies: [{ id: 'co-1', name: 'Prudential', offices: 1, ...figures }],
-          platform: { offices: 1, companies: 1, ...figures },
-        },
-      },
-    });
-    inIndonesian('/admin/analytics', <PlatformAnalyticsPage />);
-    const table = await screen.findByRole('table', { name: 'Adopsi per KPM dan perusahaan' });
-    expect(within(table).getAllByRole('columnheader').map((h) => h.textContent)).toEqual([
-      'Kode', 'Cabang', 'Perusahaan', 'Status', 'Anggota', 'Per jenjang', 'Bergabung pada Okt 2026', 'Keluar pada Okt 2026',
-      'Masuk dalam 7 hari terakhir', 'Masuk dalam 30 hari terakhir',
-    ]);
-    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^Cross-platform analytics$/);
-    const office = within(table).getByRole('row', { name: /^0417/ });
-    expect(within(office).getByText('Ditangguhkan')).toBeInTheDocument();
-    expect(within(office).getByText('1.072 (80%)')).toBeInTheDocument();
-    expect(within(table).getByText('Prudential — Total (1 KPM)')).toBeInTheDocument();
-    expect(within(table).getByText('Platform — Total (1 perusahaan, 1 KPM)')).toBeInTheDocument();
-    noEnglishLeft();
-  });
-
-  it('AC-1, AC-4 the audit log: the frame Indonesian, the actions and collections as recorded, both people named', async () => {
+  it('AC-1, AC-4 the audit log: the frame Indonesian, the actions as recorded, both people named (P19.23-T6 AC-1)', async () => {
     stubFetch({
       ...SHELL,
       '/admin/tenants': { body: [] },
@@ -466,6 +306,7 @@ describe('P18.10-T6 the Super Admin’s console in Indonesian', () => {
           items: [{
             _id: 'a-1', actorUserId: 'u-root', actorName: 'Root Operator', effectiveUserId: 'u-owner', effectiveName: 'Rangga Wibisono',
             action: 'kpm.created', targetCollection: 'kpms', targetId: 'kpm-1', targetLabel: '0417 · Surabaya Branch',
+            change: null, kpm: { id: 'kpm-1', code: '0417', branch: 'Surabaya Branch' }, company: { id: 'co-1', name: 'Prudential' },
             createdAt: '2026-10-04T02:00:00.000Z', count: 3, oldestAt: '2026-10-04T01:55:00.000Z',
           }],
           page: { cursor: null, nextCursor: 'cur-2', limit: 50, hasMore: true },
@@ -473,74 +314,70 @@ describe('P18.10-T6 the Super Admin’s console in Indonesian', () => {
         },
       },
     });
-    inIndonesian('/admin/audit', <AuditPage />);
-    const table = await screen.findByRole('table', { name: 'Entri audit, terbaru lebih dulu' });
-    expect(within(table).getAllByRole('columnheader').map((h) => h.textContent)).toEqual(['Kapan', 'Tindakan', 'Target', 'Pelaku']);
-    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^Audit \/ Role Change Log$/);
-    expect(within(table).getByText('kpm.created')).toBeInTheDocument();
-    expect(within(table).getByText('kpms')).toBeInTheDocument();
-    expect(within(table).getByText('sebagai Rangga Wibisono')).toBeInTheDocument();
-    expect(within(table).getByText('4 Okt 2026, 09.00')).toBeInTheDocument();
-    // P19.2-T2 AC-6: the chips, the count pill and *Muat lagi*, the mockups' own words.
-    expect(screen.getByRole('button', { name: 'Cakupan: Tingkat platform (tanpa KPM)' })).toBeInTheDocument();
-    for (const chip of ['Perusahaan', 'Tindakan', 'Pelaku', 'Tanggal']) {
-      expect(screen.getByRole('button', { name: new RegExp(`^${chip}: `) })).toBeInTheDocument();
+    inIndonesian('/admin/platform/audit', <AuditPage />);
+    const list = await screen.findByRole('list', { name: 'Entri audit, terbaru lebih dulu' });
+    const [line] = within(list).getAllByRole('listitem');
+    expect(line).toHaveTextContent('kpm.created · 0417 · Surabaya Branch');
+    expect(line).toHaveTextContent('Root Operator sebagai Rangga Wibisono · Surabaya Branch · Prudential');
+    expect(within(line).getByText('4 Okt 2026, 09.00')).toBeInTheDocument();
+    // P19.23-T6 AC-1 (frame f52): the search and the three filters in the mockup's own words, then *Pelaku* and *Tanggal*.
+    expect(screen.getByRole('searchbox', { name: 'Cari perubahan' })).toBeInTheDocument();
+    for (const chip of ['Perusahaan: Semua perusahaan', 'KPM: Semua KPM', 'Tindakan: Semua tindakan', 'Pelaku: Semua pelaku']) {
+      expect(screen.getByRole('button', { name: chip })).toBeInTheDocument();
     }
-    expect(within(table).getByText('×3')).toBeInTheDocument();
-    expect(within(table).getByText('3 kali')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Tanggal: / })).toBeInTheDocument();
+    expect(within(list).getByText('×3')).toBeInTheDocument();
+    expect(within(list).getByText('3 kali')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Muat lagi' })).toBeInTheDocument();
+    expect(screen.getByText('Semua perubahan Super Admin: siapa, kapan, sebelum → sesudah')).toBeInTheDocument();
     noEnglishLeft();
   });
 
-  it('AC-1, AC-4 Pending KPM requests: the card, the code, what approving does, the decided table', async () => {
-    const req = (over: Record<string, unknown> = {}) => ({
-      requestId: 'req-1', branchName: 'Surabaya Branch', companyId: 'co-1', companyName: 'Prudential',
-      requestedByName: 'Rangga Wibisono', requestedByEmail: 'rangga@example.test', note: 'Sudah ada dua belas agen.',
-      status: 'pending', requestedAt: '2026-09-01T00:00:00.000Z', decidedAt: null, reason: null, createdKpmId: null,
-      requestedByPhone: '+62 812 3456 7890', requesterCompanyId: 'co-1', requesterCompanyName: 'Prudential',
+  it('P19.23-T3 AC-2 Persetujuan: both queues waiting, Tolak · Setujui, and the decided rows with who and when', async () => {
+    const kpm = (over: Record<string, unknown> = {}) => ({
+      requestId: 'req-1', branchName: 'Surabaya Barat Branch', companyId: 'co-1', companyName: 'Prudential',
+      requestedByName: 'Rizal Pratama', requestedByEmail: 'rizal@example.test', note: null,
+      status: 'pending', requestedAt: new Date().toISOString(), decidedAt: null, decidedByName: null, reason: null,
+      createdKpmId: null, requestedByPhone: null, requesterCompanyId: 'co-1', requesterCompanyName: 'Prudential',
       requesterEmailVerified: true, createdKpm: null, ...over,
+    });
+    const limit = (over: Record<string, unknown> = {}) => ({
+      requestId: 'llr-1', kpmId: 'kpm-1', kpmCode: '0603', kpmBranchName: 'Tangerang Branch', companyName: 'Prudential',
+      subjectMembershipId: 'mem-1', subjectName: 'Rizky Ramadhan', subjectAgentCode: '86114', action: 'promote',
+      fromOrgLevelCode: 'AGENT', toOrgLevelCode: 'AAB', reason: null, requestedByMembershipId: 'mem-owner',
+      requestedByName: 'Hendra Gunawan', status: 'pending', requestedAt: '2026-10-25T00:00:00.000Z', decidedAt: null,
+      decidedByName: null, declineReason: null, maxLeaders: 10, leadersUsed: 11, ...over,
     });
     stubFetch({
       ...SHELL,
-      '/admin/kpm-requests': { body: [req(), req({ requestId: 'req-2', branchName: 'Medan Branch', status: 'declined', reason: 'Sudah ada KPM 0417.' })] },
+      '/admin/kpm-requests': {
+        body: [kpm(), kpm({
+          requestId: 'req-2', branchName: 'Test Branch', status: 'declined', reason: 'data tidak lengkap',
+          decidedAt: '2026-09-28T03:00:00.000Z', decidedByName: 'Platform Operator',
+        })],
+      },
+      '/admin/leader-limit-requests': { body: [limit()] },
       '/companies': { body: [{ _id: 'co-1', name: 'Prudential' }] },
     });
-    inIndonesian('/admin/kpm-requests', <KpmRequestsPage />);
-    expect(await screen.findByText('Surabaya Branch')).toBeInTheDocument();
-    // P19-T3 AC-1: name, email, phone and the date; the company is the picker below.
-    expect(screen.getByText(/diajukan oleh/)).toHaveTextContent(
-      'diajukan oleh Rangga Wibisono (calon KPM Owner) · rangga@example.test · +62 812 3456 7890 · 1 Sep 2026',
+    inIndonesian('/admin/approvals', <ApprovalsPage />);
+    expect(await screen.findByText('KPM baru · Surabaya Barat Branch')).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Menunggu 2' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByText(/diajukan RIZAL PRATAMA/)).toHaveTextContent('Prudential · diajukan RIZAL PRATAMA (calon owner) · hari ini');
+    expect(screen.getByText('Leader melewati batas · Tangerang Branch (Prudential)')).toBeInTheDocument();
+    expect(screen.getByText(/RIZKY RAMADHAN/)).toHaveTextContent(
+      'RIZKY RAMADHAN Agent → AAB · paket 10 leader, sekarang 11 · diajukan HENDRA GUNAWAN',
     );
-    expect(screen.getByLabelText('Perusahaan')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Setujui & jadikan Owner' })).toBeInTheDocument();
-    expect(screen.getAllByRole('button', { name: 'Hapus' }).length).toBe(2);
-    expect(screen.getByText('Sudah ada dua belas agen.')).toBeInTheDocument();
-    expect(screen.getByText('Menunggu')).toBeInTheDocument();
-    expect(screen.getByLabelText('Kode KPM')).toBeInTheDocument();
-    expect(screen.getByLabelText('Alasan')).toHaveAttribute('placeholder', 'Dikirim kembali ke pemohon');
-    expect(screen.getByText('Menyetujui akan membuat KPM ini dan menjadikan Rangga Wibisono sebagai Owner-nya.')).toBeInTheDocument();
-    const table = screen.getByRole('table', { name: 'Pendaftaran yang sudah diputuskan' });
-    expect(within(table).getAllByRole('columnheader').map((h) => h.textContent)).toEqual(['Nama KPM', 'Perusahaan', 'Diajukan oleh', 'Status']);
-    expect(within(table).getByText('Ditolak')).toBeInTheDocument();
-    expect(within(table).getByText('Sudah ada KPM 0417.')).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: 'Setujui' })).toHaveLength(2);
+    expect(screen.getAllByRole('button', { name: 'Tolak' })).toHaveLength(2);
+    expect(screen.getByText('Semua yang perlu persetujuan Super Admin ada di sini')).toBeInTheDocument();
     noEnglishLeft();
-  });
 
-  it('AC-1 Leaders past the limit: the card, the count approving makes, and the change a request asks for', async () => {
-    const req = (over: Record<string, unknown> = {}) => ({
-      requestId: 'llr-1', kpmId: 'kpm-1', kpmCode: '0603', kpmBranchName: 'Tangerang Branch', subjectMembershipId: 'mem-1',
-      subjectName: 'Rizky Ramadhan', subjectAgentCode: '86114', action: 'activate', fromOrgLevelCode: 'AAB', toOrgLevelCode: null,
-      reason: null, requestedByMembershipId: 'mem-owner', requestedByName: 'Hendra Gunawan', status: 'pending',
-      requestedAt: '2026-10-25T00:00:00.000Z', decidedAt: null, declineReason: null, maxLeaders: 10, leadersUsed: 13, ...over,
-    });
-    stubFetch({ ...SHELL, '/admin/leader-limit-requests': { body: [req(), req({ requestId: 'llr-2', status: 'cancelled' })] } });
-    inIndonesian('/admin/leader-limit-requests', <LeaderLimitRequestsPage />);
-    expect(await screen.findByText('Rizky Ramadhan · Diterima sebagai AAB')).toBeInTheDocument();
-    expect(screen.getByText(/diajukan oleh/)).toHaveTextContent('KPM 0603 · Tangerang Branch · diajukan oleh Hendra Gunawan · leaders 13 / 10');
-    expect(screen.getByText(/^Menyetujui akan langsung menjalankan perubahan ini/)).toHaveTextContent('jumlah leaders KPM menjadi 14 / 10. Batasnya tidak berubah.');
-    const table = screen.getByRole('table', { name: 'Permintaan yang sudah diputuskan' });
-    expect(within(table).getAllByRole('columnheader').map((h) => h.textContent)).toEqual(['Anggota', 'KPM', 'Perubahan', 'Diajukan oleh', 'Status']);
-    expect(within(table).getByText('Dibatalkan')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('tab', { name: 'Sudah diputuskan' }));
+    const decided = await screen.findByRole('list', { name: 'Permintaan yang sudah diputuskan' });
+    expect(within(decided).getByText('Ditolak')).toBeInTheDocument();
+    expect(within(decided).getByText(/PLATFORM OPERATOR/)).toHaveTextContent('Prudential · diajukan RIZAL PRATAMA · 28 Sep · PLATFORM OPERATOR');
+    expect(within(decided).getByText('data tidak lengkap')).toBeInTheDocument();
+    expect(screen.getByText('Siapa yang memutuskan dan kapan · tercatat di audit log')).toBeInTheDocument();
     noEnglishLeft();
   });
 
@@ -573,11 +410,10 @@ describe('P18.10-T6 the Super Admin’s console in Indonesian', () => {
       me: makeMe({ isImpersonating: true, impersonatedBy: 'u-root', impersonationReadOnly: true }),
     });
     const banner = screen.getByRole('status');
-    expect(banner).toHaveTextContent(
-      'Anda bertindak sebagai Rina. Ini sesi hanya melihat: Anda dapat melihat, dan tidak ada yang bisa diubah. '
-      + 'Semua yang Anda lakukan juga dicatat atas nama Anda.',
-    );
-    expect(screen.getByRole('button', { name: 'Berhenti bertindak sebagai dia' })).toBeInTheDocument();
+    // P19.23-T2 AC-7 (ADR-0277): the owner mockups' view-as bar.
+    expect(banner).toHaveTextContent('Melihat sebagai Rina');
+    expect(banner).toHaveTextContent('Hanya melihat · tercatat di audit log');
+    expect(screen.getByRole('button', { name: 'Selesai' })).toBeInTheDocument();
     noEnglishLeft();
   });
 
@@ -587,8 +423,8 @@ describe('P18.10-T6 the Super Admin’s console in Indonesian', () => {
    * the other way about.
    */
   it.each([
-    ['id', 'en', 'Anda bertindak sebagai Rina.'],
-    ['en', 'id', 'You are acting as Rina.'],
+    ['id', 'en', 'Melihat sebagai Rina'],
+    ['en', 'id', 'Viewing as Rina'],
   ] as const)('the support person’s browser chose %s, the person’s account %s: the banner reads the support person’s', (browser, account, words) => {
     browserChose(browser);
     const base = makeMe({ isImpersonating: true, impersonatedBy: 'u-root', impersonationReadOnly: true });
@@ -613,32 +449,10 @@ describe('P18.10-T6 the console’s lib functions, language by language', () => 
     expect(leadersSaid({ leadersUsed: 1, subscription: null }, 'id')).toBe('1 leader, tanpa batas');
   });
 
-  it('Cross-platform analytics’ words and figures', () => {
-    expect(officeState('ended_kept_active', 'id')).toEqual({ word: 'Berakhir — tetap aktif', tone: 'watch' });
-    // The word in either language names the same state.
-    expect(officeState('Ditangguhkan')).toEqual({ word: 'Suspended', tone: 'alert' });
-    expect(signedInWords(1072, 1340, 'en')).toBe('1,072 (80%)');
-    expect(signedInWords(1072, 1340, 'id')).toBe('1.072 (80%)');
-    expect(platformHeadings('2026-10', 'id', 'id').slice(6, 8)).toEqual(['Bergabung pada Okt 2026', 'Keluar pada Okt 2026']);
-  });
-
-  it('billing’s words, its refusals and its amounts in each language', () => {
-    const input = { leaders: '8', period: 'sixMonth' as const, discountType: 'flat' as const, discount: '400.001' };
-    expect(priceQuote({ tiers: TIERS }, input, 'id', 'id').discountError).toBe('Masukkan jumlah dari Rp 0 sampai Rp 400.000.');
-    expect(priceQuote({ tiers: TIERS }, { ...input, discount: '400,001' }, 'en', 'en').discountError)
-      .toBe('Enter an amount from IDR 0 to IDR 400,000.');
-    // An amount is read in the figures' grouping: the other mark is that language's decimal.
-    expect(priceQuote({ tiers: TIERS }, { ...input, discount: '25,000' }, 'en').finalMinor).toBe(rp(375_000));
-    expect(priceQuote({ tiers: TIERS }, { ...input, discount: '25.000' }, 'en').discountError).not.toBeNull();
-    expect(maskAmount('25000', 'en')).toBe('25,000');
-    expect(perLeaderDiscount(rp(20_000), 'id', 'id')).toBe('-Rp 20.000/leader/bln');
-    expect(perLeaderDiscount(rp(20_000), 'en', 'en')).toBe('-IDR 20,000/leader/mo');
-    expect(saveWordsIn(TIERS[0], 'id', 'id')).toBe('Hemat 20%');
-    expect(validateQuote({ kpm: '', pic: '', sales: '', start: '31/02/2027', end: '' }, 'id')).toEqual({
-      kpm: 'Isi nama KPM.', pic: 'Isi nama PIC.', sales: 'Isi siapa yang mengajukan penawaran ini.',
-      start: 'Masukkan tanggal mulai yang valid, dengan format HH/BB/TTTT.',
-      end: 'Masukkan tanggal berakhir yang valid, dengan format HH/BB/TTTT.',
-    });
+  it('billing’s words and its figures in each language (P19.23-T5)', () => {
+    expect(policiesText(80, 'id')).toBe('8,0');
+    expect(policiesText(80, 'en')).toBe('8.0');
+    expect(policiesText(110, 'id')).toBe('11');
     expect(costMissingWords(['price', 'dates'], 'id')).toBe('— tanpa harga per leader dan tanpa tanggal mulai dan tanggal berakhir');
   });
 });

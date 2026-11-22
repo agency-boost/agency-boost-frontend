@@ -24,14 +24,14 @@ const OFFICE = {
   timezone: 'Asia/Jakarta', locale: 'id-ID', currency: 'IDR', fiscalYearStartMonth: 4,
 };
 
-const ENGLISH = /\b(KPM code|Branch name|Company|tagged by|Address|Contact phone|Nobody yet|Financial year|January|March|May|June|July|August|October|December|Time zone|Save|Saved)\b/;
+const ENGLISH = /\b(KPM code|Branch name|Company|tagged by|Address|Contact phone|Nobody yet|Financial year|January|March|May|June|July|August|October|December|Time zone|Save|Saved|Set by the platform|The same for every)\b/;
 
 /**
  * **P18.10-T4, Settings › Branch info in ID mode**: the form's words the approved glossary's Indonesian, its title,
  * *KPM*, *KPM Owner* and *Superadmin* English (§A), the office's own details as typed, and the months by their
  * Indonesian names. In English: `page.spec.tsx`.
  */
-describe('P18.10-T4 Settings › Branch info in Indonesian', () => {
+describe('P18.10-T4 P19.21-T3 AC-7 Settings › Branch info in Indonesian', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   it('AC-2 labels the form in Indonesian, the kept terms English and the office’s details as typed', async () => {
@@ -40,17 +40,19 @@ describe('P18.10-T4 Settings › Branch info in Indonesian', () => {
     expect(await screen.findByDisplayValue('Cabang BSD City')).toBeInTheDocument();
 
     expect(screen.getByRole('heading', { name: 'Branch info', level: 1 })).toBeInTheDocument();
-    expect(screen.getByText('Nama KPM ini, dan lokasinya.')).toBeInTheDocument();
+    // P19.21-T3 AC-7 (frame 23): the mockup's words — no sub-line, the platform's fields saying *Diatur platform*.
     expect(screen.getByText('Kode KPM')).toBeInTheDocument();
-    expect(screen.getByText('Ditetapkan saat KPM ini dibuat, dan unik di perusahaan Anda.')).toBeInTheDocument();
+    expect(screen.getByText('Unik di perusahaan, tidak bisa diubah')).toBeInTheDocument();
     expect(screen.getByLabelText('Nama cabang')).toHaveValue('Cabang BSD City');
-    expect(screen.getByText('Perusahaan (di-tag oleh Superadmin)')).toBeInTheDocument();
+    expect(screen.getByText('Perusahaan')).toBeInTheDocument();
+    expect(screen.getAllByText('Diatur platform')).toHaveLength(2);
     expect(screen.getByText('Prudential')).toBeInTheDocument();
     expect(screen.getByLabelText('Alamat')).toHaveValue('Jl. BSD Grand Boulevard No. 1, Tangerang');
     expect(screen.getByLabelText('Telepon kontak')).toHaveValue('+62 21 5555 0417');
     expect(screen.getByText('KPM Owner')).toBeInTheDocument();
     expect(screen.getByText('Belum ada')).toBeInTheDocument();
-    expect(screen.getByText('Zona waktu, bahasa, dan mata uang')).toBeInTheDocument();
+    expect(screen.getByText('Zona waktu · bahasa · mata uang')).toBeInTheDocument();
+    expect(screen.getByText('Sama untuk semua KPM')).toBeInTheDocument();
     expect(screen.getByText('Asia/Jakarta · id-ID · IDR')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Simpan' })).toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(ENGLISH);

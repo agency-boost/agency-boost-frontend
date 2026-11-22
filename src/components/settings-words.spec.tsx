@@ -73,7 +73,8 @@ describe('P18.10-T4 the settings frame in Indonesian', () => {
       },
     });
     renderInIndonesian(<PublishBar />, { me: OWNER });
-    expect(await screen.findByText('Agent Anda belum melihat perubahan ini.')).toBeInTheDocument();
+    // P19.21-T2 AC-3: *"Draf."*, then the version agents are on — or that nothing is published yet.
+    expect(await screen.findByText('Draf.')).toBeInTheDocument();
     expect(screen.getByText('Belum ada yang diterbitkan untuk KPM ini.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Terbitkan ke agent' })).toBeInTheDocument();
   });

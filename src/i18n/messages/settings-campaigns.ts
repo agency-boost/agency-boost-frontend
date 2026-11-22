@@ -2,27 +2,42 @@ import { defineMessages, type MessagesOf } from '@/i18n/catalogue';
 import { kept } from '@/i18n/kept';
 
 /**
- * **Settings › Campaigns, in words** (P18.10-T4, events, campaigns and the calendar; `functional/campaigns.md`,
- * `functional/tenant-config.md`): the screen's line and two tabs, a campaign's row, the add-and-edit panel with its
- * requirements, and the carrier's tiers and MOC rules with the line saying whose they are. The frame and the shared
+ * **Pengaturan › Campaigns, in words** (P18.10-T4; P19.25-T5, ADR-0282; `functional/campaigns.md`): the filter
+ * *Semua · Struktural · Musiman*, a campaign's row — its line and its tag —, ⋯, *+ Tambah campaign*, the two notes under
+ * the list, and the add-and-edit form with its requirements. *Changed 2026-11-20 (P19.25-T5 AC-1):* the *Production club
+ * tiers* tab and its words — the carrier's tiers and MOC — are gone (*"no Production club"*; *"MOC / Club: not shown
+ * anywhere for now"*), and so is the screen's line, which spoke of them. The frame and the shared
  * controls — *Save*, *Cancel*, *Edit*, *Archive*, *Restore*, *Remove*, *Show archived*, *Code*, *Description* — are
- * `settings.ts`'; the agents' words a campaign shares — *Seasonal*, *Structural*, *Promotion Criteria*, *Production
- * Clubs*, *Not measured yet* — are `campaigns.ts`'.
+ * `settings.ts`'; the agents' words a campaign shares — *Seasonal*, *Structural*, *Not measured yet* — are `campaigns.ts`'.
  *
  * **English is the source**, as built (the prototype's *+ Create campaign* is an `alert()`, `KPM_Owner.html:1681`). The
  * Indonesian is the approved glossary's — *Judul · Jenis* (§B.4), *KPM ini* (§B.9), *Belum ada apa pun di sini.* (§B.5),
  * a comparison's *minimal · lebih dari · maksimal · kurang dari · tepat* and *metrik · aturan · kriteria* as the API
- * writes them (§B.10) — with what it lacked proposed in the glossary for approval's §B.10. **Kept** (§A): the title and
- * its two tabs, *Maintenance of Contract*, *campaign*, *leaders*, *Target*, *Branch info*, a metric's name as served.
- * **Typed content stays as typed**: a campaign's title, line, description and prize; a rule's name and reward; the
- * rungs' labels. **A figure is never a message's**: a target and a money field's mark are written by the caller.
+ * writes them (§B.10) — with what it lacked proposed in the glossary for approval's §B.10; *Struktural* and *Musiman* are
+ * the glossary's. **Kept** (§A): the title, *campaign*, *Target*, a metric's name as served. **Typed content stays as
+ * typed**: a campaign's title, line, description and prize; the rungs' labels. **A figure is never a message's**: a target and a money field's mark are written by the caller.
  *
  * @moved app/(tenant)/kpm/settings/campaigns/
  */
 const en = {
   title: kept('Campaigns'),
-  subtitle: 'What your office is running, and what your insurer measures your leaders against.',
-  tabs: { campaigns: kept('Campaigns'), tiers: kept('Production club tiers') },
+  /**
+   * **The filter and the row** (P19.25-T5 AC-1; `data-upload-pengaturan-*` frame 20): *Semua 4 · Struktural 2 · Musiman 2*;
+   * a row's line, its requirements and when it runs — *setiap tahun*, *sepanjang tahun*, a seasonal one's dates or
+   * *mulai …* —; the two notes under the list, verbatim from the mockup.
+   */
+  filterLabel: 'Show campaigns',
+  filter: {
+    all: ({ n }: { n: number }) => `All ${n}`,
+    structural: ({ n }: { n: number }) => `Structural ${n}`,
+    seasonal: ({ n }: { n: number }) => `Seasonal ${n}`,
+  },
+  when: { calendar_year: 'every year', rolling_12m: 'year-round' },
+  from: ({ day }: { day: string }) => `from ${day}`,
+  noteStructural: 'Structural = always on (promotion paths, MDRT)',
+  noteSeasonal: 'Seasonal = has a start and an end date',
+  more: ({ title }: { title: string }) => `More for ${title}`,
+  noneOfKind: 'No campaigns of this kind yet.',
   /** A campaign's phase, worked out on every read, and whose it is (P18.9-T4 AC-8; UI-030). */
   phases: { upcoming: 'Upcoming', running: 'Running', ended: 'Ended' },
   thisOffice: 'This office',
@@ -38,7 +53,6 @@ const en = {
   codeHintNew: 'Filled in from the title. Permanent.',
   codeHintEditing: 'Permanent — it never changes.',
   kind: 'Kind',
-  section: 'Section',
   readOver: 'Read over',
   windows: { rolling_12m: 'The last 12 months', calendar_year: 'Each calendar year' },
   starts: 'Starts',
@@ -71,25 +85,22 @@ const en = {
   rewardField: 'Reward',
   addTheCampaign: 'Add the campaign',
   saveTheCampaign: 'Save the campaign',
-  /** The carrier's rules, read-only with the reason on the card (parity I-76). */
-  insurers: 'These are your insurer’s, not your office’s.',
-  insurersLine: 'Production club tiers and Maintenance of Contract are the carrier’s recognition and contract rules. You can '
-    + 'see what your leaders are measured against; changing them is not your office’s to do — the same boundary as the '
-    + 'Company field on Branch info.',
-  tierHeadings: { tiers: kept('Production club tiers'), moc: kept('Maintenance of Contract') },
-  nothingHere: 'Nothing here yet.',
-  /** Between a rule's groups, and between a group's criteria. */
-  groupJoin: { any: 'or ', all: 'and ' },
-  criteriaJoin: { all: ', and ', any: ', or ' },
-  /** A rule nothing can work out yet (ADR-0070): the state and what it waits on, the metrics' names as served. */
-  waitingOn: ({ metrics }: { metrics: string }) =>
-    `Nothing measures ${metrics} yet, so this rule cannot be worked out. Nothing here guesses them.`,
 };
 
 const id: MessagesOf<typeof en> = {
   title: kept('Campaigns'),
-  subtitle: `Apa yang dijalankan ${kept('KPM')} Anda, dan ukuran dari perusahaan asuransi untuk menilai ${kept('leaders')} Anda.`,
-  tabs: { campaigns: kept('Campaigns'), tiers: kept('Production club tiers') },
+  filterLabel: `Tampilkan ${kept('campaign')}`,
+  filter: {
+    all: ({ n }) => `Semua ${n}`,
+    structural: ({ n }) => `Struktural ${n}`,
+    seasonal: ({ n }) => `Musiman ${n}`,
+  },
+  when: { calendar_year: 'setiap tahun', rolling_12m: 'sepanjang tahun' },
+  from: ({ day }) => `mulai ${day}`,
+  noteStructural: 'Struktural = berlaku terus (jenjang, MDRT)',
+  noteSeasonal: 'Musiman = ada tanggal mulai dan selesai',
+  more: ({ title }) => `Lainnya untuk ${title}`,
+  noneOfKind: `Belum ada ${kept('campaign')} jenis ini.`,
   phases: { upcoming: 'Akan datang', running: 'Berjalan', ended: 'Berakhir' },
   thisOffice: `${kept('KPM')} ini`,
   comparators: { gte: 'minimal', gt: 'lebih dari', lte: 'maksimal', lt: 'kurang dari', eq: 'tepat' },
@@ -101,7 +112,6 @@ const id: MessagesOf<typeof en> = {
   codeHintNew: 'Diisi dari judul. Permanen.',
   codeHintEditing: 'Permanen — tidak pernah berubah.',
   kind: 'Jenis',
-  section: 'Bagian',
   readOver: 'Dinilai selama',
   windows: { rolling_12m: '12 bulan terakhir', calendar_year: 'Setiap tahun kalender' },
   starts: 'Mulai',
@@ -131,16 +141,6 @@ const id: MessagesOf<typeof en> = {
   rewardField: 'Hadiah',
   addTheCampaign: `Tambahkan ${kept('campaign')}`,
   saveTheCampaign: `Simpan ${kept('campaign')}`,
-  insurers: `Ini milik perusahaan asuransi Anda, bukan milik ${kept('KPM')} Anda.`,
-  insurersLine: `${kept('Production club tiers')} dan ${kept('Maintenance of Contract')} adalah aturan penghargaan dan kontrak dari `
-    + `perusahaan asuransi. Anda dapat melihat ukuran yang dipakai untuk menilai ${kept('leaders')} Anda; mengubahnya bukan `
-    + `wewenang ${kept('KPM')} Anda — batasan yang sama dengan kolom Perusahaan di ${kept('Branch info')}.`,
-  tierHeadings: { tiers: kept('Production club tiers'), moc: kept('Maintenance of Contract') },
-  nothingHere: 'Belum ada apa pun di sini.',
-  groupJoin: { any: 'atau ', all: 'dan ' },
-  criteriaJoin: { all: ', dan ', any: ', atau ' },
-  waitingOn: ({ metrics }) =>
-    `Belum ada yang mengukur ${metrics}, jadi aturan ini belum dapat dihitung. Tidak ada yang ditebak di sini.`,
 };
 
 export const settingsCampaignsMessages = defineMessages({ en, id });

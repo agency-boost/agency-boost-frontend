@@ -16,6 +16,7 @@ import { useMessages } from '@/i18n/language-provider';
 import { userManagementMessages } from '@/i18n/messages/user-management';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
+import { useSession } from '@/lib/session';
 import { confirmationMessages } from '@/i18n/messages/confirmations';
 import {
   cancelLeaderRequest,
@@ -52,6 +53,7 @@ export default function FindLeaderPage() {
   const words = useMessages(userManagementMessages);
   const confirmed = useMessages(confirmationMessages);
   const t = words.leader;
+  const { me } = useSession();
   const ladder = useLadder();
   const [state, setState] = useState<JoinState | null>(null);
   const [q, setQ] = useState('');
@@ -75,6 +77,8 @@ export default function FindLeaderPage() {
   const noLeaders = t.noLeaders({ ab: rungShort('AB', ladder), aab: rungShort('AAB', ladder) });
   /** Somebody who already reports to a leader is not offered the search (P18.8-T3 AC-6, ADR-0170 §6). */
   const hasLeader = Boolean(state?.leaderMembershipId);
+  /** P19.20-T6 AC-1 (ADR-0273 §7): the KPM Owner is at its top — no leader to find, no code to use. */
+  const topOfKpm = Boolean(me?.membership?.isKpmOwner);
 
   useEffect(() => {
     if (!registered || hasLeader) return;
@@ -147,7 +151,13 @@ export default function FindLeaderPage() {
         ADR-0236 §2):* offered again to a member **with no leader**, which T16 had taken away because `/join` refused any
         member: a code from their own office now places them, with no approval to wait for.
       */}
-      {state && !hasLeader && (
+      {state && registered && topOfKpm && (
+        <Card data-testid="top-of-kpm">
+          <p className="font-display text-lg font-bold text-navy">{t.topOfKpm}</p>
+        </Card>
+      )}
+
+      {state && !hasLeader && !topOfKpm && (
         <Card className="mb-4">
           <h2 className="flex items-center gap-1.5 font-display text-lg font-bold text-navy">
             {t.haveCode}
@@ -160,7 +170,7 @@ export default function FindLeaderPage() {
         </Card>
       )}
 
-      {state && registered && (
+      {state && registered && !topOfKpm && (
         <>
           {hasLeader ? (
             /*

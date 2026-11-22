@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { atWidth, makeMe, renderWithSession, stubFetch } from '@test/harness';
@@ -51,18 +51,34 @@ describe('branch info (P4-T5)', () => {
     expect(screen.getByDisplayValue('+62 21 5555 0417')).toBeInTheDocument();
   });
 
-  it('keeps Company read-only, and says who can change it', async () => {
-    /*
-     * The prototype disables this field and labels it "tagged by Superadmin" — which is
-     * where the platform-owned boundary was first written down. The label is the answer
-     * to "why can't I change this", so it has to be on screen rather than implied.
-     */
+  it('P19.21-T3 AC-7 keeps the platform’s four grey, each saying who sets it (frame 23)', async () => {
     render();
     await screen.findByDisplayValue('BSD City Branch');
-    expect(screen.getByText('Company (tagged by Superadmin)')).toBeInTheDocument();
-    expect(screen.getByText('Prudential')).toBeInTheDocument();
-    expect(screen.getByText(/Only the platform can change it/)).toBeInTheDocument();
+    const fixed = (label: string) => screen.getByText(label, { selector: 'dt' }).closest('dl')!;
+    expect(within(fixed('KPM code')).getByText('0417')).toBeInTheDocument();
+    expect(within(fixed('KPM code')).getByText('Unique in your company, cannot be changed')).toBeInTheDocument();
+    expect(within(fixed('Company')).getByText('Prudential')).toBeInTheDocument();
+    expect(within(fixed('Company')).getByText('Set by the platform')).toBeInTheDocument();
+    expect(within(fixed('KPM Owner')).getByText('Wilson Tanoto')).toBeInTheDocument();
+    expect(within(fixed('KPM Owner')).getByText('Set by the platform')).toBeInTheDocument();
+    expect(within(fixed('Time zone · language · currency')).getByText('Asia/Jakarta · id-ID · IDR')).toBeInTheDocument();
+    expect(within(fixed('Time zone · language · currency')).getByText('The same for every office')).toBeInTheDocument();
+    // Grey: the base fill, never an input.
+    expect(within(fixed('Company')).getByText('Prudential')).toHaveClass('bg-base');
     expect(screen.queryByDisplayValue('Prudential')).toBeNull();
+  });
+
+  it('P19.21-T3 AC-7 lays the form out in two columns, one on a phone, in the mockup’s order', async () => {
+    render();
+    await screen.findByDisplayValue('BSD City Branch');
+    const form = document.querySelector('form')!;
+    expect(form.className).toContain('md:grid-cols-2');
+    const labels = [...form.querySelectorAll('label, dt')].map((el) => el.textContent);
+    expect(labels).toEqual([
+      'KPM code', 'Branch name', 'Company', 'KPM Owner', 'Address', 'Contact phone', 'Financial year starts',
+      'Time zone · language · currency',
+    ]);
+    expect(screen.getByLabelText('Address').tagName).toBe('INPUT');
   });
 
   it('keeps the financial year field, and says nothing about when it will be used', async () => {
@@ -79,7 +95,7 @@ describe('branch info (P4-T5)', () => {
     render();
     await screen.findByDisplayValue('BSD City Branch');
     expect(screen.getByText('Asia/Jakarta · id-ID · IDR')).toBeInTheDocument();
-    expect(screen.queryByLabelText(/Time zone$/)).toBeNull();
+    expect(screen.queryByLabelText(/Time zone/)).toBeNull();
     expect(screen.queryByLabelText('Currency')).toBeNull();
   });
 

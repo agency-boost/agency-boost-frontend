@@ -134,75 +134,24 @@ describe('SidebarUserMenu', () => {
    * title row's avatar and the *Lainnya* sheet are the account (`shell-views.spec.tsx`).
    */
 
-  describe('P19.2-T1 AC-5 with the views, for a person with more than one (UI-169 item 2; ADR-0198 §3)', () => {
-    const select = { self: vi.fn(), office: vi.fn(), add: vi.fn() };
-    const VIEWS = {
-      entries: [
-        { key: 'self', kind: 'self', label: 'My account', short: 'My account', active: true, onSelect: select.self },
-        { key: 'kpm_owner', kind: 'kpm_owner', label: 'KPM Owner · Cempaka Putih', short: 'KPM Owner', active: false, onSelect: select.office },
-      ],
-    } as const;
+  /*
+   * **P19.17-T3 AC-1: Akun Anda · Keluar, for everybody** (ADR-0269 §2; the brief's gaps 3 and 5). The views
+   * (ADR-0198), *Tambah akun* (ADR-0199) and *📘 Panduan* (ADR-0219) went; the panel holds the email, *ID | EN*, the
+   * account and signing out, nothing else.
+   */
+  it('P19.17-T3 AC-1 opens to the email, Your account and Sign out — no view, no Add account, no guide', async () => {
+    setup();
+    await userEvent.click(screen.getByRole('button', { name: /Platform Operator/ }));
+    const panel = document.getElementById('sidebar-user-actions')!;
+    expect(within(panel).getAllByRole('link').map((a) => a.textContent)).toEqual(['Your account']);
+    expect(within(panel).getAllByRole('button').map((b) => b.textContent)).toEqual(['Sign out']);
+    expect(panel.textContent).not.toMatch(/Add account|Guide|Panduan|My account/);
+    expect(document.querySelector('[data-panduan], [data-account-views]')).toBeNull();
+  });
 
-    it('P19.2-T1 AC-5 lists the views above Your account, the active one ticked and said, and nothing until opened', async () => {
-      setup({ views: VIEWS });
-      expect(screen.queryByRole('button', { name: 'My account' })).not.toBeInTheDocument();
-      await userEvent.click(screen.getByRole('button', { name: /Platform Operator/ }));
-
-      const list = screen.getByRole('list', { name: 'Views' });
-      const entries = within(list).getAllByRole('button');
-      expect(entries.map((b) => b.textContent)).toEqual(['My account', 'KPM Owner · Cempaka Putih']);
-      expect(entries[0]).toHaveAttribute('aria-current', 'true');
-      expect(entries[1]).not.toHaveAttribute('aria-current');
-      for (const entry of entries) expect(entry).toHaveClass('min-h-11');
-      // The disclosure's own vocabulary: buttons and links, no `menuitem` it does not implement.
-      expect(screen.queryByRole('menuitem')).not.toBeInTheDocument();
-      expect(entries[1].compareDocumentPosition(screen.getByRole('link', { name: 'Your account' })) & Node.DOCUMENT_POSITION_FOLLOWING)
-        .toBeTruthy();
-    });
-
-    it('P19.2-T1 AC-5 is in the tab order, before the account’s two', async () => {
-      setup({ views: VIEWS });
-      screen.getByRole('button', { name: /Platform Operator/ }).focus();
-      await userEvent.keyboard('{Enter}');
-
-      await userEvent.tab();
-      expect(screen.getByRole('button', { name: 'My account' })).toHaveFocus();
-      await userEvent.tab();
-      expect(screen.getByRole('button', { name: 'KPM Owner · Cempaka Putih' })).toHaveFocus();
-      await userEvent.tab();
-      expect(screen.getByRole('link', { name: 'Your account' })).toHaveFocus();
-    });
-
-    it('P19.2-T1 AC-5 one tap switches and closes the panel, so it is not left open over the other view', async () => {
-      setup({ views: VIEWS });
-      await userEvent.click(screen.getByRole('button', { name: /Platform Operator/ }));
-      await userEvent.click(screen.getByRole('button', { name: 'KPM Owner · Cempaka Putih' }));
-      expect(select.office).toHaveBeenCalledTimes(1);
-      expect(screen.queryByRole('link', { name: 'Your account' })).not.toBeInTheDocument();
-    });
-
-    it('P19.2-T1 AC-5 a person with one view sees no list; a row after the views (Tambah akun, AC-8) is drawn as its own', async () => {
-      setup({ views: { entries: [VIEWS.entries[0]] } });
-      await userEvent.click(screen.getByRole('button', { name: /Platform Operator/ }));
-      expect(screen.queryByRole('list', { name: 'Views' })).not.toBeInTheDocument();
-      expect(document.querySelector('[data-account-views]')).toBeNull();
-      await userEvent.click(screen.getByRole('button', { name: /Platform Operator/ }));
-
-      // The extension point the linked logins use (ADR-0199 §5): one action, after the views, a 44px row.
-      setup({ views: { entries: [VIEWS.entries[0]], actions: [{ key: 'add', label: 'Add account', onSelect: select.add }] } });
-      await userEvent.click(screen.getAllByRole('button', { name: /Platform Operator/ })[1]);
-      const action = screen.getByRole('button', { name: 'Add account' });
-      expect(action).toHaveClass('min-h-11');
-      await userEvent.click(action);
-      expect(select.add).toHaveBeenCalledTimes(1);
-    });
-
-    it('P19.2-T1 AC-5 has no axe violations with the views open', async () => {
-      const { container } = setup({ views: VIEWS });
-      await userEvent.click(screen.getByRole('button', { name: /Platform Operator/ }));
-      const results = await axe(container, { rules: { 'color-contrast': { enabled: false } } });
-      expect(results.violations ?? []).toHaveLength(0);
-    });
+  it('P19.17-T3 (`DESIGN-RULES.md` *Names*) writes the name in capitals', () => {
+    setup();
+    expect(screen.getByText('Platform Operator')).toHaveClass('uppercase');
   });
 
   it('has no axe violations, open or closed', async () => {

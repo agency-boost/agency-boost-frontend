@@ -69,7 +69,7 @@ describe('P18.10-T4 the Event List in Indonesian', () => {
   it('P18.10-T4 AC-1, AC-2, P19.1-T5 AC-4 the list: its title kept, its line, filter, groups, pills and Ikut Indonesian', async () => {
     list();
     await screen.findByRole('heading', { level: 3, name: 'Kickoff 2026' });
-    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^Event List$/);
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^Event$/);
     expect(screen.getByText('Lihat event yang akan datang dan yang sudah lewat dari KPM Anda — ikut, dan berikan feedback setelah event selesai.'))
       .toBeInTheDocument();
     const filter = screen.getByRole('group', { name: 'Tampilkan event' });

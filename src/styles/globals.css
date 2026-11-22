@@ -138,6 +138,21 @@
   --color-signal-red: #c23b3b;
   --color-signal-green: #3b6d11;
   --color-signal-grey: #6e6e69;
+  /* P19.21-T2 (DESIGN-RULES *Statuses*): the yellow status dot beside its words — *Belum diterbitkan*, *Logo belum ada*. */
+  --color-signal-amber: #d99a2b;
+  /*
+   * P19.22-T6, T7 (DESIGN-RULES *NPS bars*; ADR-0276): the promoter · passive · detractor bar; *Siapa yang menjawab*'s
+   * part-time and the four *Lama di KPM* bands; the response panel's agents (leaders are the accent, *belum* faint white).
+   */
+  --color-nps-promoter: #2e7d4f;
+  --color-nps-passive: #f2c14e;
+  --color-nps-detractor: #c23b3b;
+  --color-survey-part-time: #97c459;
+  --color-survey-agent: #f5c79e;
+  --color-tenure-1: #f6c9a2;
+  --color-tenure-2: #e8873a;
+  --color-tenure-3: #c2611e;
+  --color-tenure-4: #7e3a0e;
   --color-on-navy-red: #f27979;
   --color-on-navy-green: #97c459;
   --color-on-navy-lavender: #9aa6e0;
@@ -282,6 +297,25 @@
   --sidebar-width: 252px;
   /* Icon, centred, with the same 8px gutter either side. */
   --sidebar-rail-width: 56px;
+
+  /*
+   * **The desktop page frame and its spacing scale** (P19.13-T1; UI-192, UI-194, UI-198; ADR-0252; `tokens.md`, *The page
+   * frame*). From 1024px every page sits in one frame, `max-w-frame` (1320px, its 32px sides included, `px-frame`),
+   * centred beside the sidebar; **16px between sibling cards** (`gap-cards`) and **24px between sections and under the
+   * title row** (`gap-section`, `mb-section`); a form or a reading column at most **720px** (`max-w-form`); a list beside
+   * its detail **360px** (`--list-pane`). Below 1024px none of these is read: every class that names one is `lg:`.
+   */
+  --page-frame-max: 1320px;
+  --page-frame-gutter: 2rem;
+  --space-cards: 1rem;
+  --space-section: 1.5rem;
+  --form-max: 720px;
+  --list-pane: 360px;
+  /* The gap between two cards of a wide list (Campaign's groups): 10px on a tablet, `--space-cards` from 1024px. */
+  --wide-card-gap: 0.625rem;
+  /* The floating sidebar (UI-196): 12px off the window's top, bottom and left, 20px corners. */
+  --sidebar-inset: 0.75rem;
+  --radius-sidebar: 20px;
 }
 
 /**
@@ -301,6 +335,22 @@
    * 56px below is no longer drawn.
    */
   --sidebar-rail-width: 64px;
+  /*
+   * **The floating panel is 240px** (P19.13-T2 AC-1; UI-196, ADR-0252): 12px off the window's left edge
+   * (`--sidebar-inset`), so the page still starts 252px from it, as it did beside the flat 252px column.
+   */
+  --sidebar-width: 240px;
+}
+
+/*
+ * **The frame does not move when a page gets long** (P19.13-T1 AC-3; UI-193, ADR-0252): from 1024px the document keeps
+ * its scrollbar's room whether the page scrolls or not, so the frame's right edge and the title row's avatar stand
+ * where they stood on a short page. Below 1024px nothing changes (the scrollbars there overlay the page).
+ */
+@media (min-width: 1024px) {
+  :root:has([data-surface='v1']) {
+    scrollbar-gutter: stable;
+  }
 }
 
 /*
@@ -312,6 +362,8 @@
 @media (min-width: 1024px) {
   :root {
     --text-title: 1.5rem;
+    /* P19.13-T1 AC-4 (UI-194): a wide list's cards 16px apart from 1024px, as every card grid's. */
+    --wide-card-gap: var(--space-cards);
   }
 }
 

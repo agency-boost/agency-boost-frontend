@@ -27,6 +27,12 @@ import { formatBenchmark, formatRatioForStatus } from '@/lib/ratio-format';
  *   does not, judged by the server on the unrounded value; **a whole percentage** (UI-080); *Leads per activity* to two
  *   places; and **–** in lavender with too little data, which a screen reader hears as *Data belum cukup*.
  * - **No pills, dots or verdict words** (UI-053): the colour repeats the comparison the two figures already make.
+ * - **`tiles`: from 768px, four equal tiles** (P19.18-T2 AC-3; ADR-0271 §10; the brief of 19 November 2026, part A,
+ *   *"ratio card: Selling vs Recruitment bar full width, then the 4 ratios as 4 equal mini tiles (big value on top, ratio
+ *   name, 'Target x' underneath)"*; `unit-aktivitas-{tablet,laptop}`): the split bar across the card, then one tile per
+ *   ratio in one row — its value on top, 26px, in the same colours, its name, *Target X* under it. **Never the formula.**
+ *   One list, laid out by the width alone, so a phone keeps its rows and nothing is drawn twice. The Unit Dashboard's
+ *   *Aktivitas* asks for it; every other page keeps the rows, and a card whose rows explain themselves (`explain`) too.
  *
  * **The figures are the server's** (`GET /activity/ratios`, the Ratio page's); this card computes nothing. The Unit
  * Dashboard passes its Unit or Group answer the same way (`ratios`), once its endpoint exists.
@@ -39,6 +45,7 @@ export function RatioCard({
   error = null,
   headingLevel = 2,
   explain,
+  tiles = false,
   className,
 }: {
   /** The ratios as `GET /activity/ratios` answers them (`ActivityRatios.ratios`); `null` while loading. */
@@ -56,6 +63,8 @@ export function RatioCard({
    * each row is a button that opens this under it; absent, the rows are read-only as on every other page.
    */
   explain?: (ratio: ActivityRatio) => ReactNode;
+  /** From 768px, the ratios as equal tiles in one row (P19.18-T2 AC-3): the Unit Dashboard's *Aktivitas*. */
+  tiles?: boolean;
   className?: string;
 }) {
   const t = useMessages(uiV1Messages);
@@ -63,6 +72,8 @@ export function RatioCard({
   const balance = ratios?.find((ratio) => ratio.comparison === 'band') ?? null;
   const rows = ratios?.filter((ratio) => ratio.comparison !== 'band') ?? [];
   const titleId = useId();
+  // A row that explains itself is a button with a panel under it: those stay rows (Activity › Ratio, UI-106).
+  const asTiles = tiles && !explain;
 
   return (
     <section
@@ -89,8 +100,13 @@ export function RatioCard({
       ) : (
         <>
           {balance && <SplitBar ratio={balance} />}
-          <ul>
-            {rows.map((ratio) => <RatioRow key={ratio.code} ratio={ratio} explain={explain} />)}
+          <ul
+            data-ratio-tiles={asTiles ? '' : undefined}
+            className={cn(asTiles && 'md:grid md:gap-2')}
+            // One column a ratio, all equal: a grid only from 768px, so on a phone the template is never read.
+            style={asTiles ? { gridTemplateColumns: `repeat(${Math.max(1, rows.length)}, minmax(0, 1fr))` } : undefined}
+          >
+            {rows.map((ratio) => <RatioRow key={ratio.code} ratio={ratio} explain={explain} tile={asTiles} />)}
           </ul>
         </>
       )}
@@ -148,8 +164,14 @@ const VALUE_TONE: Record<ActivityRatio['status'], string> = {
   neutral: 'text-white',
 };
 
-/** One ratio: its name, *Target X* under it, its value on the right — and, with `explain`, a tap away from what it is. */
-function RatioRow({ ratio, explain }: { ratio: ActivityRatio; explain?: (ratio: ActivityRatio) => ReactNode }) {
+/**
+ * One ratio: its name, *Target X* under it, its value on the right — and, with `explain`, a tap away from what it is. As a
+ * **`tile`** from 768px (P19.18-T2 AC-3): the value on top and larger, the name bold, *Target X* under it, on its own lighter
+ * navy; the same markup, in the same reading order, on a phone a row.
+ */
+function RatioRow({
+  ratio, explain, tile = false,
+}: { ratio: ActivityRatio; explain?: (ratio: ActivityRatio) => ReactNode; tile?: boolean }) {
   const t = useMessages(uiV1Messages);
   const language = useLanguage();
   const figures = useFigureLanguage();
@@ -158,8 +180,8 @@ function RatioRow({ ratio, explain }: { ratio: ActivityRatio; explain?: (ratio: 
   const empty = ratio.value === null;
   const line = (
     <>
-      <div className="min-w-0 flex-1">
-        <p className="text-base text-white">{ratio.label}</p>
+      <div className={cn('min-w-0 flex-1', tile && 'md:w-full md:flex-none')}>
+        <p className={cn('text-base text-white', tile && 'md:font-semibold md:leading-snug')}>{ratio.label}</p>
         <p className="mt-0.5 text-sm text-on-navy-muted">
           {t.ratio.target({ value: formatBenchmark(ratio.benchmark, ratio.displayUnit, figures, language) })}
         </p>
@@ -167,6 +189,7 @@ function RatioRow({ ratio, explain }: { ratio: ActivityRatio; explain?: (ratio: 
       <p
         data-status={empty ? 'none' : ratio.status}
         className={cn('shrink-0 text-right text-[1.375rem] font-semibold tabular-nums leading-tight',
+          tile && 'md:text-left md:text-[1.625rem] md:font-bold',
           empty ? 'text-on-navy-lavender' : VALUE_TONE[ratio.status])}
       >
         {empty ? (
@@ -179,7 +202,18 @@ function RatioRow({ ratio, explain }: { ratio: ActivityRatio; explain?: (ratio: 
     </>
   );
   if (!explain) {
-    return <li data-ratio={ratio.code} className="flex items-center gap-3 border-t border-on-navy-line py-2.5">{line}</li>;
+    return (
+      <li
+        data-ratio={ratio.code}
+        className={cn(
+          'flex items-center gap-3 border-t border-on-navy-line py-2.5',
+          // The tile, from 768px: the value above the words (the list's order reversed on screen, never in the DOM).
+          tile && 'md:flex-col-reverse md:items-start md:justify-end md:gap-1 md:rounded-[12px] md:border-t-0 md:bg-white/[0.06] md:px-3.5 md:py-3',
+        )}
+      >
+        {line}
+      </li>
+    );
   }
   return (
     <li data-ratio={ratio.code} className="border-t border-on-navy-line">

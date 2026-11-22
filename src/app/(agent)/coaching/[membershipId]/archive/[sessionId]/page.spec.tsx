@@ -397,6 +397,8 @@ describe('a past session’s archive (P11-T10)', () => {
       const { seen, print } = stubPrint();
       const { calls } = show();
       const download = await screen.findByRole('button', { name: 'Download as PDF' });
+      // The tab's title before printing: the shell's, *Coaching · AgencyBoost* since P19.13-T4 (UI-197), put back after.
+      const before = document.title;
       // A line icon, never the ⬇ glyph (UI V1: no emoji as icons).
       expect(download).toHaveTextContent(/^Download as PDF$/);
       expect(download.querySelector('svg')).toHaveAttribute('aria-hidden', 'true');
@@ -431,7 +433,8 @@ describe('a past session’s archive (P11-T10)', () => {
 
       act(() => { window.dispatchEvent(new Event('afterprint')); });
       await waitFor(() => expect(document.querySelector('[data-print-view]')).toBeNull());
-      expect(document.title).toBe('AgencyBoost');
+      expect(document.title).toBe(before);
+      expect(before).toBe('Coaching · AgencyBoost');
       // Nothing a leader keeps to themselves is read to print it.
       expect(calls.some((c) => /leader-notes|profile/.test(c.url))).toBe(false);
     });
@@ -563,7 +566,7 @@ describe('a past session’s archive (P11-T10)', () => {
       });
 
       expect(await screen.findByRole('heading', { level: 2, name: 'Rina Wijaya' })).toBeInTheDocument();
-      expect(screen.getByRole('link', { name: '← Back to Coaching Session' })).toHaveAttribute('href', '/coaching');
+      expect(screen.getByRole('link', { name: '← Back to Coaching' })).toHaveAttribute('href', '/coaching');
       expect(screen.queryByRole('navigation', { name: 'Coaching' })).not.toBeInTheDocument();
       expect(screen.queryByRole('group', { name: 'View' })).not.toBeInTheDocument();
       expect(screen.queryByText('This person isn’t someone you coach.')).not.toBeInTheDocument();
@@ -589,7 +592,7 @@ describe('a past session’s archive (P11-T10)', () => {
 
       await card('Coaching tips');
       expect(screen.getByRole('link', { name: '← Back to My Coaching Notes' })).toHaveAttribute('href', '/coaching/me');
-      expect(screen.queryByRole('link', { name: '← Back to Coaching Session' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('link', { name: '← Back to Coaching' })).not.toBeInTheDocument();
     });
 
     it('P11 final walk F4 says not found to a reader who leads nobody without pointing at an empty roster', async () => {

@@ -270,6 +270,60 @@ const en = {
     recruitmentShort: kept('Recruitment'),
   },
   /**
+   * **The Overview of 19 November 2026** (P19.18-T1; ADR-0271; the brief's part A, `unit-overview-*` mockups): the orange
+   * panel and its two sheets, the roster's unit lines and person rows, and the KPM Owner's person card. The client's
+   * Indonesian verbatim; *Active Agent*, *Recruitment*, *New Hires*, *Leads*, *potensi*, *goal* kept.
+   */
+  overview: {
+    /** The panel's group name for a screen reader, and the three tiles' labels. */
+    panelLabel: 'Production and team',
+    /** The sheets: `month` the month's name in full, written by the caller. */
+    activeAgentTitle: ({ month }: { month: string }) => `${kept('Active Agent')} · ${month}`,
+    activeAgentLine: ({ count, of }: { count: string; of: string }) => `${count} of ${of} · from the uploaded production data`,
+    activeAgentNotUploaded: 'This month’s production is not uploaded yet',
+    activeAgentNone: 'Nobody is an Active Agent this month yet.',
+    /** A sheet row's line: `unit` *Unit Anda* or *Unit {NAME}*; the APE and the policies written by the caller. */
+    ape: ({ sum }: { sum: string }) => `APE ${sum}`,
+    policies: ({ n }: { n: number }) => `${n} ${n === 1 ? 'policy' : 'policies'}`,
+    recruitmentTitle: ({ month }: { month: string }) => `${kept('Recruitment')} · ${month}`,
+    recruitmentLine: ({ n }: { n: number }) => `${n} new ${n === 1 ? 'agent' : 'agents'} joined this month`,
+    recruitmentNone: 'No new agent has joined this month yet.',
+    recruitedBy: 'Recruited by',
+    joined: ({ day }: { day: string }) => `Joined ${day}`,
+    seeInNewHires: `See in ${kept('New Hires')}`,
+    /** *n orang* on a unit line, a team line and the card. */
+    people: ({ n }: { n: number }) => `${n} ${n === 1 ? 'person' : 'people'}`,
+    /** The roster title's ⓘ, now that it carries no status (OD-391). */
+    rosterInfo: 'About this roster',
+    rosterRules: 'Goal progress is navy below 100% and green from 100%. Test accounts are not counted.',
+    /** The tablet's and laptop's line under the coaching status tile: each figure bold, written by the caller. */
+    salesLeads: `Sales ${kept('leads')}`,
+    recruitLeads: `Recruit ${kept('leads')}`,
+    leadsOfPeriod: 'Leads in the period',
+    /** The person card (AC-9): the role once, *AAB · Unit AGUS PRASETYO*. */
+    cardSalesLeads: `Sales ${kept('leads')}`,
+    cardRecruitLeads: `Recruitment ${kept('leads')}`,
+    potensiCount: ({ n }: { n: number }) => `${n} potensi`,
+    goalProgress: `${kept('Goal')} progress`,
+    activity: 'Activity',
+    last7: 'last 7 days',
+    openProfile: 'Open profile',
+    whatsApp: 'WhatsApp',
+    /** The phone's floating + (AC-8): its name for a screen reader. */
+    addAgent: '+ Add agent',
+  },
+  /**
+   * ***The coaching status tile*** (P19.18-T1 AC-8, T5 AC-2; ADR-0267 §5, `COACHING_STATUS`): red *Belum pernah coaching*,
+   * green *Coaching n hari lalu* up to 14 days, yellow after — on the Unit Dashboard's rows on a tablet and a laptop, in
+   * the KPM Owner's person card and on Coaching's rows. The client's words.
+   */
+  coachingStatus: {
+    never: 'Never coached',
+    daysAgo: ({ n }: { n: number }) => (n === 0 ? 'Coached today' : `Coached ${n} ${n === 1 ? 'day' : 'days'} ago`),
+    /** Under the tile on Coaching: who led the latest 1:1. */
+    by: ({ name }: { name: string }) => `by ${name}`,
+  },
+  /**
    * **The three views** (the client's message of 11 November 2026, item 7; ADR-0249; glossary *Grup langsung*, *Grup
    * informal*, *Semua downline*): the picker beside the period on *Overview* and the month on *Potensi*, *Grup informal*'s
    * line and its sheet, the tiles' *AB* chip, and the office-wide view's *Belum punya leader*. The Indonesian is the
@@ -277,6 +331,8 @@ const en = {
    */
   views: {
     label: 'View',
+    /** ***Direct Unit*** (P19.18-T1 AC-2; ADR-0271 §2; glossary): the client's own words in both languages. */
+    unit: kept('Direct Unit'),
     direct: 'Direct group',
     informal: 'Informal group',
     downline: `All ${kept('downline')}`,
@@ -477,9 +533,45 @@ const id: MessagesOf<typeof en> = {
     activeAgentShort: kept('Active Agent'),
     recruitmentShort: kept('Recruitment'),
   },
+  overview: {
+    panelLabel: 'Produksi dan tim',
+    activeAgentTitle: ({ month }) => `${kept('Active Agent')} · ${month}`,
+    activeAgentLine: ({ count, of }) => `${count} dari ${of} · dari data produksi yang diunggah`,
+    activeAgentNotUploaded: 'Produksi bulan ini belum diunggah',
+    activeAgentNone: `Belum ada ${kept('Active Agent')} bulan ini.`,
+    ape: ({ sum }) => `APE ${sum}`,
+    policies: ({ n }) => `${n} polis`,
+    recruitmentTitle: ({ month }) => `${kept('Recruitment')} · ${month}`,
+    recruitmentLine: ({ n }) => `${n} agent baru bergabung bulan ini`,
+    recruitmentNone: 'Belum ada agent baru yang bergabung bulan ini.',
+    recruitedBy: 'Direkrut oleh',
+    joined: ({ day }) => `Bergabung ${day}`,
+    seeInNewHires: `Lihat di ${kept('New Hires')}`,
+    people: ({ n }) => `${n} orang`,
+    rosterInfo: 'Tentang roster ini',
+    rosterRules: `Progres ${kept('goal')} berwarna navy di bawah 100% dan hijau mulai 100%. Akun tes tidak dihitung.`,
+    salesLeads: `${kept('Leads')} sales`,
+    recruitLeads: `${kept('Leads')} rekrut`,
+    leadsOfPeriod: `${kept('Leads')} dalam periode ini`,
+    cardSalesLeads: `${kept('Leads')} penjualan`,
+    cardRecruitLeads: `${kept('Leads')} rekrut`,
+    potensiCount: ({ n }) => `${n} potensi`,
+    goalProgress: `Progres ${kept('goal')}`,
+    activity: 'Aktivitas',
+    last7: '7 hari terakhir',
+    openProfile: 'Buka profil',
+    whatsApp: 'WhatsApp',
+    addAgent: '+ Tambah agent',
+  },
+  coachingStatus: {
+    never: `Belum pernah ${kept('coaching')}`,
+    daysAgo: ({ n }) => (n === 0 ? `${kept('Coaching')} hari ini` : `${kept('Coaching')} ${n} hari lalu`),
+    by: ({ name }) => `oleh ${name}`,
+  },
   // The client's words, verbatim (11 November 2026, item 7).
   views: {
     label: 'Tampilan',
+    unit: kept('Direct Unit'),
     direct: 'Grup langsung',
     informal: 'Grup informal',
     downline: `Semua ${kept('downline')}`,

@@ -7,7 +7,11 @@ import type { Me } from './session';
  * other field page needs a KPM, and shows `NoKpmYet` in its place without being mounted, so it asks the API for nothing
  * a person in no office cannot read.
  */
-export const NO_KPM_ROUTES: readonly string[] = ['/user-management', '/profile', '/notifications', '/join'];
+export const NO_KPM_ROUTES: readonly string[] = [
+  '/user-management', '/profile', '/notifications', '/join',
+  // P19.23-T2 AC-3 (OD-420): a KPM's future Owner opens their claim link before they are in any office.
+  '/owner-invite',
+];
 
 /**
  * **Somebody signed in who is not in an office yet**, and no Super Admin: who `NoKpmYet` is for — with no membership at

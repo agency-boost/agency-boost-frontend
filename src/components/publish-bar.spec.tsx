@@ -1,12 +1,13 @@
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { makeMe, renderWithSession, stubFetch } from '@test/harness';
+import { makeMe, renderInIndonesian, renderWithSession, stubFetch } from '@test/harness';
 import { PublishBar } from './publish-bar';
 
+const at = vi.hoisted(() => ({ path: '/kpm/settings/activity-types' }));
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
-  usePathname: () => '/kpm/settings/activity-types',
+  usePathname: () => at.path,
 }));
 
 const membership = {
@@ -31,7 +32,7 @@ function render(me = OWNER, body: unknown = state()) {
 }
 
 describe('the publish bar (P4-T6)', () => {
-  afterEach(() => vi.unstubAllGlobals());
+  afterEach(() => { vi.unstubAllGlobals(); at.path = '/kpm/settings/activity-types'; });
 
   it('says what agents are on while an Owner is mid-restructure', async () => {
     /*
@@ -40,8 +41,7 @@ describe('the publish bar (P4-T6)', () => {
      * is how they know the gate is there.
      */
     render();
-    expect(await screen.findByText(/not seeing these changes yet/)).toBeInTheDocument();
-    expect(screen.getByText(/on version 3/)).toBeInTheDocument();
+    expect(await screen.findByRole('status')).toHaveTextContent('Draft. Agents are still on version 3.');
   });
 
   it('says so differently when nothing has ever been published', async () => {
@@ -69,7 +69,7 @@ describe('the publish bar (P4-T6)', () => {
     // Read is wide and write is narrow. Hiding the whole bar would leave them wondering
     // why an Owner's screen and theirs disagree.
     render(ADMIN_READONLY);
-    expect(await screen.findByText(/not seeing these changes yet/)).toBeInTheDocument();
+    expect(await screen.findByText(/still on version 3/)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Publish to agents' })).toBeNull();
   });
 
@@ -91,5 +91,63 @@ describe('the publish bar (P4-T6)', () => {
     expect(await screen.findByRole('alert'))
       .toHaveTextContent('Could not check what your agents are seeing');
     expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument();
+  });
+});
+
+/** Each setting's own bar (P19.21-T2 AC-3; ADR-0274 §5). */
+describe('the publish bar, per setting (P19.21-T2)', () => {
+  afterEach(() => { vi.unstubAllGlobals(); at.path = '/kpm/settings/activity-types'; });
+
+  const perSetting = (over: Record<string, Partial<{ version: number; hasUnpublishedChanges: boolean }>> = {}) => state({
+    settings: ['activity_types', 'lead_statuses', 'activation_checklist', 'training', 'capability_mapping', 'events']
+      .map((setting) => ({ setting, version: 1, hasUnpublishedChanges: false, publishedAt: null, ...over[setting] })),
+  });
+
+  it.each([
+    ['/kpm/settings/activity-types', 'activity_types'],
+    ['/kpm/settings/ratio-benchmarks', 'activity_types'],
+    ['/kpm/settings/lead-statuses', 'lead_statuses'],
+    ['/kpm/settings/activation-checklist', 'activation_checklist'],
+    ['/kpm/settings/training', 'training'],
+    ['/kpm/settings/training/66f000000000000000000001', 'training'],
+    ['/kpm/settings/capability-mapping', 'capability_mapping'],
+    ['/kpm/settings/events', 'events'],
+  ])('P19.21-T2 AC-3 on %s reads and publishes %s alone', async (path, setting) => {
+    at.path = path;
+    const { calls } = render(OWNER, perSetting({ [setting]: { version: 4, hasUnpublishedChanges: true } }));
+    const bar = await screen.findByRole('status');
+    expect(bar).toHaveAttribute('data-publish-bar', setting);
+    expect(bar).toHaveTextContent('Draft. Agents are still on version 4.');
+    await userEvent.click(screen.getByRole('button', { name: 'Publish to agents' }));
+    const post = calls.find((c) => c.init.method === 'POST')!;
+    expect(JSON.parse(post.init.body as string)).toEqual({ settings: [setting] });
+  });
+
+  it('P19.21-T2 AC-3 says nothing on a page whose setting has no changes, while another setting has some', async () => {
+    at.path = '/kpm/settings/lead-statuses';
+    render(OWNER, perSetting({ events: { hasUnpublishedChanges: true } }));
+    await waitFor(() => expect(screen.queryByRole('status')).toBeNull());
+  });
+
+  it.each(['/kpm/settings/products', '/kpm/settings/campaigns', '/kpm/settings/branch-info', '/kpm/settings'])(
+    'P19.21-T2 AC-3 draws nothing and asks nothing on %s, which is saved live', async (path) => {
+      at.path = path;
+      const { calls } = render(OWNER, perSetting({ activity_types: { hasUnpublishedChanges: true } }));
+      await waitFor(() => expect(screen.queryByRole('status')).toBeNull());
+      expect(calls).toHaveLength(0);
+    },
+  );
+
+  it('P19.21-T2 AC-3 a setting named by its page overrides the address', async () => {
+    stubFetch({ '/kpm/settings/publish-state': { body: perSetting({ events: { version: 2, hasUnpublishedChanges: true } }) } });
+    renderWithSession(<PublishBar setting="events" />, { me: OWNER });
+    expect(await screen.findByRole('status')).toHaveAttribute('data-publish-bar', 'events');
+  });
+
+  it('P19.21-T2 AC-3 in Indonesian: "Draf. Agent masih memakai versi n." and Terbitkan ke agent', async () => {
+    stubFetch({ '/kpm/settings/publish-state': { body: perSetting({ activity_types: { version: 1, hasUnpublishedChanges: true } }) } });
+    renderInIndonesian(<PublishBar />, { me: OWNER });
+    expect(await screen.findByRole('status')).toHaveTextContent('Draf. Agent masih memakai versi 1.');
+    expect(screen.getByRole('button', { name: 'Terbitkan ke agent' })).toBeInTheDocument();
   });
 });

@@ -1,34 +1,32 @@
 'use client';
 
+import Link from 'next/link';
 import { Suspense } from 'react';
+import { Anggota } from '@/components/admin/anggota';
 import { PlatformAccounts } from '@/components/admin/platform-accounts';
-import { PlatformMembers } from '@/components/admin/platform-members';
 import { Page } from '@/components/page';
-import { RouteTabs } from '@/components/ui/route-tabs';
+import { LineIcon } from '@/components/ui/line-icon';
 import { useMessages } from '@/i18n/language-provider';
-import { adminPlatformReadsMessages } from '@/i18n/messages/admin-platform-reads';
-import type { AccountKpmFilter, MemberRoleFilter, MemberStatus } from '@/lib/platform-reads';
+import { adminMembersMessages } from '@/i18n/messages/admin-members';
+import type { MemberClass } from '@/lib/admin-members';
+import type { AccountKpmFilter, MemberStatus } from '@/lib/platform-reads';
 import { useQuery } from '@/lib/use-query';
 
-const ROLES = new Set(['ab', 'aab', 'agent']);
+const CLASSES = new Set(['ab', 'aab', 'agent']);
 const STATUSES = new Set(['active', 'pending', 'removed']);
 const KPM_FILTERS = new Set(['none', 'some']);
 
-/** The two tabs, in the query (the route registry's `?tab=`): *Anggota KPM* when absent. */
-const MEMBERS_TAB = '/admin/members';
-const ACCOUNTS_TAB = '/admin/members?tab=accounts';
-
 /**
- * ***All members*** (`/admin/members`; P19.4-T3 AC-1, AC-2; SA UI-010, SA R1; ADR-0207): every membership on the
- * platform, a sidebar item under *KPMS* after *All KPMs*. *TOTAL MEMBERS* on the overview opens it unfiltered and *ABS*
- * with `?role=AB`. The Super Admin's alone (`platform_members:read`); the API refuses everybody else and audits each read.
+ * ***Anggota*** (`/admin/members`; P19.23-T3 AC-1; the Super Admin spec of 20 November 2026, §6; ADR-0277) — every member
+ * of every KPM, the rail's third item. The Super Admin's alone (`platform_members:read`); the API refuses everybody else
+ * and audits each read. The list is `Anggota`; a row opens the member's detail.
  *
- * **Two tabs since P19.12-T2** (ADR-0245 §1; the client's message of 11 November 2026, item 2): ***Anggota KPM***, the
- * list above, unchanged and the default; and ***Akun terdaftar*** (`?tab=accounts`), every registered account — a person
- * who registered and joined no KPM included, whom a list of memberships cannot show.
+ * **`?tab=accounts` is *Akun terdaftar*** (ADR-0245 §1; the client's request of 11 November 2026, item 2): every
+ * registered account, one in no KPM included — kept, one link under the list, with its way back (parity I-1187). The
+ * address's filters (`?role=AB`, `?status=`, `?companyId=`, `?q=`) start the list from them; anything else is dropped.
  */
-export default function AllMembersPage() {
-  const t = useMessages(adminPlatformReadsMessages).members;
+export default function AnggotaPage() {
+  const t = useMessages(adminMembersMessages);
   return (
     <Page title={t.title} permission="platform_members:read">
       {/* `useSearchParams` needs a boundary (`lib/use-query.ts`). */}
@@ -39,40 +37,39 @@ export default function AllMembersPage() {
   );
 }
 
-/** The address's tab and filters, the ones the server knows; anything else is dropped rather than refused. */
+/** The address's view and filters, the ones the server knows. */
 function FromAddress() {
-  const t = useMessages(adminPlatformReadsMessages).members;
+  const t = useMessages(adminMembersMessages);
   const query = useQuery();
   const one = (key: string) => (typeof query[key] === 'string' ? (query[key] as string) : undefined);
-  const accounts = one('tab') === 'accounts';
   const q = one('q');
-  const role = one('role')?.toLowerCase();
-  const status = one('status')?.toLowerCase();
-  const kpm = one('kpm')?.toLowerCase();
-  return (
-    <>
-      <RouteTabs
-        label={t.tabs}
-        activeHref={accounts ? ACCOUNTS_TAB : MEMBERS_TAB}
-        tabs={[{ href: MEMBERS_TAB, label: t.tab.members }, { href: ACCOUNTS_TAB, label: t.tab.accounts }]}
-      />
-      {/* Keyed by the address's search, so a link that carries one (`n KPM`, *Cari di Akun terdaftar*) starts from it. */}
-      {accounts ? (
+  if (one('tab') === 'accounts') {
+    const kpm = one('kpm')?.toLowerCase();
+    return (
+      <div className="flex flex-col gap-3">
+        <Link href="/admin/members" className="inline-flex min-h-11 items-center gap-1 self-start text-md font-semibold text-navy">
+          <LineIcon name="chevronLeft" className="h-4 w-4" />
+          {t.backToMembers}
+        </Link>
         <PlatformAccounts
           key={`accounts:${q ?? ''}:${kpm ?? ''}`}
           initial={{ q, kpm: kpm && KPM_FILTERS.has(kpm) ? (kpm as AccountKpmFilter) : undefined }}
         />
-      ) : (
-        <PlatformMembers
-          key={`members:${q ?? ''}`}
-          initial={{
-            role: role && ROLES.has(role) ? (role as MemberRoleFilter) : undefined,
-            status: status && STATUSES.has(status) ? (status as MemberStatus) : undefined,
-            companyId: one('companyId'),
-            q,
-          }}
-        />
-      )}
-    </>
+      </div>
+    );
+  }
+  const role = one('role')?.toLowerCase();
+  const status = one('status')?.toLowerCase();
+  return (
+    <Anggota
+      key={`members:${q ?? ''}:${role ?? ''}`}
+      initial={{
+        role: role && CLASSES.has(role) ? (role as MemberClass) : undefined,
+        status: status && STATUSES.has(status) ? (status as MemberStatus) : undefined,
+        testAccount: status === 'test' ? 'only' : undefined,
+        companyId: one('companyId'),
+        q,
+      }}
+    />
   );
 }

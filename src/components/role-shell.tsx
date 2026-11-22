@@ -17,9 +17,9 @@ import { useSession } from '@/lib/session';
  * shells by the reader, in `landingFor`'s order.
  *
  * **Since P19.2-T1 there is one shell** (ADR-0197): this renders it with no family, so nobody is sent away, and the
- * shell draws the reader's own menu — the Super Admin's, the office view's or the field's — in the view the tab is in
- * (ADR-0198). What is left here is the signed-out reader: sent to sign in, or, on the one page that opts in, the page
- * bare.
+ * shell draws the reader's own menu — the Super Admin's, or the field's with the extras their role gives (one menu by
+ * role since P19.17-T3, ADR-0269). What is left here is the signed-out reader: sent to sign in, or, on the one page that
+ * opts in, the page bare.
  */
 export function RoleShell({
   title,

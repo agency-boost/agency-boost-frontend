@@ -1,12 +1,12 @@
 import { messagesIn } from '@/i18n/catalogue';
 import { SOURCE_LANGUAGE } from '@/i18n/language';
-import { kpmComplianceMessages } from '@/i18n/messages/kpm-compliance';
+import { kpmOverviewMessages } from '@/i18n/messages/kpm-overview';
 import { api } from './api-client';
 
 /**
  * **The override of a final campaign standing** (P18.3-T2 AC-5, AC-8; ADR-0144 §4; D-override): the Owner or an
  * Admin sets a chaser's frozen result to *Achieved* or *Not achieved* with a reason, or clears it with one. Its
- * only control is the compliance tree's *Achieved* cell (`components/analytics/standing-override.tsx`).
+ * only control is the *Achieved* pill on the KPM Overview's *Campaigns* list (`components/overview/standing-override.tsx`).
  *
  * **Every judgement is the server's**: whether the standing is final, whether the member has one, and whether
  * the status asked for is the one it already reads. The screen offers only what can succeed and prints the
@@ -69,13 +69,13 @@ export const clearOverride = (code: string, membershipId: string, body: { reason
     { method: 'DELETE', body },
   );
 
-/** The override's words in English, the catalogue's source (`i18n/messages/kpm-compliance.ts`, `override`). */
-const EN = messagesIn(kpmComplianceMessages, SOURCE_LANGUAGE).override;
+/** The override's words in English, the catalogue's source (`i18n/messages/kpm-overview.ts`, `override`, since P19.19). */
+const EN = messagesIn(kpmOverviewMessages, SOURCE_LANGUAGE).override;
 
 /**
  * **Our words, in English**: the prototype draws no override (contradiction 11). Plain, and none of OD-39's six words.
  * `campaign` is the campaign's title, `name` the member's. The catalogue's source, in the shapes this module's callers
- * and spec have always read; **the cell reads the reader's language** (`useMessages(kpmComplianceMessages).override`,
+ * and spec have always read; **the cell reads the reader's language** (`useMessages(kpmOverviewMessages).override`,
  * P18.10-T4).
  */
 export const OVERRIDE_COPY = {

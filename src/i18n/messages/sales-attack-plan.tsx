@@ -32,7 +32,7 @@ type Strong = (words: string) => ReactNode;
 type Outside = readonly ('age' | 'budget')[];
 
 const en = {
-  title: kept('Sales Attack Plan'),
+  title: kept('Sales'),
   /** The step pills (`:3788-3792`); the first also names the brief's summary for a screen reader. */
   stepBrief: 'Customer brief',
   stepPlan: 'Attack plan',
@@ -92,7 +92,7 @@ const en = {
 };
 
 const id: MessagesOf<typeof en> = {
-  title: kept('Sales Attack Plan'),
+  title: kept('Sales'),
   stepBrief: 'Gambaran nasabah',
   // The plan's name, as §A.3's tab writes it.
   stepPlan: kept('Attack Plan'),

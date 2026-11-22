@@ -12,6 +12,13 @@ vi.mock('@/components/publish-bar', () => ({
   PublishBar: () => <div data-testid="publish-bar">publish</div>,
 }));
 
+/** Where the page is — a settings page under the hub (P19.21-T2), unless a test moves it. */
+const at = vi.hoisted(() => ({ path: '/kpm/settings/lead-statuses' as string | null }));
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+  usePathname: () => at.path,
+}));
+
 const TABS = [
   { label: 'Activity types', href: '/kpm/settings/activity-types' },
   { label: 'Ratio benchmarks', href: '/kpm/settings/ratio-benchmarks' },
@@ -41,6 +48,7 @@ function renderFull() {
 function order() {
   const marks = [
     ['header', screen.getByRole('heading', { name: 'Lead statuses' })],
+    ['back', screen.getByRole('link', { name: 'Back to Settings' })],
     ['tabs', screen.getByRole('navigation', { name: 'Activity settings' })],
     ['subtabs', screen.getByRole('navigation', { name: 'Lead pipeline' })],
     ['error', screen.getByRole('alert')],
@@ -68,13 +76,32 @@ describe('SettingsScreen', () => {
    * Asserted as document order rather than as "the tabs are present", because presence is
    * exactly what every one of those screens already had.
    */
-  it('lays the blocks out header → tabs → subtabs → error → bars → toolbar → content', () => {
+  it('lays the blocks out header → back → tabs → subtabs → error → bars → toolbar → content', () => {
     renderFull();
 
     expect(order()).toEqual([
-      'header', 'tabs', 'subtabs', 'error', 'bars', 'toolbar', 'content',
+      'header', 'back', 'tabs', 'subtabs', 'error', 'bars', 'toolbar', 'content',
     ]);
   });
+
+  it('P19.21-T2 AC-3 opens every page under Pengaturan with the way back to the hub', () => {
+    renderFull();
+    const back = screen.getByRole('link', { name: 'Back to Settings' });
+    expect(back).toHaveAttribute('href', '/kpm/settings');
+    expect(back).toHaveTextContent('Settings');
+  });
+
+  it.each([['/kpm/settings'], ['/admin/companies/c1/template'], [null]])(
+    'P19.21-T2 AC-3 draws no way back on %s, which is not a page under the hub', (path) => {
+      at.path = path;
+      try {
+        renderFull();
+        expect(screen.queryByRole('link', { name: 'Back to Settings' })).toBeNull();
+      } finally {
+        at.path = '/kpm/settings/lead-statuses';
+      }
+    },
+  );
 
   it('names the two tab rows differently, so they are separable landmarks', () => {
     renderFull();
@@ -102,6 +129,8 @@ describe('SettingsScreen', () => {
 
     expect(screen.queryByRole('navigation')).not.toBeInTheDocument();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    // The way back to the hub is the one block every page under it has (P19.21-T2).
+    expect(screen.getByRole('link', { name: 'Back to Settings' })).toBeInTheDocument();
     expect(screen.getByTestId('content')).toBeInTheDocument();
   });
 

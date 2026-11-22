@@ -1,8 +1,9 @@
-import { screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { atWidth, makeMe, renderWithSession, stubFetch, wears } from '@test/harness';
+import { atWidth, makeMe, renderWithSession, stubFetch } from '@test/harness';
 import { smallTargets } from '@test/touch-audit';
+import { ownMilestoneCodes, reorderWithin } from '@/lib/capability-mapping';
 import CapabilityMappingPage from './page';
 
 vi.mock('next/navigation', () => ({
@@ -15,316 +16,269 @@ const member = {
   status: 'active' as const, isKpmOwner: true, isKpmAdmin: false, directCount: 0,
 };
 const OWNER = makeMe({ membership: member, permissions: ['tenant_config:read', 'tenant_config:write'] });
+/** A core leader holds the Owner's rights in Pengaturan (ADR-0268). */
+const CORE_LEADER = makeMe({ membership: { ...member, isKpmOwner: false, isCoreLeader: true }, permissions: ['tenant_config:read', 'tenant_config:write'] });
 const READER = makeMe({ membership: member, permissions: ['tenant_config:read'] });
 
-const entry = (code: string, label: string, over: Record<string, unknown> = {}) => ({
-  code, label, displayOrder: 1, status: 'active', ...over,
+const entry = (code: string, label: string, displayOrder = 1, over: Record<string, unknown> = {}) => ({
+  code, label, displayOrder, status: 'active', ...over,
 });
 
+/** The mockup's ladder (frame 18): cumulative stages, each adding its own milestones. */
 const catalog = (over: Record<string, unknown> = {}) => ({
   stages: [
-    { ...entry('COMPETENT_PRODUCER', 'Competent Producer'), requiredMilestoneCodes: ['SELLS_INDEPENDENTLY'], stageOrder: 1 },
-    { ...entry('INDEPENDENT_PRODUCER', 'Independent Producer', { displayOrder: 2 }), requiredMilestoneCodes: ['SELLS_INDEPENDENTLY', 'SELLS_OUTSIDE_NETWORK'], stageOrder: 2 },
+    { ...entry('COMPETENT_PRODUCER', 'Competent Producer'), requiredMilestoneCodes: ['SELLS'], stageOrder: 1 },
+    { ...entry('INDEPENDENT_PRODUCER', 'Independent Producer', 2), requiredMilestoneCodes: ['SELLS', 'OUTSIDE'], stageOrder: 2 },
+    {
+      ...entry('PRODUCTIVE_TEAM_BUILDER', 'Productive Team Builder', 3),
+      requiredMilestoneCodes: ['SELLS', 'OUTSIDE', 'RECRUITS', 'DEVELOPS'], stageOrder: 3,
+    },
   ],
   milestones: [
-    entry('SELLS_INDEPENDENTLY', 'Sells policies independently'),
-    entry('SELLS_OUTSIDE_NETWORK', 'Sells outside direct network', { displayOrder: 2 }),
+    entry('SELLS', 'Sells policies independently'),
+    entry('OUTSIDE', 'Sells outside direct network', 2),
+    entry('RECRUITS', 'Recruits quality agents', 3),
+    entry('DEVELOPS', 'Develops downline agent to Independent Producer', 4),
   ],
   grids: [
     {
-      ...entry('PERSONAL_SELLING', 'Personal selling'),
-      requiresDownline: false,
-      items: [entry('APPROACH', 'Approach & appointment setting')],
+      ...entry('PERSONAL_SELLING', 'Personal selling'), requiresDownline: false,
+      items: [entry('LEADS', 'Leads generation consistency'), entry('APPROACH', 'Approach & appointment setting', 2)],
     },
     {
-      ...entry('DEVELOPING_DOWNLINE_AGENT', 'Developing downline agent', { displayOrder: 2 }),
-      requiresDownline: true,
-      items: [entry('AGENT_VISIBILITY', "Visibility into each agent's progress & goals")],
+      ...entry('RECRUITMENT', 'Recruitment', 2), requiresDownline: false,
+      items: [entry('CANDIDATES', 'Candidate leads generation')],
+    },
+    {
+      ...entry('DEVELOPING_DOWNLINE_AGENT', 'Developing downline agent', 3), requiresDownline: true,
+      items: [entry('VISIBILITY', 'Visibility into each agent’s progress & goals')],
     },
   ],
   version: 1,
   ...over,
 });
 
-/**
- * `tab` names which half to open (client feedback, 2026-09-24).
- *
- * The screen is two subtabs now, the same two the Company template has: **Ladder** is what a
- * stage *is*, **Skills** is what somebody is assessed *against*. Most of these tests act on a
- * grid item, so they open `#skills`.
- */
-function render(body: unknown = catalog(), me = OWNER, tab: '#ladder' | '#skills' = '#skills') {
-  window.location.hash = tab;
+function render(body: unknown = catalog(), me = OWNER, extra: Record<string, unknown> = {}) {
   const stub = stubFetch({
     '/kpm/settings/capability-mapping': { body },
     '/kpm/settings/publish-state': {
-      body: { publishedVersion: 1, workingVersion: 1, hasUnpublishedChanges: false, publishedAt: null },
+      body: { publishedVersion: 1, workingVersion: 1, hasUnpublishedChanges: false, publishedAt: null, settings: [] },
     },
+    ...extra,
   });
   renderWithSession(<CapabilityMappingPage />, { me });
   return stub;
 }
 
-/**
- * The office's capability catalog (P5-T8, ADR-0025).
- *
- * What this screen has to make visible is the fix itself: **every row has a code, and renaming does
- * not touch it.** Two of the prototype's four grids have no codes at all, so a tick there is bound
- * to the label and correcting a typo orphans every assessment that used it.
- */
-describe('the capability catalog screen', () => {
-  afterEach(() => { vi.unstubAllGlobals(); window.location.hash = ''; });
+const ladder = () => screen.getByRole('region', { name: 'Ladder' });
+const tracker = () => screen.getByRole('region', { name: 'Skill tracker' });
+const stage = (code: string) => document.querySelector(`[data-stage="${code}"]`) as HTMLElement;
+const writes = (stub: ReturnType<typeof stubFetch>, method: string, path: string) =>
+  stub.calls.filter((c) => c.init.method === method && c.url.includes(path)).map((c) => JSON.parse(String(c.init.body)));
 
-  it('P13.2-T6 AC-8: an empty catalog says so on both halves, and offers the first milestone', async () => {
-    /*
-     * A catalog with no stage at all. An office started Empty had one under ADR-0115 §1; since ADR-0116
-     * (2026-10-08) it is given the platform ladder, so a new office never does — the state is kept for
-     * one made before.
-     */
-    const empty = { stages: [], milestones: [], grids: [], version: 1 };
-    render(empty, OWNER, '#ladder');
-    expect(await screen.findByText('No stages yet.')).toBeInTheDocument();
-    expect(screen.getByText('No milestones yet.')).toBeInTheDocument();
-    // The ladder's sentence is for a ladder that has stages (the client's words since P18.9-T4 AC-6).
-    expect(screen.queryByText(/highest stage with all milestones ticked/)).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Add a milestone' })).toBeEnabled();
-    vi.unstubAllGlobals();
+describe('P19.21-T3 AC-4 Capability Mapping as two cards (ADR-0274, frame 18)', () => {
+  afterEach(() => vi.unstubAllGlobals());
 
-    render(empty, OWNER, '#skills');
-    expect(await screen.findAllByText('No skill grids yet.')).not.toHaveLength(0);
-  });
-
-  it('is called Capability Mapping, with the template’s own two halves', async () => {
-    // One name on both sides: an office had to learn that its *Skills & stages* was the Super
-    // Admin's *Capability Mapping*, which is a thing nobody should have to be told.
-    render(catalog(), OWNER, '#ladder');
-
-    expect(await screen.findByRole('heading', { name: 'Capability Mapping', level: 1 }))
-      .toBeInTheDocument();
-    const tabs = screen.getByRole('navigation', { name: 'Capability Mapping sections' });
-    expect(within(tabs).getAllByRole('link').map((l) => l.textContent))
-      .toEqual(['Ladder', 'Skills']);
-  });
-
-  it('keeps the ladder and the grids on their own halves', async () => {
-    render(catalog(), OWNER, '#ladder');
-
-    expect(await screen.findByRole('heading', { name: 'The ladder' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Milestones' })).toBeInTheDocument();
-    expect(screen.queryByText('Approach & appointment setting')).toBeNull();
-  });
-
-  it('gives every row a code, shown where a reader is acting on it', async () => {
-    /*
-     * **The claim is that every row *has* a stable code, not that every row paints one.** Two of
-     * the prototype's four grids have no ids at all, so a tick there binds to the label and
-     * correcting a typo orphans every assessment that used it — that defect is what the codes
-     * fix, and it is fixed whether or not the list shows them.
-     *
-     * The client asked for the lists to stop showing them, so this asserts what is now true:
-     * clean rows, and the code on the panel where renaming happens — which is the one moment a
-     * reader needs to see that the identity is not what they are editing.
-     */
+  it('P19.21-T3 AC-4 draws Ladder and Skill tracker side by side from 1024px, stacked below it, the mockup’s words', async () => {
     render();
-    await screen.findByText('Approach & appointment setting');
-
-    expect(screen.queryByText('APPROACH')).not.toBeInTheDocument();
-    expect(screen.queryByText('SELLS_INDEPENDENTLY')).not.toBeInTheDocument();
-
-    const row = screen.getByText('Approach & appointment setting').closest('li')!;
-    await userEvent.click(within(row).getByRole('button', { name: 'Rename' }));
-    expect(screen.getByText(/Code APPROACH/)).toBeInTheDocument();
-  });
-
-  it('renames a row and never sends anything that could move its code', async () => {
-    const stub = render();
-    const row = (await screen.findByText('Approach & appointment setting')).closest('li')!;
-
-    await userEvent.click(within(row).getByRole('button', { name: 'Rename' }));
-    await userEvent.clear(screen.getByLabelText('Name'));
-    await userEvent.type(screen.getByLabelText('Name'), 'Approaching and booking');
-    await userEvent.click(within(row).getByRole('button', { name: 'Save' }));
-
-    await waitFor(() => expect(stub.calls.some((c) => c.url.includes('/label'))).toBe(true));
-    const sent = JSON.parse(String(stub.calls.find((c) => c.url.includes('/label'))!.init.body));
-    // The code goes along to *find* the row; the label is the only thing that changes.
-    expect(sent).toEqual({
-      part: 'item', code: 'APPROACH', label: 'Approaching and booking',
-      gridCode: 'PERSONAL_SELLING',
-    });
-  });
-
-  it('archives rather than deletes, and says what archiving keeps', async () => {
-    const stub = render();
-    const row = (await screen.findByText('Approach & appointment setting')).closest('li')!;
-
-    const archive = within(row).getByRole('button', { name: 'Archive' });
-    expect(archive).toHaveAttribute('title', expect.stringContaining('already tick it'));
-    expect(within(row).queryByRole('button', { name: /delete/i })).not.toBeInTheDocument();
-
-    await userEvent.click(archive);
-    await waitFor(() => expect(stub.calls.some((c) => c.url.includes('/status'))).toBe(true));
-    expect(JSON.parse(String(stub.calls.find((c) => c.url.includes('/status'))!.init.body)))
-      .toMatchObject({ status: 'archived' });
-  });
-
-  /*
-   * *Amended 2026-10-28 (P18.9-T4 AC-6; UI-027):* in the client's words — how a stage is decided, the milestones ticked
-   * and not the order, which is why reordering moves nobody.
-   */
-  it('says reordering the ladder moves nobody’s stage', async () => {
-    // The prototype computes the stage from the array index, so tidying it moves everybody.
-    render(catalog(), OWNER, '#ladder');
-
-    expect((await screen.findAllByText('A person’s stage = highest stage with all milestones ticked.')).length)
-      .toBeGreaterThan(0);
-  });
-
-  it('reorders by sending every code once, in the new order', async () => {
-    const stub = render(catalog(), OWNER, '#ladder');
     await screen.findByText('Competent Producer');
-
-    const row = screen.getByText('Competent Producer').closest('li')!;
-    within(row).getByRole('button', { name: /^Reorder Competent Producer\./ }).focus();
-    await userEvent.keyboard('{ArrowDown}');
-
-    await waitFor(() => expect(stub.calls.some((c) => c.url.includes('/order'))).toBe(true));
-    expect(JSON.parse(String(stub.calls.find((c) => c.url.includes('/order'))!.init.body)))
-      .toEqual({ part: 'stage', codes: ['INDEPENDENT_PRODUCER', 'COMPETENT_PRODUCER'] });
+    expect(within(ladder()).getByText('Stage = the highest stage whose milestones the leader has all ticked')).toBeInTheDocument();
+    expect(within(tracker()).getByText('Ticked by leaders in an agent’s profile · 3 groups')).toBeInTheDocument();
+    const grid = ladder().parentElement!;
+    expect(grid.className).toContain('lg:grid-cols-[1fr_1.25fr]');
+    expect(screen.queryByRole('link', { name: 'Ladder' })).not.toBeInTheDocument();
+    expect(screen.getByText('Leaders tick these in an agent’s profile (Capability mapping + Skill tracker)')).toBeInTheDocument();
   });
 
-  it('fills a new item’s code in from its name', async () => {
+  it('P19.21-T3 AC-4 numbers each tahap and shows only the milestones it adds, as checkbox rows', async () => {
+    render();
+    await screen.findByText('Competent Producer');
+    expect(within(stage('COMPETENT_PRODUCER')).getByLabelText('Stage 1')).toHaveTextContent('1');
+    const own = (code: string) => [...stage(code).querySelectorAll('[data-milestone]')].map((li) => li.getAttribute('data-milestone'));
+    expect(own('COMPETENT_PRODUCER')).toEqual(['SELLS']);
+    expect(own('INDEPENDENT_PRODUCER')).toEqual(['OUTSIDE']);
+    expect(own('PRODUCTIVE_TEAM_BUILDER')).toEqual(['RECRUITS', 'DEVELOPS']);
+    // A box a leader ticks in the profile: drawn, never a control here.
+    expect(within(ladder()).queryByRole('checkbox')).not.toBeInTheDocument();
+  });
+
+  it('P19.21-T3 AC-4 + Tambah milestone under a tahap adds it there by its name alone', async () => {
+    const stub = render(catalog(), OWNER, { 'POST /kpm/settings/capability-mapping/items': { body: catalog() } });
+    await screen.findByText('Competent Producer');
+    await userEvent.click(within(stage('INDEPENDENT_PRODUCER')).getByRole('button', { name: 'Add a milestone' }));
+    await userEvent.type(within(stage('INDEPENDENT_PRODUCER')).getByLabelText('Name'), 'Polis pertama terbit');
+    await userEvent.click(within(stage('INDEPENDENT_PRODUCER')).getByRole('button', { name: 'Add' }));
+    await waitFor(() => expect(writes(stub, 'POST', '/items')).toEqual([
+      { part: 'milestone', label: 'Polis pertama terbit', stageCode: 'INDEPENDENT_PRODUCER' },
+    ]));
+  });
+
+  it('P19.21-T3 AC-4 + Tambah tahap asks its name and its first milestone, and adds nothing without both', async () => {
+    const stub = render(catalog(), OWNER, { 'POST /kpm/settings/capability-mapping/items': { body: catalog() } });
+    await screen.findByText('Competent Producer');
+    await userEvent.click(within(ladder()).getByRole('button', { name: 'Add a stage' }));
+    await userEvent.type(within(ladder()).getByLabelText('Stage name'), 'Transformative Team Builder');
+    expect(within(ladder()).getByRole('button', { name: 'Add' })).toBeDisabled();
+    await userEvent.type(within(ladder()).getByLabelText('Its first milestone'), 'Develops downline leader');
+    await userEvent.click(within(ladder()).getByRole('button', { name: 'Add' }));
+    await waitFor(() => expect(writes(stub, 'POST', '/items')).toEqual([
+      { part: 'stage', label: 'Transformative Team Builder', firstMilestone: 'Develops downline leader' },
+    ]));
+  });
+
+  it('P19.21-T3 AC-4 a kelompok shows “n skill”, opens to its skills on a tap, the first open already', async () => {
     render();
     await screen.findByText('Personal selling');
-
-    const card = screen.getByText('Personal selling').closest('div')!.parentElement!;
-    await userEvent.click(within(card).getByRole('button', { name: 'Add an item' }));
-    await userEvent.type(screen.getByLabelText('Name'), 'Asking for referrals');
-
-    expect(screen.getByLabelText('Code')).toHaveValue('ASKING_FOR_REFERRALS');
+    const toggle = (label: string) => within(tracker()).getByRole('button', { name: `${label}: show its skills` });
+    expect(toggle('Personal selling')).toHaveAttribute('aria-expanded', 'true');
+    expect(within(tracker()).getByText('Leads generation consistency')).toBeInTheDocument();
+    expect(toggle('Recruitment')).toHaveAttribute('aria-expanded', 'false');
+    expect(within(tracker()).queryByText('Candidate leads generation')).not.toBeInTheDocument();
+    await userEvent.click(toggle('Recruitment'));
+    expect(within(tracker()).getByText('Candidate leads generation')).toBeInTheDocument();
+    expect(within(tracker()).getByText(/^2 skills/)).toBeInTheDocument();
+    expect(within(tracker()).getByText('1 skill · Only for somebody with a downline')).toBeInTheDocument();
   });
 
-  it('marks the grids that only apply to somebody with a downline', async () => {
-    render();
-
-    expect(await screen.findByText('Only for somebody with a downline')).toBeInTheDocument();
+  it('P19.21-T3 AC-4 + Tambah skill and + Tambah kelompok add by name', async () => {
+    const stub = render(catalog(), OWNER, { 'POST /kpm/settings/capability-mapping/items': { body: catalog() } });
+    await screen.findByText('Personal selling');
+    await userEvent.click(within(tracker()).getByRole('button', { name: 'Add a skill' }));
+    await userEvent.type(within(tracker()).getByLabelText('Name'), 'Presentation');
+    await userEvent.click(within(tracker()).getByRole('button', { name: 'Add' }));
+    await waitFor(() => expect(writes(stub, 'POST', '/items')).toHaveLength(1));
+    await userEvent.click(within(tracker()).getByRole('button', { name: 'Add a group' }));
+    await userEvent.type(within(tracker()).getByLabelText('Name'), 'Digital selling');
+    await userEvent.click(within(tracker()).getByRole('button', { name: 'Add' }));
+    await waitFor(() => expect(writes(stub, 'POST', '/items')).toEqual([
+      { part: 'item', label: 'Presentation', gridCode: 'PERSONAL_SELLING' },
+      { part: 'grid', label: 'Digital selling' },
+    ]));
   });
 
-  it('hides archived rows until asked', async () => {
+  it('P19.21-T3 AC-4 the pencil renames, the code shown while renaming and never sent as anything but the key', async () => {
+    const renamed = catalog();
+    const stub = render(catalog(), OWNER, { 'PATCH /kpm/settings/capability-mapping/label': { body: renamed } });
+    await screen.findByText('Competent Producer');
+    await userEvent.click(screen.getByRole('button', { name: 'Rename Recruits quality agents' }));
+    const box = screen.getByLabelText('Name');
+    expect(box).toHaveAccessibleDescription('Code RECRUITS — a tick names this, and renaming never moves it.');
+    await userEvent.clear(box);
+    await userEvent.type(box, 'Recruits good agents');
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(writes(stub, 'PATCH', '/label')).toEqual([
+      { part: 'milestone', code: 'RECRUITS', label: 'Recruits good agents' },
+    ]));
+  });
+
+  it('P19.21-T3 AC-4 ⋯ archives a milestone, saying it is taken out of its stages; restores an archived one', async () => {
+    const stub = render(catalog(), OWNER, { 'PATCH /kpm/settings/capability-mapping/status': { body: catalog() } });
+    await screen.findByText('Competent Producer');
+    await userEvent.click(screen.getByRole('button', { name: 'More for Sells outside direct network' }));
+    const archive = screen.getByRole('menuitem', { name: 'Archive' });
+    expect(archive).toHaveAccessibleDescription('Takes it out of every stage that requires it; restoring it puts it back.');
+    await userEvent.click(archive);
+    await waitFor(() => expect(writes(stub, 'PATCH', '/status')).toEqual([
+      { part: 'milestone', code: 'OUTSIDE', status: 'archived' },
+    ]));
+  });
+
+  it('P19.21-T3 AC-4 drags a milestone within its tahap: every code once, the others where they were', async () => {
+    const stub = render(catalog(), OWNER, { 'PATCH /kpm/settings/capability-mapping/order': { body: catalog() } });
+    await screen.findByText('Competent Producer');
+    fireEvent.keyDown(within(stage('PRODUCTIVE_TEAM_BUILDER')).getByRole('button', { name: /^Reorder Develops downline agent/ }), { key: 'ArrowUp' });
+    await waitFor(() => expect(writes(stub, 'PATCH', '/order')).toEqual([
+      { part: 'milestone', codes: ['SELLS', 'OUTSIDE', 'DEVELOPS', 'RECRUITS'] },
+    ]));
+  });
+
+  it('P19.21-T3 AC-4 drags a skill within its kelompok, naming the kelompok', async () => {
+    const stub = render(catalog(), OWNER, { 'PATCH /kpm/settings/capability-mapping/order': { body: catalog() } });
+    await screen.findByText('Personal selling');
+    fireEvent.keyDown(within(tracker()).getByRole('button', { name: /^Reorder Approach/ }), { key: 'ArrowUp' });
+    await waitFor(() => expect(writes(stub, 'PATCH', '/order')).toEqual([
+      { part: 'item', gridCode: 'PERSONAL_SELLING', codes: ['APPROACH', 'LEADS'] },
+    ]));
+  });
+
+  it('P19.21-T3 AC-4 keeps archived rows hidden until Tampilkan yang diarsipkan, and milestones in no stage apart', async () => {
     render(catalog({
-      milestones: [entry('SELLS_INDEPENDENTLY', 'Sells policies independently', { status: 'archived' })],
-    }), OWNER, '#ladder');
-    await screen.findByRole('checkbox', { name: 'Show archived' });
-
-    expect(screen.queryByText('Sells policies independently')).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole('checkbox', { name: 'Show archived' }));
-    expect(await screen.findByText('Sells policies independently')).toBeInTheDocument();
+      milestones: [...catalog().milestones, entry('OLD', 'Old milestone', 5, { status: 'archived' })],
+    }));
+    await screen.findByText('Competent Producer');
+    expect(screen.queryByText('Old milestone')).not.toBeInTheDocument();
+    await userEvent.click(screen.getByLabelText('Show archived'));
+    expect(within(screen.getByText('Milestones in no stage').parentElement!).getByText('Old milestone')).toBeInTheDocument();
   });
 
-  it('shows a reader who cannot write the catalog without a control to change it', async () => {
+  it('P19.21-T3 AC-4 a reader sees both cards with no control to change them', async () => {
     render(catalog(), READER);
-    await screen.findByText('Approach & appointment setting');
-
-    expect(screen.queryByRole('button', { name: 'Rename' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Archive' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Add a milestone' })).not.toBeInTheDocument();
+    await screen.findByText('Competent Producer');
+    expect(screen.queryByRole('button', { name: /^Rename / })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^More for / })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Add a stage' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Reorder/ })).not.toBeInTheDocument();
   });
 
-  it('says what the server refused, and keeps the row open to fix it', async () => {
-    stubFetch({
-      '/kpm/settings/capability-mapping/items': {
+  it('P19.21-T3 AC-4 a core leader writes as the Owner does', async () => {
+    render(catalog(), CORE_LEADER);
+    await screen.findByText('Competent Producer');
+    expect(within(ladder()).getByRole('button', { name: 'Add a stage' })).toBeInTheDocument();
+  });
+
+  it('P19.21-T3 AC-4 says what the server refused, in its own words', async () => {
+    render(catalog(), OWNER, {
+      'PATCH /kpm/settings/capability-mapping/status': {
         status: 400,
-        body: {
-          error: {
-            code: 'VALIDATION_FAILED',
-            message: 'APPROACH is already used in this catalog.',
-            requestId: 'r-1',
-          },
-        },
-      },
-      '/kpm/settings/capability-mapping': { body: catalog() },
-      '/kpm/settings/publish-state': {
-        body: { publishedVersion: 1, workingVersion: 1, hasUnpublishedChanges: false, publishedAt: null },
+        body: { error: { code: 'VALIDATION_FAILED', message: 'Competent Producer would require no milestone without this one, so everybody would be on it. Add another milestone to it first.', requestId: 'r-1' } },
       },
     });
-    window.location.hash = '#skills';
+    await screen.findByText('Competent Producer');
+    await userEvent.click(screen.getByRole('button', { name: 'More for Sells policies independently' }));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Archive' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('would require no milestone without this one');
+  });
+
+  it('shows the empty state of each card for a catalog with nothing in it', async () => {
+    render({ stages: [], milestones: [], grids: [], version: 1 });
+    expect(await screen.findByText('No stages yet.')).toBeInTheDocument();
+    expect(screen.getByText('No skill groups yet.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Add a stage' })).toBeEnabled();
+  });
+
+  it('shows a skeleton, then the read’s refusal, when the catalog cannot be read', async () => {
+    stubFetch({
+      '/kpm/settings/capability-mapping': { status: 500, body: { error: { code: 'INTERNAL_ERROR', message: 'The server stumbled.', requestId: 'r-2' } } },
+      '/kpm/settings/publish-state': { body: { publishedVersion: 1, workingVersion: 1, hasUnpublishedChanges: false, publishedAt: null, settings: [] } },
+    });
     renderWithSession(<CapabilityMappingPage />, { me: OWNER });
-    await screen.findByText('Personal selling');
-
-    const card = screen.getByText('Personal selling').closest('div')!.parentElement!;
-    await userEvent.click(within(card).getByRole('button', { name: 'Add an item' }));
-    await userEvent.type(screen.getByLabelText('Name'), 'Approach');
-    await userEvent.click(screen.getByRole('button', { name: 'Add' }));
-
-    expect(await screen.findByRole('alert')).toHaveTextContent(/already used in this catalog/);
-    expect(screen.getByLabelText('Name')).toHaveValue('Approach');
+    expect(await screen.findByText('The server stumbled.')).toBeInTheDocument();
   });
 });
 
-/**
- * **The ladder's grey sentence per size** (P18.9-T4 AC-6, ADR-0176 §6; the client's grey-text table of 2026-10-27,
- * UI-027, *ⓘ · ⓘ · Show*): *"A person’s stage = highest stage with all milestones ticked."* under *The ladder* from
- * 1024px, behind an ⓘ beside the heading below it.
- */
-describe('P18.9-T4 AC-6 the ladder’s grey text per size', () => {
-  afterEach(() => { vi.unstubAllGlobals(); window.location.hash = ''; });
-  const NOTE = 'A person’s stage = highest stage with all milestones ticked.';
-
-  async function drawnAt(px: number) {
-    atWidth(px);
-    render(catalog(), OWNER, '#ladder');
-    const heading = await screen.findByRole('heading', { name: 'The ladder' });
-    const shown = (el: Element) => !wears(el, px).split(' ').includes('hidden');
-    const sentence = screen.getAllByText(NOTE).find((el) => el.tagName === 'P')!;
-    const tip = screen.getByRole('button', { name: NOTE });
-    return { heading, sentence: shown(sentence), tip: shown(tip.parentElement!), glyph: tip };
-  }
-
-  it.each([1024, 1280])('P18.9-T4 AC-6 at %ipx shows the sentence under the heading and no ⓘ', async (px) => {
-    const { sentence, tip } = await drawnAt(px);
-    expect([sentence, tip]).toEqual([true, false]);
+describe('P19.21-T3 AC-4 the ladder’s rules, as functions', () => {
+  it('P19.21-T3 AC-4 a stage’s own milestones are what it adds over every stage of lower seniority, in the catalog’s order', () => {
+    const { stages } = catalog();
+    const order = ['DEVELOPS', 'SELLS', 'RECRUITS', 'OUTSIDE'];
+    expect(ownMilestoneCodes(stages[2] as never, stages as never, order)).toEqual(['DEVELOPS', 'RECRUITS']);
+    expect(ownMilestoneCodes(stages[0] as never, stages as never, order)).toEqual(['SELLS']);
   });
 
-  it.each([767, 768, 1023])('P18.9-T4 AC-6 at %ipx hides it behind the ⓘ beside The ladder', async (px) => {
-    const { heading, sentence, tip, glyph } = await drawnAt(px);
-    expect([sentence, tip]).toEqual([false, true]);
-    // Beside its subject, and not inside the heading's name.
-    expect(heading.parentElement).toContainElement(glyph);
-    expect(heading).not.toContainElement(glyph);
-  });
-
-  it('P18.9-T4 AC-6 says the twenty-seven words no more', async () => {
-    render(catalog(), OWNER, '#ladder');
-    await screen.findByRole('heading', { name: 'The ladder' });
-    expect(screen.queryByText(/Four stages\. Somebody is at the highest stage/)).toBeNull();
+  it('P19.21-T3 AC-4 a milestone moved within its stage keeps every other milestone where it was', () => {
+    expect(reorderWithin(['A', 'X', 'B', 'Y', 'C'], ['A', 'B', 'C'], 2, 0)).toEqual(['C', 'X', 'A', 'Y', 'B']);
+    expect(reorderWithin(['A', 'B'], ['A', 'B'], 0, 5)).toEqual(['A', 'B']);
   });
 });
 
-/**
- * **No target under 44px on a phone or a tablet** (P19.2-T3 AC-4; UI-142: text links 17px tall, *Tampilkan yang
- * diarsipkan* 13px, tab rows 38px, ⠿ 20px), inside the field shell's frame the Owner's pages wear (ADR-0197), which
- * `data-surface` stands for here.
- */
 describe('P19.2-T3 AC-4 the capability mapping’s targets (UI-142)', () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it.each([375, 768])('P19.2-T3 AC-4 at %ipx finds no target under 44px', async (px) => {
+  it.each([390, 768])('P19.21-T3 AC-4 at %ipx finds no target under 44px', async (px) => {
     atWidth(px);
     render();
     const frame = document.body.firstElementChild!;
     frame.setAttribute('data-surface', 'v1');
-    await screen.findByRole('heading', { name: 'Capability Mapping', level: 1 });
-    await screen.findByRole('checkbox', { name: 'Show archived' });
-    await userEvent.click(screen.getByRole('checkbox', { name: 'Show archived' }));
-    expect(smallTargets(frame, px)).toEqual([]);
-  });
-
-  it.each([375, 768])('P19.2-T3 AC-4 at %ipx finds no target under 44px on The ladder', async (px) => {
-    atWidth(px);
-    render(catalog(), OWNER, '#ladder');
-    const frame = document.body.firstElementChild!;
-    frame.setAttribute('data-surface', 'v1');
-    await screen.findByRole('heading', { name: 'The ladder' });
+    await screen.findByText('Competent Producer');
     expect(smallTargets(frame, px)).toEqual([]);
   });
 });

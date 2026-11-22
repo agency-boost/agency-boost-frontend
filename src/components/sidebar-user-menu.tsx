@@ -2,12 +2,10 @@
 
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
-import { ViewMenu, hasViewMenu, type ViewSwitcher } from '@/components/field-chrome';
 import { LanguageSwitch } from '@/components/language-switch';
 import { useMessages } from '@/i18n/language-provider';
 import { shellMessages } from '@/i18n/messages/shell';
 import { cn } from '@/lib/cn';
-import { PANDUAN_GLYPH } from '@/lib/panduan';
 
 /** The initials' circle: the chip's and the rail's alike. */
 const AVATAR = 'flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-base font-bold text-primary-contrast';
@@ -19,13 +17,13 @@ const AVATAR = 'flex h-8 w-8 shrink-0 items-center justify-center rounded-full b
  * navigation and a roving tabstop; claiming it without implementing them leaves screen
  * reader users pressing keys that do nothing. A button with `aria-expanded` revealing
  * ordinary links and buttons is navigable with Tab, which is what people actually do
- * with two items, or a few more for a person with more than one view.
+ * with two items.
  *
  * It opens upward because it sits at the bottom of the viewport.
  *
- * **It holds the account's items alone** (P18.7-T2 AC-4, ADR-0167 §3): the email, *ID | EN*, for a person with more
- * than one view **the view switcher** (P19.2-T1 AC-5; ADR-0198 §3 — it replaced ADR-0114's link to the other view), then
- * *Your account* and *Sign out* — and between those two, since P19.6-T5, ***📘 Panduan*** (ADR-0219 §5).
+ * **It holds the account's items alone** (P18.7-T2 AC-4, ADR-0167 §3): the email, *ID | EN*, then ***Akun Anda*** and
+ * ***Keluar*** — the same for everybody since P19.17-T3 (AC-1; ADR-0269 §2; the brief's gaps 3 and 5): the view switcher
+ * (ADR-0198), *Tambah akun* (ADR-0199) and *📘 Panduan* (ADR-0219) are gone.
  *
  * *Changed 2026-11-05 (P19.2-T1; ADR-0197):* the sidebar is a desktop's alone for every role, so there is no phone's bar
  * for the chip to hang from (ADR-0085; P18.7-T12's avatar with the notices): below 1024px the title row's avatar and the
@@ -39,9 +37,7 @@ export function SidebarUserMenu({
   className,
   compact,
   panelId = 'sidebar-user-actions',
-  views,
   languageSwitch = false,
-  guideHref,
 }: {
   user: { name: string; role: string; initials: string; email?: string; fullName?: string };
   accountHref: string;
@@ -65,22 +61,11 @@ export function SidebarUserMenu({
   /** The panel's id, for the trigger's `aria-controls`: one id names one element. */
   panelId?: string;
   /**
-   * **The view switcher** (P19.2-T1 AC-5; UI-169 item 2; ADR-0198 §3): for a person with more than one view, the views
-   * — the active one ticked, one tap switching — above *Your account*, then what comes after them (*Tambah akun*, AC-8).
-   * Omitted for everyone else, who has one view and sees nothing of it.
-   */
-  views?: ViewSwitcher;
-  /**
    * **The *ID | EN* switch, in the panel** (P19.1-T1 AC-1, ADR-0196; UI-112, UI-129, D-20: *no ID | EN on pages — the
    * account menu*): the account from 1024px, under who is signed in, for every role since P19.2-T1. Choosing keeps the
    * panel open, so the reader sees the menu change language.
    */
   languageSwitch?: boolean;
-  /**
-   * ***📘 Panduan*** (P19.6-T5 AC-1; ADR-0219 §5; the guide spec's *Where the menu goes* 2): the reader's own guide,
-   * between *Your account* and *Sign out*, opened in a new tab. Omitted, nothing is drawn.
-   */
-  guideHref?: string;
 }) {
   const [open, setOpen] = useState(false);
   const container = useRef<HTMLDivElement>(null);
@@ -139,7 +124,8 @@ export function SidebarUserMenu({
         {!compact && (
           <>
             <span className="min-w-0 flex-1">
-              <span className="block truncate text-md font-semibold text-secondary-contrast">{user.name}</span>
+              {/* P19.17-T3 (`DESIGN-RULES.md`, *Names*; `sidebar-icons-laptop`): a person's name in capitals. */}
+              <span className="block truncate text-md font-semibold uppercase text-secondary-contrast">{user.name}</span>
               {/* The profile line (ADR-0159 §5): one line, truncated, the whole of it on hover. */}
               <span className="block truncate text-xs text-secondary-contrast/55" title={user.role}>{user.role}</span>
             </span>
@@ -182,31 +168,9 @@ export function SidebarUserMenu({
               <LanguageSwitch tone="bar" />
             </div>
           )}
-          {hasViewMenu(views) && (
-            /*
-              * **The views** (P19.2-T1 AC-5; ADR-0198 §3): the same list the title row's avatar opens (`ViewMenu`), in the
-              * sidebar's navy, above the account's own two; choosing one closes the panel and the shell switches.
-              */
-            <div data-account-views="" className="mb-1 border-b border-secondary-contrast/10 pb-1">
-              <ViewMenu views={views} tone="navy" onChosen={() => setOpen(false)} />
-            </div>
-          )}
           <Link href={accountHref} className={row} onClick={() => setOpen(false)}>
             {t.yourAccount}
           </Link>
-          {guideHref && (
-            <a
-              href={guideHref}
-              target="_blank"
-              rel="noopener"
-              data-panduan=""
-              aria-label={`${t.guide}${t.opensInNewTab}`}
-              className={cn(row, 'flex items-center gap-2')}
-            >
-              <span aria-hidden="true" className="w-[18px] shrink-0 text-center leading-none">{PANDUAN_GLYPH}</span>
-              {t.guide}
-            </a>
-          )}
           <button
             type="button"
             onClick={onSignOut}

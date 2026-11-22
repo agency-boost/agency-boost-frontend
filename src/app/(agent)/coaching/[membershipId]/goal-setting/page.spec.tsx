@@ -148,7 +148,7 @@ describe('a coachee’s Goal Setting tab (P11-T7 AC-5)', () => {
      */
     expect(JSON.parse(String(put.init.body))).not.toHaveProperty('apeAchievedMinor');
     expect(JSON.parse(String(calls.find((c) => c.init.method === 'POST')!.init.body))).not.toHaveProperty('apeAchievedMinor');
-    await waitFor(() => expect(within(document.querySelector('[data-goal-aside]') as HTMLElement).getByRole('status'))
+    await waitFor(() => expect(within(document.querySelector('[data-goal-save]') as HTMLElement).getByRole('status'))
       .toHaveTextContent('Saved ✓'));
   });
 
@@ -199,7 +199,7 @@ describe('a coachee’s Goal Setting tab (P11-T7 AC-5)', () => {
     await userEvent.keyboard('75000000');
     expect(field).toHaveValue('75,000,000');
     // UI-020: an edit marks the plan unsaved.
-    await waitFor(() => expect(within(document.querySelector('[data-goal-aside]') as HTMLElement).getByRole('status'))
+    await waitFor(() => expect(within(document.querySelector('[data-goal-save]') as HTMLElement).getByRole('status'))
       .toHaveTextContent('Not saved yet'));
 
     await userEvent.click(screen.getByRole('button', { name: 'Save goal' }));

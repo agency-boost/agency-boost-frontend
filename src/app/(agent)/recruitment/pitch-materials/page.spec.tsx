@@ -122,7 +122,7 @@ describe('Recruitment › Pitch Materials (P17-T6)', () => {
       expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
       expect(screen.queryByText('Confirm this PDF actually includes')).not.toBeInTheDocument();
       expect(screen.queryByRole('button', { name: /^Replace/ })).not.toBeInTheDocument();
-      expect(screen.queryByRole('button', { name: /^Upload PDF/ })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /^Upload (PDF|file)/ })).not.toBeInTheDocument();
       expect(document.querySelector('input[type=file]')).toBeNull();
     });
 

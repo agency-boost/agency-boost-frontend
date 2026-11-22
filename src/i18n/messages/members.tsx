@@ -1,239 +1,132 @@
-import type { ReactNode } from 'react';
 import { defineMessages, type MessagesOf } from '@/i18n/catalogue';
 import { kept } from '@/i18n/kept';
 
 /**
- * **All Members** — `/people/members`, the office's roster (P18.10-T4, people and forum; `functional/org-hierarchy.md`,
- * *The directory*, *Deciding*, *The role change log*, groups): its line, the filter, the roster as a table and as a
- * phone's cards, *Pending* with its approvals, *Removed*, *Role change log* and *Groups*.
+ * **All members** — `/people/members`, the KPM's people (P19.20-T1; ADR-0273 §2; `functional/org-hierarchy.md`, *All
+ * members*): the three tabs *Anggota (n) · Menunggu · Riwayat*, *Undang anggota*, the search and the filter, the roster as
+ * a table and as a phone's rows, *Menunggu*'s two sections and *Riwayat*'s list.
  *
- * **English is the source**: the prototype's words where it draws them (`KPM_Owner.html:1822-1849`, `:4490-4522`) and
- * ours where it does not. The Indonesian is the approved glossary's (§B.1 to §B.5; *office* is *KPM*, §B.9), with what it
- * lacked in the glossary for approval's §B.10 — *Nonaktifkan* for retiring a group, *Pemilik* for a group's owner.
- * **Kept** (§A): the page's title and its five tabs (`kept('…')` where the page draws them), the roles, *Core Leader*,
- * *unit* and *leader*. *Pending* and *Removed* are tabs there and a status or a column here (`KEPT_ELSEWHERE`).
- * **Typed content stays as typed**: names, emails, agent codes, a group's name, a reason. **A figure is never a
- * message's**: a date is written by the caller in the figures' language and passed in.
+ * **The Indonesian is the source**: the approved People mockups of 19 November word for word (*Anggota*, *Menunggu*,
+ * *Riwayat*, *Undang anggota*, *Cari nama atau kode agen*, *Semua · AB · AAB · Agent · ★ Core leader*, *Group*, *Melapor
+ * ke*, *Aktivitas terakhir*, *Coaching terakhir*, *"4 langsung · 29 di unit"*, *Tanpa tim*, *Lihat semua (30)*,
+ * *Permintaan pindah unit*, *terlama dulu · seluruh tim ikut pindah*, *Diajukan …*, *Sudah daftar, belum masuk unit*,
+ * *Belum memilih leader · daftar …*, *Pilih leader*, *Tolak*, *Setujui*, *Perubahan peran*, *Dikeluarkan*, *Pindah unit*,
+ * *Bergabung kembali*, *oleh …*). The English is ours. **Kept** (§A): the page's title, *KPM*, *AB*, *AAB*, *Agent*, *Core
+ * leader*, *Group*, *Unit*, *Owner*, *Admin*. Typed content stays as typed; a figure is the caller's, written and passed in.
  *
  * @moved app/(tenant)/people/members/page.tsx
  */
-
-/** A run of words drawn bold. */
-type Strong = (words: string) => ReactNode;
-
 const en = {
-  subtitle: 'Directory, pending requests, removed, and role history',
-  /** The filter over the roster. */
-  search: 'Search',
-  searchExample: 'Name, email or agent code',
-  role: 'Role',
-  everyRole: 'Every role',
-  /**
-   * **The filter on a phone and a tablet** (P19.2-T3 AC-2; UI-140): the search pill's words, which the ticket gives, and
-   * the role chips' group and first chip — *Semua 28 · AB 5 · AAB 4 · Agent 19*, each rung by its badge's name.
-   */
-  searchPill: 'Search name or agent code',
-  roleChips: 'Filter by role',
-  allRoles: 'All',
-  /** *Role change log* (P3-T6 AC-4). */
-  log: {
-    caption: 'Role changes, newest first',
-    columns: { when: 'When', who: 'Who', change: 'Change', why: 'Why', changedBy: 'Changed by' },
-    empty: 'Nobody has changed role in this office yet.',
-    /** The arrow between the two badges, for a screen reader. */
-    became: 'became',
+  tabs: { members: 'Members', waiting: 'Waiting', history: 'History' },
+  invite: 'Invite a member',
+  search: 'Search name or agent code',
+  filters: 'Filter',
+  all: 'All',
+  coreLeaders: kept('Core leader'),
+  caption: 'The KPM’s members',
+  columns: {
+    member: 'Member',
+    group: kept('Group'),
+    reportsTo: 'Reports to',
+    lastActivity: 'Last activity',
+    lastCoached: 'Last coaching',
+    actions: 'Actions',
   },
-  /** *Pending* (P3-T5): who registered and is in no unit yet, and the requests among them. */
-  pending: {
-    line: ({ strong }: { strong: Strong }) => (
-      <>
-        Approve or decline requests from agents asking to join your KPM. Approving adds them
-        under {strong('the leader they asked for')}, not under you.
-      </>
-    ),
-    caption: 'Registered, not yet in a unit',
-    columns: { who: 'Who', waitingOn: 'Waiting on', actions: 'Actions' },
-    empty: 'Everybody who has registered is in a unit.',
-    aDecision: 'A decision',
-    /** `date` the day it was asked, written. */
-    asked: ({ date }: { date: ReactNode }) => <>Asked {date}</>,
-    nobody: 'Nobody',
-    noLeaderAsked: ({ strong }: { strong: Strong }) => (
-      <>They have asked no leader — a leader can pick them up from {strong('Add new agents')}</>
-    ),
+  unitCounts: ({ direct, unit }: { direct: number; unit: number }) => `${direct} direct · ${unit} in unit`,
+  noTeam: 'No team',
+  seeAll: ({ n }: { n: number }) => `See all (${n})`,
+  seeMore: 'See more',
+  noMembers: 'This KPM has no members yet.',
+  noMatch: 'Nobody matches.',
+  clearFilters: 'Clear the filter',
+  loading: 'Loading the members…',
+  legend: '★ = core leader · red = never · yellow = more than 14 days · test accounts are not shown',
+  open: ({ name }: { name: string }) => `Open ${name}`,
+  changeGroupOf: ({ name }: { name: string }) => `Change the group of ${name}`,
+  /* Menunggu. */
+  waiting: {
+    movesTitle: 'Requests to move',
+    movesNote: 'oldest first · the whole team moves',
+    askedBy: ({ name }: { name: string }) => `Requested by ${name}`,
+    move: ({ from, to }: { from: string | null; to: string }) => (from ? `moves from ${from} to ${to}` : `joins ${to}`),
+    registeredTitle: 'Registered, not yet in a unit',
+    notChosen: ({ ago }: { ago: string }) => `Has not chosen a leader · registered ${ago}`,
+    askedLeader: ({ name, ago }: { name: string; ago: string }) => `Asked to join ${name}’s unit · registered ${ago}`,
+    pickLeader: 'Choose a leader',
+    pickTitle: ({ name }: { name: string }) => `Choose a leader for ${name}`,
+    pickNote: 'They join the unit now, today their join date.',
     approve: 'Approve',
     decline: 'Decline',
+    nothing: 'Nobody is waiting.',
+    loading: 'Loading who is waiting…',
   },
-  /** *Groups* (P3-T9): the office's own labels. */
-  groups: {
-    line: ({ strong }: { strong: Strong }) => (
-      <>
-        Labels this office defines for its own organising — a mentoring circle, a task force.
-        A group is {strong('not')} hierarchy and grants nobody access to anything.
-      </>
-    ),
-    create: 'Create group',
-    edit: 'Edit group',
-    name: 'Group name',
-    nameExample: 'New Agent Mentoring Circle',
-    owner: 'Owner',
-    ownerHint: 'Who runs it. Stored as their membership, so renaming them changes nothing.',
-    chooseSomebody: 'Choose somebody',
-    save: 'Save',
-    saving: 'Saving…',
-    cancel: 'Cancel',
-    retireQuestion: ({ name }: { name: string }) => `Retire ${name}?`,
-    /** `n` the people tagged into it. */
-    retireLine: ({ n }: { n: number }) =>
-      `It stops being offered and stops being counted. Nothing is deleted: ${n === 1 ? 'the person' : `all ${n} people`} tagged into it keep the tag, so who was in it stays readable.`,
-    retire: 'Retire group',
-    retiring: 'Retiring…',
-    caption: 'Informal groups',
-    columns: { group: 'Group', owner: 'Owner', tagged: 'Tagged', actions: 'Actions' },
-    empty: 'No groups yet — create one to start organising people.',
-    ownerLeft: 'No longer in this office — hand it to somebody else',
-    people: ({ n }: { n: number }) => `${n} ${n === 1 ? 'person' : 'people'}`,
-    editRow: 'Edit',
-    retireRow: 'Retire',
-  },
-  /** The roster, *Directory* and *Removed*, as a table and as a phone's cards. */
-  roster: {
-    caption: 'Office roster',
-    removedCaption: 'Removed members',
-    loading: 'Loading the office roster…',
-    loadingRemoved: 'Loading removed members…',
-    columns: {
-      name: 'Name',
-      agentCode: 'Agent code',
-      role: 'Role',
-      reportsTo: 'Reports to',
-      lastActivity: 'Last activity',
-      lastCoached: 'Last coached',
-      unit: kept('Unit'),
-      removed: 'Removed',
-      status: 'Status',
-    },
-    noMatch: 'Nobody matches that.',
-    noneRemoved: 'Nobody has been removed from this office.',
-    noMembers: 'This office has no members yet.',
-    clearFilters: 'Clear the filters',
-    /** A leader's row's Core Leader control (ADR-0159 §1): its name, and its tooltip. */
-    untag: ({ name }: { name: string }) => `Remove the Core Leader tag from ${name}`,
-    tag: ({ name }: { name: string }) => `Tag ${name} Core Leader`,
-    untagTitle: 'Remove the Core Leader tag',
-    tagTitle: 'Tag as Core Leader',
-    /** *Unit*: whom a leader leads; *No team* for one who leads nobody (ADR-0176 §2). */
-    unitCounts: ({ direct, unit }: { direct: number; unit: number }) => `${direct} direct · ${unit} in unit`,
-    noTeam: 'No team',
-    /** A row's leader on a phone and a tablet, by their first name (UI-140: *ke <leader first name>*). */
-    under: ({ name }: { name: string }) => `under ${name}`,
+  /* Riwayat. */
+  history: {
+    filters: { all: 'All', role: 'Role changes', removed: 'Removed', moved: 'Moved unit' },
+    removed: 'Removed',
+    moved: 'Moved unit',
     rejoined: 'Rejoined',
-    /** `date` the day they came back, written. */
-    rejoinedOn: ({ date }: { date: ReactNode }) => <>Rejoined {date}</>,
-    previous: 'Previous',
-    next: 'Next',
-    shown: ({ n, more }: { n: number; more: boolean }) => `${n} shown${more ? ' · more to come' : ''}`,
+    by: ({ name }: { name: string }) => `by ${name}`,
+    movedLine: ({ from, to }: { from: string; to: string }) => `moved from ${from} to ${to}`,
+    empty: 'No history yet.',
+    loading: 'Loading the history…',
+    caption: 'History, newest first',
   },
 };
 
 const id: MessagesOf<typeof en> = {
-  subtitle: 'Direktori, permintaan yang menunggu, anggota yang dikeluarkan, dan riwayat peran',
-  search: 'Cari',
-  searchExample: 'Nama, email, atau kode agen',
-  role: 'Peran',
-  everyRole: 'Semua peran',
-  searchPill: 'Cari nama atau kode agen',
-  roleChips: 'Saring menurut peran',
-  allRoles: 'Semua',
-  log: {
-    caption: 'Perubahan peran, terbaru dulu',
-    columns: { when: 'Kapan', who: 'Siapa', change: 'Perubahan', why: 'Alasan', changedBy: 'Diubah oleh' },
-    empty: `Belum ada yang berganti peran di ${kept('KPM')} ini.`,
-    became: 'menjadi',
+  tabs: { members: 'Anggota', waiting: 'Menunggu', history: 'Riwayat' },
+  invite: 'Undang anggota',
+  search: 'Cari nama atau kode agen',
+  filters: 'Saring',
+  all: 'Semua',
+  coreLeaders: kept('Core leader'),
+  caption: `Anggota ${kept('KPM')}`,
+  columns: {
+    member: 'Anggota',
+    group: kept('Group'),
+    reportsTo: 'Melapor ke',
+    lastActivity: 'Aktivitas terakhir',
+    lastCoached: 'Coaching terakhir',
+    actions: 'Tindakan',
   },
-  pending: {
-    line: ({ strong }) => (
-      <>
-        Setujui atau tolak permintaan dari agen yang ingin bergabung ke {kept('KPM')} Anda. Menyetujui akan
-        menempatkan mereka di bawah {strong(`${kept('leader')} yang mereka minta`)}, bukan di bawah Anda.
-      </>
-    ),
-    caption: `Sudah mendaftar, belum masuk ${kept('unit')}`,
-    columns: { who: 'Siapa', waitingOn: 'Menunggu', actions: 'Aksi' },
-    empty: `Semua yang sudah mendaftar sudah masuk ${kept('unit')}.`,
-    aDecision: 'Keputusan',
-    asked: ({ date }) => <>Diajukan {date}</>,
-    nobody: 'Tidak ada',
-    noLeaderAsked: ({ strong }) => (
-      <>
-        Dia belum meminta {kept('leader')} mana pun — {kept('leader')} dapat mengambilnya dari {strong(kept('Add New Agents'))}
-      </>
-    ),
+  unitCounts: ({ direct, unit }) => `${direct} langsung · ${unit} di ${kept('unit')}`,
+  noTeam: 'Tanpa tim',
+  seeAll: ({ n }) => `Lihat semua (${n})`,
+  seeMore: 'Lihat lagi',
+  noMembers: `${kept('KPM')} ini belum punya anggota.`,
+  noMatch: 'Tidak ada yang cocok.',
+  clearFilters: 'Hapus filter',
+  loading: 'Memuat anggota…',
+  legend: '★ = core leader · merah = belum pernah · kuning = lebih dari 14 hari · akun tes tidak ditampilkan',
+  open: ({ name }) => `Buka ${name}`,
+  changeGroupOf: ({ name }) => `Ubah group ${name}`,
+  waiting: {
+    movesTitle: 'Permintaan pindah unit',
+    movesNote: 'terlama dulu · seluruh tim ikut pindah',
+    askedBy: ({ name }) => `Diajukan ${name}`,
+    move: ({ from, to }) => (from ? `pindah dari ${from} ke ${to}` : `masuk ke ${to}`),
+    registeredTitle: 'Sudah daftar, belum masuk unit',
+    notChosen: ({ ago }) => `Belum memilih leader · daftar ${ago}`,
+    askedLeader: ({ name, ago }) => `Meminta masuk unit ${name} · daftar ${ago}`,
+    pickLeader: 'Pilih leader',
+    pickTitle: ({ name }) => `Pilih leader untuk ${name}`,
+    pickNote: 'Dia masuk ke unit itu sekarang; hari ini tanggal bergabungnya.',
     approve: 'Setujui',
     decline: 'Tolak',
+    nothing: 'Tidak ada yang menunggu.',
+    loading: 'Memuat yang menunggu…',
   },
-  groups: {
-    line: ({ strong }) => (
-      <>
-        Label yang ditetapkan {kept('KPM')} ini untuk pengaturannya sendiri — lingkar mentoring, tim khusus.
-        Grup {strong('bukan')} hierarki dan tidak memberi siapa pun akses ke apa pun.
-      </>
-    ),
-    create: 'Buat grup',
-    edit: 'Ubah grup',
-    name: 'Nama grup',
-    nameExample: 'Lingkar Mentoring Agen Baru',
-    owner: 'Pemilik',
-    ownerHint: 'Orang yang menjalankannya. Disimpan sebagai keanggotaannya, jadi mengganti namanya tidak mengubah apa pun.',
-    chooseSomebody: 'Pilih seseorang',
-    save: 'Simpan',
-    saving: 'Menyimpan…',
-    cancel: 'Batal',
-    retireQuestion: ({ name }) => `Nonaktifkan ${name}?`,
-    retireLine: ({ n }) =>
-      `Grup ini tidak lagi ditawarkan dan tidak lagi dihitung. Tidak ada yang dihapus: ${n === 1 ? 'orang' : `semua ${n} orang`} yang di-tag ke dalamnya tetap memiliki tag-nya, jadi siapa yang pernah ada di dalamnya tetap dapat dibaca.`,
-    retire: 'Nonaktifkan grup',
-    retiring: 'Menonaktifkan…',
-    caption: 'Grup informal',
-    columns: { group: 'Grup', owner: 'Pemilik', tagged: 'Di-tag', actions: 'Aksi' },
-    empty: 'Belum ada grup — buat satu untuk mulai mengatur orang.',
-    ownerLeft: `Sudah tidak di ${kept('KPM')} ini — serahkan kepada orang lain`,
-    people: ({ n }) => `${n} orang`,
-    editRow: 'Ubah',
-    retireRow: 'Nonaktifkan',
-  },
-  roster: {
-    caption: `Roster ${kept('KPM')}`,
-    removedCaption: 'Anggota yang dikeluarkan',
-    loading: `Memuat roster ${kept('KPM')}…`,
-    loadingRemoved: 'Memuat anggota yang dikeluarkan…',
-    columns: {
-      name: 'Nama',
-      agentCode: 'Kode agen',
-      role: 'Peran',
-      reportsTo: 'Melapor ke',
-      lastActivity: 'Aktivitas terakhir',
-      lastCoached: 'Coaching terakhir',
-      unit: kept('Unit'),
-      removed: 'Dikeluarkan',
-      status: 'Status',
-    },
-    noMatch: 'Tidak ada yang cocok.',
-    noneRemoved: `Belum ada yang dikeluarkan dari ${kept('KPM')} ini.`,
-    noMembers: `${kept('KPM')} ini belum punya anggota.`,
-    clearFilters: 'Hapus filter',
-    untag: ({ name }) => `Hapus tag ${kept('Core Leader')} dari ${name}`,
-    tag: ({ name }) => `Tag ${name} sebagai ${kept('Core Leader')}`,
-    untagTitle: `Hapus tag ${kept('Core Leader')}`,
-    tagTitle: `Tag sebagai ${kept('Core Leader')}`,
-    unitCounts: ({ direct, unit }) => `${direct} langsung · ${unit} di ${kept('unit')}`,
-    noTeam: 'Tanpa tim',
-    under: ({ name }) => `ke ${name}`,
+  history: {
+    filters: { all: 'Semua', role: 'Perubahan peran', removed: 'Dikeluarkan', moved: 'Pindah unit' },
+    removed: 'Dikeluarkan',
+    moved: 'Pindah unit',
     rejoined: 'Bergabung kembali',
-    rejoinedOn: ({ date }) => <>Bergabung kembali {date}</>,
-    previous: 'Sebelumnya',
-    next: 'Berikutnya',
-    shown: ({ n, more }) => `${n} ditampilkan${more ? ' · masih ada lagi' : ''}`,
+    by: ({ name }) => `oleh ${name}`,
+    movedLine: ({ from, to }) => `pindah dari ${from} ke ${to}`,
+    empty: 'Belum ada riwayat.',
+    loading: 'Memuat riwayat…',
+    caption: 'Riwayat, terbaru dulu',
   },
 };
 

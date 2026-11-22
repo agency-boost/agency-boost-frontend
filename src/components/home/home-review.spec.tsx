@@ -68,7 +68,9 @@ describe('P19.8-T2 AC-1 MOB UI-164 one order at every size', () => {
       expect(drawn[i - 1]!.compareDocumentPosition(drawn[i]!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     }
     const grid = wears(document.querySelector('[data-home]')!.firstElementChild!, px).split(' ');
-    expect(grid).toContain(px < 1024 ? 'grid-cols-2' : 'grid-cols-[3fr_2fr]');
+    // From 1024px the frame's dashboard grid, 2/3 + 1/3, its columns stretched (P19.13-T4 AC-2; UI-195), where it was 3fr / 2fr.
+    expect(grid).toContain(px < 1024 ? 'grid-cols-2' : 'grid-cols-[minmax(0,2fr)_minmax(0,1fr)]');
+    if (px >= 1024) expect(grid).toEqual(expect.arrayContaining(['items-stretch', 'gap-cards']));
     if (px >= 1024) {
       // The left column holds the quote, the buttons, the tiles and Aksi hari ini; the right the team and the chart.
       const [left, right] = [...document.querySelector('[data-home]')!.firstElementChild!.children];

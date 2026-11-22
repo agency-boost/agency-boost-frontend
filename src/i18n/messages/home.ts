@@ -99,6 +99,14 @@ const en = {
      */
     reminder: ({ name, both, link, leader }: { name: string; both: boolean; link: string; leader: string }) =>
       `Hi ${name} 👋 ${both ? 'Yesterday’s & today’s' : 'Today’s'} activity isn’t filled in yet. Report it, it takes 1 minute: ${link} – ${leader}`,
+    /**
+     * P19.18-T4 AC-2 (ADR-0271 §7; `home-owner-mobile`): the whole office's list — *Semua downline ⌄*'s name for a screen
+     * reader, and each unit line: *Unit AGUS PRASETYO*, *Unit Anda*, *Belum punya leader*.
+     */
+    viewLabel: 'View',
+    unitOf: ({ name }: { name: string }) => `${name}’s unit`,
+    yourUnit: `Your ${kept('Unit')}`,
+    unled: 'No leader yet',
   },
   chart: {
     heading: 'Activity, last 7 days',
@@ -168,6 +176,10 @@ const id: MessagesOf<typeof en> = {
     firstAgent: 'Tambah agent pertama →',
     reminder: ({ name, both, link, leader }) =>
       `Halo ${name} 👋 Aktivitas ${both ? 'kemarin & hari ini' : 'hari ini'} belum diisi. Yuk lapor, 1 menit: ${link} – ${leader}`,
+    viewLabel: 'Tampilan',
+    unitOf: ({ name }) => `${kept('Unit')} ${name}`,
+    yourUnit: `${kept('Unit')} Anda`,
+    unled: `Belum punya ${kept('leader')}`,
   },
   chart: {
     heading: 'Aktivitas 7 hari terakhir',

@@ -126,6 +126,15 @@ export interface AuditGroupSpan {
   count: number;
   /** The oldest row's time; `createdAt` is the newest's. */
   oldestAt: string;
+  /**
+   * **What changed, before → after, in words** (P19.23-T6 AC-1): *"6 → 8"*, or *"status: active → suspended · …"*; null
+   * when the row records no such pair. Absent from a server before P19.23.
+   */
+  change?: string | null;
+  /** The KPM the row is in or about (P19.23-T6 AC-1: *KPM · company*); null for a platform row about none. */
+  kpm?: { id: string; code: string; branch: string } | null;
+  /** Its company; null when none. */
+  company?: { id: string; name: string } | null;
 }
 
 /** One actor the *Pelaku* chip offers. */
@@ -157,8 +166,13 @@ export interface AuditPage {
   facets: AuditFacets | null;
 }
 
-/** The page's filters. Each one absent narrows nothing; `kpmId` absent is the platform-level log. */
+/**
+ * The page's filters. Each one absent narrows nothing; `kpmId` absent is *Semua KPM* — the platform's log and every Super
+ * Admin change inside a KPM (P19.23-T6 AC-1).
+ */
 export interface AuditQuery {
+  /** *Cari perubahan* (P19.23-T6 AC-1): words a line says, read as text; at most 100 characters. */
+  q?: string;
   kpmId?: string;
   companyId?: string;
   action?: string;
@@ -275,6 +289,8 @@ export interface KpmRequestRow {
   status: 'pending' | 'approved' | 'declined';
   requestedAt: string;
   decidedAt: string | null;
+  /** *Persetujuan* › *Sudah diputuskan* (P19.23-T3 AC-2): who decided, by name; `null` while it waits. */
+  decidedByName: string | null;
   reason: string | null;
   createdKpmId: string | null;
   /** What an approval made (P19-T3 AC-3); `deleted` once that office has been deleted. */
@@ -283,6 +299,8 @@ export interface KpmRequestRow {
 
 export interface PlatformAdminRow {
   membershipId: string;
+  /** The person: what *Kelola data produk* is given to (ADR-0260 §4). */
+  userId: string;
   fullName: string;
   email: string;
   initials: string;
@@ -301,11 +319,12 @@ export const readKpmRequests = () => api<KpmRequestRow[]>('/admin/kpm-requests')
  * **"Setujui & jadikan Owner"** (ADR-0191 §3, P19-T3 AC-3): the office and its Owner in one step, or nothing. `companyId`
  * when the Super Admin corrected the company on the card. A second press answers the same office.
  */
-export const approveKpmRequest = (requestId: string, code: string, companyId?: string, startFrom?: StartFrom) =>
+export const approveKpmRequest = (requestId: string, code?: string, companyId?: string, startFrom?: StartFrom) =>
   api<KpmRequestRow[]>(`/admin/kpm-requests/${requestId}/approve`, {
     method: 'POST',
-    // *Mulai dari* (ADR-0213 §3): offered on the card only when the company has no template.
-    body: { code, ...(companyId ? { companyId } : {}), ...(startFrom ? { startFrom } : {}) },
+    // *Mulai dari* (ADR-0213 §3): offered on the card only when the company has no template. No code: the server makes
+    // the company's next free one (P19.23-T3 AC-2).
+    body: { ...(code ? { code } : {}), ...(companyId ? { companyId } : {}), ...(startFrom ? { startFrom } : {}) },
   });
 
 /** *Hapus*: a wrong or duplicate request, soft-deleted and audited (P19-T3 AC-7). Answers the queue. */
@@ -489,7 +508,8 @@ export interface OwnerInput {
 
 export interface CreateKpmInput {
   companyId: string;
-  code: string;
+  /** Absent: made automatically, the company's next free code (P19.23-T2 AC-3; ADR-0277 §3). */
+  code?: string;
   branchName: string;
   address?: string;
   contactPhone?: string;
@@ -512,10 +532,6 @@ export const assignOwner = (
   id: string,
   who: { email?: string; userId?: string; owner?: OwnerInput; sendInvitation?: boolean },
 ) => api<TenantRow>(`/admin/tenants/${id}/owner`, { method: 'PATCH', body: who });
-
-/** *Kirim ulang undangan* (ADR-0212 §2): a new link to the Owner's email, the old revoked. */
-export const resendOwnerInvitation = (id: string) =>
-  api<TenantRow>(`/admin/tenants/${id}/owner/invitation`, { method: 'POST' });
 
 export const setTenantStatus = (id: string, status: TenantStatus, reason?: string) =>
   api<Kpm>(`/admin/tenants/${id}/status`, { method: 'PATCH', body: { status, reason } });
@@ -1261,15 +1277,67 @@ export interface Product {
   defaultInsured?: 'client' | 'child' | null;
   /** As stored: `null` reads the category's (*KESEHATAN* …). */
   proposalTypeLabel?: string | null;
+  /*
+   * **The catalogue's calculation fields** (P19.14-T2 AC-5; ADR-0255 §5): read only on the Super Admin's *Perhitungan*.
+   * Always sent since P19.14; optional here so an older answer reads as none set.
+   */
+  calcType?: ProposalCalcType;
+  entryAge?: ProductEntryAge | null;
+  payTerms?: ProductPayTerm[];
+  frequencies?: ProductPayFrequency[];
+  smokerRated?: boolean;
+  planRule?: ProductPlanRule | null;
+  upStep?: number | null;
+  upMin?: number | null;
+  upMax?: number | null;
+  premiumMin?: number | null;
+  premiumMax?: number | null;
+  rateTableId?: string | null;
+  needTag?: ProductNeedTag | null;
   sortOrder: number;
   version: number;
 }
 
+export type ProposalCalcType = 'up_premium' | 'goal' | 'premium_benefit' | 'plan_priced' | 'manual';
+export type ProductPayFrequency = 'monthly' | 'quarterly' | 'semiannual' | 'annual' | 'single';
+export type ProductNeedTag = 'HOSPITAL' | 'CRITICAL_INCOME' | 'FAMILY' | 'EDUCATION' | 'FUTURE';
+
+export interface ProductEntryAge {
+  min: number;
+  max: number;
+}
+
+/** One pay term (ADR-0255 §2): its years, the age it is paid to, or single; the oldest entry age it is offered at. */
+export interface ProductPayTerm {
+  key: string;
+  label: string;
+  years: number | null;
+  toAge: number | null;
+  single: boolean;
+  maxEntryAge: number | null;
+  default: boolean;
+}
+
+export interface ProductPlanRuleEntry {
+  when: Record<string, string>;
+  value: string;
+}
+
+/** How a `derived` field is worked out (ADR-0255 §3). */
+export interface ProductPlanRule {
+  field: string;
+  rules: ProductPlanRuleEntry[];
+}
+
 // ----------------------------------------------- a product's proposal fields (P19.7-T1; ADR-0225 §1, §2)
 
-/** How a proposal field is drawn: one-tap choices, a money box, or a sentence. */
-export type ProposalFieldType = 'chips' | 'money' | 'fixed';
-export const PROPOSAL_FIELD_TYPES: readonly ProposalFieldType[] = ['chips', 'money', 'fixed'];
+/**
+ * How a proposal field is drawn: one-tap choices, a money box, or a sentence — and, since P19.14-T2 (ADR-0255 §3),
+ * **`derived`**, worked out by the product's plan rule, which the editor shows and never offers to make.
+ */
+export type ProposalFieldType = 'chips' | 'money' | 'fixed' | 'derived';
+/** The types the editor offers a field (a `derived` one comes with its rule, from an import). */
+export const PROPOSAL_FIELD_TYPES: readonly Exclude<ProposalFieldType, 'derived'>[] = ['chips', 'money', 'fixed'];
 
 export interface ProposalOption {
   label: string;
@@ -1318,7 +1386,8 @@ export interface PdfDetailBlock {
  */
 export const PROPOSAL_LIMITS = {
   FIELDS: 8,
-  CHIP_OPTIONS: 8,
+  /** Raised from 8 by P19.14-T2 (ADR-0255 §9): PRUCerah's *Masa tunggu* has 11. */
+  CHIP_OPTIONS: 12,
   QUICK_AMOUNTS: 4,
   PLAN_OPTIONS: 8,
   PLAN_HIGHLIGHTS: 4,

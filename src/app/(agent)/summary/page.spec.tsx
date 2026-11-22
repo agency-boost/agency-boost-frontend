@@ -963,20 +963,25 @@ describe('the Personal Summary — one control row, two columns, line icons (UI-
     };
   };
 
-  it('P19.1-T4 AC-6 a laptop (1024, 1280): goal, targets and the ratio card left; next steps, improve, campaigns and leads right', async () => {
+  /*
+   * *Changed 2026-11-12 (P19.13-T4 AC-2; UI-195, ADR-0252):* **the leads close the left column**, after the ratio card,
+   * so the two columns end within about 120px of each other (731 beside 1,098px before); 16px between them (UI-194).
+   */
+  it('P19.1-T4 AC-6, P19.13-T4 AC-2 a laptop (1024, 1280): goal, targets, the ratio card and the leads left; next steps, improve and campaigns right', async () => {
     for (const px of [1024, 1280]) {
       atWidth(px);
       show(summary({ insights: [NEXT, IMPROVE] }), undefined, RINA_CHASING);
       const { layout, left, right } = await columns();
       expect(layout).toHaveAttribute('data-summary-layout', 'desktop');
-      expect(layout).toHaveClass('grid-cols-[minmax(0,1.4fr)_minmax(300px,1fr)]');
+      expect(layout).toHaveClass('grid-cols-[minmax(0,1.4fr)_minmax(300px,1fr)]', 'gap-cards');
       const names = async (column: HTMLElement) => [...column.children].map((c) => c.querySelector('h2, [role="heading"]')?.textContent ?? c.textContent?.slice(0, 20));
       expect(left).toContainElement(await card('Goal vs. actual (APE)'));
       expect(left).toContainElement(await card('Your sales activity targets'));
       expect(left).toContainElement(await card('Ratio · last 30 days'));
       const order = [...right.querySelectorAll(':scope > section')].map((sec) => sec.querySelector('h2')?.textContent);
-      expect(order).toEqual(['What to do next', 'How you can improve your performance', "Campaigns you're chasing", 'Leads that need you']);
-      expect(await names(left)).toHaveLength(3);
+      expect(order).toEqual(['What to do next', 'How you can improve your performance', "Campaigns you're chasing"]);
+      expect(left.lastElementChild?.querySelector('h2')?.textContent).toBe('Leads that need you');
+      expect(await names(left)).toHaveLength(4);
       // Not centred (UI-056: the title at x292, the cards at x329).
       expect(layout.parentElement!.className).not.toContain('mx-auto');
       cleanup();
@@ -1430,7 +1435,8 @@ describe('P19.1-T4, P19.11-T4 the goal card when production is not uploaded (UI-
     const owner = makeMe({ permissions: ['personal_summary:read', 'data_upload:upload_and_preview'] });
     showAs(owner, { '/summary': { body: notUploaded() } });
     const link = within(await goalCard()).getByRole('link', { name: 'Upload production →' });
-    expect(link).toHaveAttribute('href', '/kpm/data-upload');
+    // P19.21-T1 AC-9: on the current month, the search filled with the reader's name.
+    expect(link.getAttribute('href')).toMatch(/^\/kpm\/data-upload\?month=\d{4}-\d{2}&q=.+/);
   });
 
   it('P19.1-T4 AC-9 nobody else sees it: an agent, an AB or an AAB holds no data_upload grant', async () => {

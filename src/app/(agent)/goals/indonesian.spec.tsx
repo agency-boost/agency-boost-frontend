@@ -91,7 +91,8 @@ const commitment = async () => (await screen.findByText(/^Bulan ini/)).closest('
 /** The orange result card (UI-014). */
 const resultCard = () => screen.findByRole('region', { name: 'Target aktivitas bulanan' });
 /** The desktop's save status, at the foot of the right column (UI-022). */
-const status = () => within(document.querySelector('[data-goal-aside]') as HTMLElement).getByRole('status');
+// The save card's state (step ④ shares the right column since P19.13-T4).
+const status = () => within(document.querySelector('[data-goal-save]') as HTMLElement).getByRole('status');
 
 describe('P18.10-T4 Goal Settings in Indonesian', () => {
   afterEach(() => vi.unstubAllGlobals());
@@ -99,7 +100,7 @@ describe('P18.10-T4 Goal Settings in Indonesian', () => {
   it('AC-2 UI-006 asks the four steps in Indonesian, the kept terms English, every figure Indonesian', async () => {
     show({ body: goal() });
 
-    expect(await screen.findByRole('heading', { level: 1, name: 'Goal Settings' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { level: 1, name: 'Goal Setting' })).toBeInTheDocument();
     expect(screen.getByText('Ubah target tahunan Anda menjadi angka aktivitas bulan ini.')).toBeInTheDocument();
     for (const name of [
       'Target aktivitas bulanan', '1Berapa target APE Anda tahun ini?', '2Progres Anda saat ini', '3Dari APE ke jumlah polis',
@@ -128,7 +129,7 @@ describe('P18.10-T4 Goal Settings in Indonesian', () => {
     const produced = screen.getByRole('textbox', { name: 'APE yang sudah dicapai tahun ini' });
     expect(produced).toHaveValue('Rp 0');
     expect(screen.getByText('Sisa yang dibutuhkan').closest('[data-variant]')).toHaveTextContent('Rp 500 Jt');
-    expect(screen.getByText('Target APE bulan ini').closest('[data-variant]')).toHaveTextContent('Rp 100 Jt');
+    expect(screen.getByText('Target APE per bulan').closest('[data-variant]')).toHaveTextContent('Rp 100 Jt');
     expect(screen.getByText('Polis per bulan').closest('[data-variant]')).toHaveTextContent('6polis');
     expect(screen.getByText('Polis per minggu').closest('[data-variant]')).toHaveTextContent('≈ 1,4');
     expect(screen.getByRole('button', {

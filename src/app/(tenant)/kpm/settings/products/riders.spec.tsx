@@ -59,37 +59,42 @@ function render(rows: unknown[] = [SOFI, LADY, RIDER], extra: Record<string, unk
 describe('P19.4-T4 an office’s products: riders under their bases, and the objection cards', () => {
   afterEach(() => vi.unstubAllGlobals());
 
+  /** A base's sheet, from its ⋯ (P19.21-T3 AC-5): where its riders and its switch are, at every width. */
+  const sheetOf = async (name: string) => {
+    await userEvent.click(await screen.findByRole('button', { name: `More for ${name}` }));
+    return screen.findByRole('dialog', { name });
+  };
+
   it('P19.4-T4 AC-8 lists the rider under each base it attaches to, never as a product with a switch of its own', async () => {
     render();
-    await screen.findByRole('heading', { name: 'SOFI Critical Infinity' });
-    expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent))
-      .toEqual(['SOFI Critical Infinity', 'Lady']);
-    const sofi = screen.getByRole('heading', { name: 'SOFI Critical Infinity' }).closest('li')!;
+    // The list has the two bases and no row for the rider (P19.21-T3 AC-5: one list at every width).
+    await screen.findByText('SOFI Critical Infinity', { selector: 'span' });
+    expect(document.querySelectorAll('[data-list-row]')).toHaveLength(2);
+    expect(screen.queryByText('CI Coverage+ Insurance')).not.toBeInTheDocument();
+    const sofi = await sheetOf('SOFI Critical Infinity');
     const under = within(sofi).getByText('CI Coverage+ Insurance').closest('[data-rider]')!;
     expect(under).toHaveTextContent('Rider');
     expect(under).toHaveTextContent('Sold with its base products — it has no switch of its own.');
     expect(within(under as HTMLElement).queryByRole('switch')).not.toBeInTheDocument();
+    // One switch, the base's; none for the rider.
+    expect(within(sofi).getAllByRole('switch', { name: 'Agents sell it' })).toHaveLength(1);
+    await userEvent.keyboard('{Escape}');
     // Under Lady too, which the office does not sell: the rider is on through SOFI.
-    const lady = screen.getByRole('heading', { name: 'Lady' }).closest('li')!;
-    expect(within(lady).getByText('CI Coverage+ Insurance')).toBeInTheDocument();
-    // One switch per base, none for the rider.
-    expect(screen.getAllByRole('switch', { name: 'Agents sell it' })).toHaveLength(2);
+    expect(within(await sheetOf('Lady')).getByText('CI Coverage+ Insurance')).toBeInTheDocument();
   });
 
   it('P19.4-T4 AC-8 says a rider is not sold when none of its bases is', async () => {
     render([SOFI, { ...RIDER, attachesTo: ['p1'], active: field(false) }]);
-    const sofi = (await screen.findByRole('heading', { name: 'SOFI Critical Infinity' })).closest('li')!;
+    const sofi = await sheetOf('SOFI Critical Infinity');
     expect(within(sofi).getByText('Not sold: none of its base products is. It has no switch of its own.')).toBeInTheDocument();
   });
 
   it('P19.4-T4 AC-8 on a phone: the rider is no row of its own, and sits in its base’s sheet', async () => {
     atWidth(375);
     render();
-    await screen.findByRole('button', { name: 'SOFI Critical Infinity' });
-    expect(screen.queryByRole('button', { name: 'CI Coverage+ Insurance' })).not.toBeInTheDocument();
+    await screen.findByText('SOFI Critical Infinity', { selector: 'span' });
     expect(document.querySelectorAll('[data-list-row]')).toHaveLength(2);
-    await userEvent.click(screen.getByRole('button', { name: 'SOFI Critical Infinity' }));
-    const sheet = await screen.findByRole('dialog', { name: 'SOFI Critical Infinity' });
+    const sheet = await sheetOf('SOFI Critical Infinity');
     expect(within(sheet).getByText('CI Coverage+ Insurance')).toBeInTheDocument();
   });
 
@@ -97,6 +102,7 @@ describe('P19.4-T4 an office’s products: riders under their bases, and the obj
     const stub = render([SOFI], {
       'PATCH /kpm/settings/products/p1/overrides': { body: SOFI },
     });
+    await sheetOf('SOFI Critical Infinity');
     await userEvent.click(await screen.findByRole('button', { name: 'Customize' }));
     const cards = screen.getByRole('group', { name: '4 · If they push back' });
     expect(within(cards).getByLabelText('Objection 1 — they say')).toHaveValue('Mahal.');

@@ -167,9 +167,10 @@ describe('P18.10-T1 AC-6 a module already moved keeps its words in the catalogue
   it('reads the registry off the areas, the first one’s eight modules among it', () => {
     expect(MOVED.filter((m) => m.area === 'shell.ts').map((m) => m.path)).toEqual([
       'components/app-shell.tsx', 'components/sidebar-user-menu.tsx', 'components/notification-bell.tsx',
-      // P19.2-T1 (ADR-0197): the one shell for every role, and the views (ADR-0198); the two consoles' shells are gone.
+      // P19.2-T1 (ADR-0197): the one shell for every role; the two consoles' shells are gone. The views (ADR-0198) went
+      // with P19.17-T3 (ADR-0269): one login, one menu.
       'components/agent-shell.tsx', 'components/shell.tsx',
-      'lib/landing.ts', 'lib/views.ts', 'lib/profile-line.ts',
+      'lib/landing.ts', 'lib/profile-line.ts',
       // UI V1 (UI-004): the field shell's tab bar, its *Lainnya* sheet and the model both draw.
       'components/field-nav.tsx', 'components/field-more-sheet.tsx', 'lib/field-nav.ts',
       // The bundle, 2026-11-06: the title row's parts, the page header and the bell's popover, each a module of its own.

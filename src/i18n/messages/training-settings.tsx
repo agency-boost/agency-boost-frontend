@@ -132,7 +132,7 @@ const en = {
     archivedLine: ({ link }: { link: (label: ReactNode) => ReactNode }) => words(
       'No agent is offered it. Bring it back from ',
       link(kept('Training')),
-      ' — on Modules, with Show archived on.',
+      ' — with Show archived on.',
     ),
     publishState: 'Publish state',
     draft: 'Draft',
@@ -156,8 +156,9 @@ const en = {
     videos: 'Videos',
     links: 'Links',
     // P19.6-T2 (ADR-0217 §1): a lesson as an HTML page, which opens inside the app.
-    filesHint: 'Up to 25 MB each. PDFs, images, spreadsheets and HTML lessons.',
-    videosHint: 'Up to 25 MB each, mp4. Anything longer belongs under Links — a long video is a download an agent on '
+    // P19.25-T4 AC-2 (ADR-0282 §3): any format the owner named — PowerPoint and Word among them.
+    filesHint: 'Up to 25 MB each. Any format: PDF, PowerPoint, Word, images, spreadsheets and HTML lessons.',
+    videosHint: 'Up to 25 MB each: MP4, WebM or MOV. Anything longer belongs under Links — a long video is a download an agent on '
       + 'mobile data cannot afford.',
     linkCount: ({ n }: { n: number }) => `${n} ${n === 1 ? 'link' : 'links'}`,
     nothingHere: 'Nothing here yet.',
@@ -181,6 +182,39 @@ const en = {
     saveContent: 'Save content',
     undoEdits: 'Undo my edits',
     notSavedYet: 'Not saved yet — a file you added is uploaded, but this module does not use it until you save.',
+  },
+  /**
+   * **Pengaturan › Training as one tree** (P19.25-T4, ADR-0282; `data-upload-pengaturan-*` frame 17): *Kategori › Skill ›
+   * Modul*, a category's *"n skill · n modul"*, a skill's *"n modul"*, a module's *"n dari 30 selesai"* or *Belum ada yang
+   * belajar*, its file with *Ganti* or *Unggah materi*, the pencil that renames, ⋯, *+ Tambah …*, and the three notes
+   * under the card. The Indonesian is the mockup's, verbatim.
+   */
+  tree: {
+    path: `Category › ${kept('Skill')} › Module`,
+    addCategory: 'Add category',
+    addSkill: `Add ${kept('skill')}`,
+    addModule: 'Add module',
+    categoryLine: ({ skills, modules }: { skills: number; modules: number }) =>
+      `${skills} ${skills === 1 ? kept('skill') : kept('skills')} · ${modules} ${modules === 1 ? 'module' : 'modules'}`,
+    skillLine: ({ modules }: { modules: number }) => `${modules} ${modules === 1 ? 'module' : 'modules'}`,
+    done: ({ done, of }: { done: number; of: number }) => `${done} of ${of} done`,
+    nobodyYet: 'Nobody has started yet',
+    replace: 'Replace',
+    upload: 'Upload material',
+    replaceName: ({ title }: { title: string }) => `Replace the material of ${title}`,
+    uploadName: ({ title }: { title: string }) => `Upload material to ${title}`,
+    uploaded: ({ title }: { title: string }) => `${title}: material saved. Agents see it now.`,
+    toggle: ({ label }: { label: string }) => `Open or close ${label}`,
+    rename: ({ label }: { label: string }) => `Rename ${label}`,
+    more: ({ label }: { label: string }) => `More for ${label}`,
+    manage: 'Material and details',
+    archiveTip: 'Everything under it is archived with it. Restore brings back this one alone.',
+    draft: 'Draft',
+    draftTip: 'Not offered to agents yet: open Material and details to publish it.',
+    codeOf: ({ code }: { code: string }) => `Code ${code}: permanent.`,
+    tapToOpen: 'Tap to open',
+    uploadAnywhere: 'Upload material right on the module · any format',
+    renameNote: 'rename',
   },
 };
 
@@ -273,7 +307,7 @@ const id: MessagesOf<typeof en> = {
     archivedLine: ({ link }) => words(
       'Tidak ada agent yang ditawari modul ini. Pulihkan dari ',
       link(kept('Training')),
-      ` — di ${kept('Modules')}, dengan Tampilkan yang diarsipkan aktif.`,
+      ' — dengan Tampilkan yang diarsipkan aktif.',
     ),
     publishState: 'Status terbit',
     draft: 'Draf',
@@ -295,8 +329,8 @@ const id: MessagesOf<typeof en> = {
     files: 'File',
     videos: 'Video',
     links: 'Tautan',
-    filesHint: 'Maksimal 25 MB per file. PDF, gambar, spreadsheet, dan pelajaran HTML.',
-    videosHint: 'Maksimal 25 MB per file, mp4. Yang lebih panjang letakkan di Tautan — video panjang adalah unduhan yang '
+    filesHint: 'Maksimal 25 MB per file. Format apa saja: PDF, PowerPoint, Word, gambar, spreadsheet, dan pelajaran HTML.',
+    videosHint: 'Maksimal 25 MB per file: MP4, WebM, atau MOV. Yang lebih panjang letakkan di Tautan — video panjang adalah unduhan yang '
       + 'terlalu mahal bagi agent yang memakai data seluler.',
     linkCount: ({ n }) => `${n} tautan`,
     nothingHere: 'Belum ada apa pun di sini.',
@@ -320,6 +354,32 @@ const id: MessagesOf<typeof en> = {
     undoEdits: 'Buang suntingan saya',
     notSavedYet: 'Belum disimpan — file yang Anda tambahkan sudah diunggah, tetapi modul ini belum memakainya sampai '
       + 'Anda menyimpan.',
+  },
+  tree: {
+    path: `Kategori › ${kept('Skill')} › Modul`,
+    addCategory: 'Tambah kategori',
+    addSkill: `Tambah ${kept('skill')}`,
+    addModule: 'Tambah modul',
+    categoryLine: ({ skills, modules }) => `${skills} ${kept('skill')} · ${modules} modul`,
+    skillLine: ({ modules }) => `${modules} modul`,
+    done: ({ done, of }) => `${done} dari ${of} selesai`,
+    nobodyYet: 'Belum ada yang belajar',
+    replace: 'Ganti',
+    upload: 'Unggah materi',
+    replaceName: ({ title }) => `Ganti materi ${title}`,
+    uploadName: ({ title }) => `Unggah materi ke ${title}`,
+    uploaded: ({ title }) => `${title}: materi tersimpan. Agent langsung melihatnya.`,
+    toggle: ({ label }) => `Buka atau tutup ${label}`,
+    rename: ({ label }) => `Ganti nama ${label}`,
+    more: ({ label }) => `Lainnya untuk ${label}`,
+    manage: 'Materi & detail',
+    archiveTip: 'Semua yang ada di bawahnya ikut diarsipkan. Pulihkan hanya mengembalikan yang ini.',
+    draft: 'Draf',
+    draftTip: 'Belum ditawarkan ke agent: buka Materi & detail untuk menerbitkannya.',
+    codeOf: ({ code }) => `Kode ${code}: permanen.`,
+    tapToOpen: 'Ketuk untuk membuka',
+    uploadAnywhere: 'Unggah materi langsung di modul · format apa saja',
+    renameNote: 'ganti nama',
   },
 };
 

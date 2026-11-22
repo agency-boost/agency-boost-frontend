@@ -1,40 +1,50 @@
 'use client';
 
 import dynamic from 'next/dynamic';
+import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { useFieldContent } from '@/components/field-chrome';
-import { Button } from '@/components/ui/field';
-import { useLanguage, useMessages } from '@/i18n/language-provider';
+import { buttonClass, Button } from '@/components/ui/field';
+import { LineIcon } from '@/components/ui/line-icon';
+import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
 import { forumMessages } from '@/i18n/messages/forum';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
 import {
-  defaultMeetingTitle, filterMeetings, readMeetings, signInAndReturn, type MeetingFilter, type MeetingListView,
+  daysToGo, forumWhen, readMeetings, signInAndReturn, type MeetingCard, type MeetingListView,
 } from '@/lib/leader-meetings';
 import { useSession } from '@/lib/session';
 import { useOpenedOnce } from '@/lib/use-opened-once';
-import { usePhone } from '@/lib/use-phone';
+import { CoreLeaderStack } from './forum-people';
 import { ListSkeleton, LoadError, NotFound } from './forum-states';
-import { MeetingCardRow } from './meeting-card';
-import { V1ForumList } from './v1-list';
 
-/** *+ New meeting*'s dialog, downloaded when it is first opened and mounted from then on (`useOpenedOnce`; P18.11-T16). */
-const MeetingDialog = dynamic(() => import('./meeting-dialog').then((m) => m.MeetingDialog), { ssr: false });
+const ForumDialog = dynamic(() => import('./forum-dialog').then((m) => m.ForumDialog), { ssr: false });
 
-const FILTERS: readonly MeetingFilter[] = ['all', 'upcoming', 'past'];
+/** A forum's address, on a tab when one is named. */
+export const forumHref = (id: string, tab?: 'agenda' | 'actions') =>
+  `/leader-meetings/${encodeURIComponent(id)}${tab ? `?tab=${tab}` : ''}`;
+
+/** *Akan datang* navy on its blue tint, *Selesai* green on its tint — the mockup's two pills, from tokens. */
+export const STATE_PILL = {
+  upcoming: 'bg-pill-blue text-pill-blue-ink',
+  completed: 'bg-pill-green text-pill-green-ink',
+} as const;
 
 /**
- * **The list** (`/leader-meetings`, `:2002-2013`, `:2588-2630`; *The list*): the filter *All* · *Upcoming* · *Past*
- * over the one read, *+ New meeting* beside it for whoever may make one, and a card per meeting, newest first. A member
- * the server does not let read the forum is answered `404`, and meets the not-found state.
+ * **The Strategic Leader Forum's list** (`/leader-meetings`, P19.22-T8 AC-1; `slf-*` frame 1).
  *
- * **One subtitle** (P18.9-T2 AC-1, I-496; the client's grey-text row for UI-015): the page's, from the shell. The list's
- * own line (`:2004`) said it again and is gone at every size.
+ * - The note *"Pertemuan core leader tiap 2 minggu · 60–90 menit"* and the orange *+ Forum baru* (full width on a phone).
+ * - **The navy *Forum berikutnya* card**: the nearest forum not yet held — *Forum #15* in orange, *Kam, 27 Nov 2026 ·
+ *   14.00 · 8 hari lagi*, the core leaders' photos and *"7 core leader"*, and *Siapkan agenda*, which opens it on its
+ *   agenda; on a phone the button sits under the words.
+ * - ***Semua forum*, newest first**: *#n*, *Forum #n*, date · time, *Action items x/y selesai* for one held or *Agenda n
+ *   item* for one to come (from 768px), the state pill, ›. A row on a phone is two lines.
+ *
+ * Every state: a skeleton, the shared banner with *Try again*, *Belum ada forum*, and not-found for a reader who is no
+ * steward (the server's 404).
  */
 export function ForumList() {
   const t = useMessages(forumMessages);
-  const language = useLanguage();
   const { me, loading, signedOut, expired } = useSession();
   const router = useRouter();
   const pathname = usePathname();
@@ -43,12 +53,8 @@ export function ForumList() {
   const [error, setError] = useState<ApiError | null>(null);
   const [missing, setMissing] = useState(false);
   const [attempt, setAttempt] = useState(0);
-  const [filter, setFilter] = useState<MeetingFilter>('all');
   const [creating, setCreating] = useState(false);
   const createOpened = useOpenedOnce(creating);
-  // UI V1 (UI-110): a phone in the field shell reads the Event-like cards; the console and wider screens as before.
-  const phone = usePhone();
-  const field = useFieldContent();
 
   useEffect(() => {
     if (!loading && !me) router.replace(signInAndReturn(pathname, { signedOut, expired }));
@@ -73,70 +79,97 @@ export function ForumList() {
   if (error && !view) return <LoadError error={error} onRetry={() => setAttempt((n) => n + 1)} />;
   if (!view) return <ListSkeleton />;
 
-  const shown = filterMeetings(view.meetings, filter);
-
-  const dialog = view.can.create && createOpened && (
-    <MeetingDialog
-      open={creating}
-      onClose={() => setCreating(false)}
-      limits={view.limits}
-      defaultTitle={defaultMeetingTitle(view.meetings, language)}
-      onCreated={(card) => router.push(`/leader-meetings/${encodeURIComponent(card.id)}`)}
-    />
-  );
-
-  if (phone && field) {
-    return (
-      <>
-        <V1ForumList
-          meetings={view.meetings}
-          filter={filter}
-          onFilter={setFilter}
-          create={view.can.create ? <Button onClick={() => setCreating(true)}>{t.newMeeting}</Button> : null}
-        />
-        {dialog}
-      </>
-    );
-  }
+  const next = view.meetings.find((m) => m.id === view.nextId) ?? null;
 
   return (
-    <>
-      <div className="mb-[22px] flex flex-wrap items-center gap-3">
-        {/* `#meeting-segmented` (`:596-601`): each button says whether it is the one on (I-255). */}
-        <div className="inline-flex rounded-[9px] border border-hairline bg-card p-[3px]">
-          {FILTERS.map((f) => (
-            <button
-              key={f}
-              type="button"
-              aria-pressed={filter === f}
-              onClick={() => setFilter(f)}
-              className={cn(
-                'rounded-md px-4 py-[7px] text-base font-semibold',
-                filter === f ? 'bg-secondary text-secondary-contrast' : 'text-muted hover:text-navy',
-              )}
-            >
-              {t.filters[f]}
-            </button>
-          ))}
-        </div>
+    <div data-forum-list="">
+      <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <p className="text-base text-muted">{t.note}</p>
         {view.can.create && (
-          <Button onClick={() => setCreating(true)}>{t.newMeeting}</Button>
+          <Button onClick={() => setCreating(true)} className="w-full md:w-auto">
+            <LineIcon name="plus" className="h-4 w-4" />
+            {t.newForum}
+          </Button>
         )}
       </div>
 
+      {next && <NextForumCard card={next} view={view} />}
+
+      <h2 className="mb-2 text-md font-bold text-navy">{t.all}</h2>
       {view.meetings.length === 0 ? (
-        <p className="rounded-lg border border-card-edge bg-card px-[18px] py-10 text-center text-base text-muted">
-          {t.noMeetings}
-        </p>
-      ) : shown.length === 0 ? (
-        <p className="px-[18px] py-10 text-center text-base text-muted">{t.noMatch}</p>
+        <p className="rounded-lg border border-card-edge bg-card px-4 py-10 text-center text-base text-muted">{t.noForums}</p>
       ) : (
-        <ul className="mb-8 flex flex-col gap-3">
-          {shown.map((meeting) => <MeetingCardRow key={meeting.id} meeting={meeting} />)}
+        <ul className="overflow-hidden rounded-lg border border-card-edge bg-card">
+          {view.meetings.map((card) => <ForumRow key={card.id} card={card} />)}
         </ul>
       )}
 
-      {dialog}
-    </>
+      {view.can.create && createOpened && (
+        <ForumDialog
+          mode="create"
+          open={creating}
+          today={view.today}
+          onClose={() => setCreating(false)}
+          onSaved={(card) => router.push(forumHref(card.id, 'agenda'))}
+        />
+      )}
+    </div>
+  );
+}
+
+/** **Forum berikutnya** — the navy card (AC-1). */
+function NextForumCard({ card, view }: { card: MeetingCard; view: MeetingListView }) {
+  const t = useMessages(forumMessages);
+  const words = useLanguage();
+  const language = useFigureLanguage();
+  return (
+    <section
+      data-next-forum={card.id}
+      aria-labelledby="next-forum-title"
+      className="mb-5 flex flex-col gap-4 rounded-lg bg-secondary px-4 py-4 text-secondary-contrast md:flex-row md:items-center md:justify-between md:px-5"
+    >
+      <div className="min-w-0">
+        <p className="text-sm font-semibold text-secondary-muted">{t.next}</p>
+        <h2 id="next-forum-title" className="font-display text-[28px] font-bold leading-tight text-primary-on-secondary">{t.forumN({ n: card.number })}</h2>
+        <p className="mt-1 text-md font-semibold text-secondary-contrast">
+          {forumWhen(card, language)} · {daysToGo(card.daysUntil, words)}
+        </p>
+        <CoreLeaderStack people={view.coreLeaders} onNavy className="mt-2" />
+      </div>
+      <Link href={forumHref(card.id, 'agenda')} className={cn(buttonClass('primary'), 'w-full shrink-0 md:w-auto')}>
+        {t.prepare}
+      </Link>
+    </section>
+  );
+}
+
+/** One forum in *Semua forum* — two lines on a phone (part C). */
+function ForumRow({ card }: { card: MeetingCard }) {
+  const t = useMessages(forumMessages);
+  const language = useFigureLanguage();
+  const summary = card.state === 'completed'
+    ? <>{t.actionsLabel} <b className="font-bold text-navy">{card.actionProgress.done}/{card.actionProgress.total}</b> {t.doneWord}</>
+    : t.agendaCount({ n: card.agendaCount });
+  return (
+    <li className="border-b border-divider last:border-0" data-forum-row={card.number}>
+      <Link
+        href={forumHref(card.id)}
+        aria-label={t.open({ n: card.number })}
+        className="flex min-h-14 items-center gap-3 px-4 py-2.5 hover:bg-hover-row focus-visible:bg-hover-row"
+      >
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-hover-row text-sm font-bold text-navy" aria-hidden="true">
+          {t.chipN({ n: card.number })}
+        </span>
+        <span className="min-w-0 flex-1">
+          <b className="block text-md font-bold text-navy">{t.forumN({ n: card.number })}</b>
+          <span className="block truncate text-sm text-muted">{forumWhen(card, language)}</span>
+        </span>
+        <span className="hidden text-sm text-muted md:inline">{summary}</span>
+        <span className={cn('shrink-0 rounded-pill px-2.5 py-0.5 text-sm font-semibold', STATE_PILL[card.state])}>
+          {t.state[card.state]}
+        </span>
+        <LineIcon name="chevronRight" className="h-4 w-4 shrink-0 text-muted" />
+      </Link>
+    </li>
   );
 }

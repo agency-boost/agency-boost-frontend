@@ -8,8 +8,9 @@ import {
 } from '@test/kpm-template-fixtures';
 import SectionPage from './page';
 
+const routerPush = vi.hoisted(() => vi.fn());
 vi.mock('next/navigation', () => ({
-  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+  useRouter: () => ({ push: routerPush, replace: vi.fn() }),
   usePathname: () => '/admin/companies/c1/templates/t-default/training',
 }));
 
@@ -86,7 +87,11 @@ describe('P19.4-T1 the template’s Training section', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 
-  it('P19.4-T1 AC-6 after a section’s Terbitkan, asks whether the offices made from the template take it too', async () => {
+  /*
+   * *Changed 2026-11-20 (P19.23-T4 AC-5; ADR-0278 §7):* an insurer's section publishes from *Terbitkan ke KPM* —
+   * nothing automatic, nothing pre-selected — so its *Terbitkan* opens that tab, and ADR-0208's question is not asked.
+   */
+  it('P19.23-T4 AC-5 an insurer’s section Terbitkan opens Terbitkan ke KPM, publishing nothing and asking nothing', async () => {
     const stub = render({
       '/admin/companies/c1/template/training_taxonomy': {
         body: kindView('training_taxonomy', TRAINING, { status: 'draft', version: 2, publishedVersion: 1, revision: 3 }),
@@ -102,10 +107,9 @@ describe('P19.4-T1 the template’s Training section', () => {
       },
     });
     await userEvent.click(await screen.findByRole('button', { name: 'Publish' }));
-    const dialog = within(await screen.findByRole('dialog', { name: 'Apply to existing offices too?' }));
-    expect(await dialog.findByRole('checkbox', { name: /KPM 0417/ })).toBeChecked();
-    expect(stub.calls.some((c) => c.url.includes('/offices?kind=training_taxonomy'))).toBe(true);
-    await userEvent.click(dialog.getByRole('button', { name: 'Not now' }));
+    await vi.waitFor(() => expect(routerPush).toHaveBeenCalledWith('/admin/companies/c1/publish'));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(stub.calls.some((c) => c.url.endsWith('/publish') && c.init.method === 'POST')).toBe(false);
     expect(stub.calls.some((c) => c.url.endsWith('/apply'))).toBe(false);
   });
 });

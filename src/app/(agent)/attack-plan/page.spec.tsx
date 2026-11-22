@@ -96,7 +96,8 @@ describe('/attack-plan, the Sales Attack Plan (P14-T8)', () => {
     it('P14-T8 AC-2, P18.7-T7 AC-1 the title, one line for the brief, the step pills and the card; no plan read yet, the shelf read once', async () => {
       const { calls } = show();
       await screen.findByRole('heading', { level: 2, name: 'Who are we talking to?' });
-      expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^Sales Attack Plan$/);
+      // P19.13-T4 AC-1 (UI-197): the menu's *Sales*, where the title was *Sales Attack Plan*.
+      expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^Sales$/);
       // Grey text row 10: the sub-line and the hint became the client's one line, at every size — the page has no sub-line.
       expect(screen.queryByText('Tell us about the customer. Get the product, the pitch, and the objection response.')).not.toBeInTheDocument();
       expect(screen.getByRole('heading', { level: 1 }).nextElementSibling).toBeNull();

@@ -4,6 +4,7 @@ import { useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { applyPalette, brandingApi, brandingFileUrl, kpmIdFromLink, type PublicBranding } from '@/lib/branding';
 import { inviteTokenOf, readInviteBanner } from '@/lib/invites';
+import { currentSystemName, setSystemName } from '@/i18n/system-name';
 
 type Shown = PublicBranding & { kpmId: string };
 
@@ -33,7 +34,15 @@ export function LinkBranding() {
 
   useEffect(() => {
     applyPalette(shown?.palette ?? null);
-    return () => applyPalette(null);
+    // P19.21-T4 (ADR-0274): the page calls the app what the KPM calls it, while it is open. An invitation's read carries
+    // no name, so it keeps AgencyBoost.
+    const named = shown?.systemName?.trim() || null;
+    if (named) setSystemName(named);
+    return () => {
+      applyPalette(null);
+      // Only the name this page set: a session that signed in meanwhile keeps its own.
+      if (named && currentSystemName() === named) setSystemName(null);
+    };
   }, [shown]);
 
   if (!shown?.logo || !shown.version) return null;
