@@ -56,7 +56,8 @@ describe('P19.23-T4 AC-3 the catalogue', () => {
     expect(await screen.findByRole('button', { name: 'Semua 3' })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByRole('button', { name: 'Jiwa 2' })).toBeInTheDocument();
     const jiwa = screen.getByRole('region', { name: 'Jiwa' });
-    expect(within(jiwa).getByText('2 produk')).toBeInTheDocument();
+    // The heading's count, and the phone's section header's (P19.26-T4, drawn below 768px alone).
+    expect(within(jiwa).getAllByText('2 produk')).toHaveLength(2);
     expect(screen.queryByText('Old product')).toBeNull();
     const sehat = document.querySelector('[data-product-card="PRUSEHAT"]') as HTMLElement;
     expect(within(sehat).getByText('PRUSehat Plus')).toBeInTheDocument();
@@ -67,6 +68,46 @@ describe('P19.23-T4 AC-3 the catalogue', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Kesehatan 1' }));
     expect(screen.queryByRole('region', { name: 'Jiwa' })).toBeNull();
+  });
+
+  /*
+   * **P19.26-T4 (UI-216 (21 Nov)): the catalogue on a phone.** Each category a section that opens and closes with its
+   * count; each product a 56px row — name, *Syariah* only when syariah, a currency only when not IDR, ›. From 768px the
+   * cards, as before. jsdom applies no media query: the two layouts are asserted by their classes.
+   */
+  it('P19.26-T4 AC-1 AC-2 AC-3 on a phone: sections that open and close, 56px rows, Syariah and a currency only when they say something', async () => {
+    atWidth(375);
+    render({
+      '/admin/companies/c1/products': {
+        body: [...PRODUCTS.slice(0, 2), product('p3', 'PRUCINTA', 'PRUCinta', 'life', { channel: 'syariah', currencies: ['IDR', 'USD'] })],
+      },
+    });
+    const section = await screen.findByRole('button', { name: /Jiwa.*2 produk/ });
+    expect(section.closest('[data-product-section]')).toHaveClass('md:hidden');
+    // The category chips are 44px tall on a phone (the walk of 2026-11-22: 40px); 40px from 768px as before.
+    for (const chip of within(screen.getByRole('group', { name: /./ })).getAllByRole('button')) {
+      expect(chip).toHaveClass('min-h-10', 'max-md:min-h-11');
+    }
+    // The cards are the tablet's and the laptop's.
+    expect(document.querySelector('[data-product-card="PRUMAPAN"]')!.closest('ul')).toHaveClass('max-md:hidden');
+    expect(section).toHaveAttribute('aria-expanded', 'false');
+    expect(document.querySelector('[data-product-row]')).toBeNull();
+
+    await userEvent.click(section);
+    expect(section).toHaveAttribute('aria-expanded', 'true');
+    const mapan = document.querySelector('[data-product-row="PRUMAPAN"]') as HTMLElement;
+    expect(mapan).toHaveClass('min-h-14');
+    expect(within(mapan).getByRole('link')).toHaveAttribute('href', '/admin/companies/c1/products/p1');
+    // Conventional and IDR: nothing beside the name.
+    expect(within(mapan).queryByText('Konvensional')).toBeNull();
+    expect(within(mapan).queryByText('IDR')).toBeNull();
+    const cinta = document.querySelector('[data-product-row="PRUCINTA"]') as HTMLElement;
+    expect(within(cinta).getByText('Syariah')).toBeInTheDocument();
+    expect(within(cinta).getByText('USD')).toBeInTheDocument();
+    expect(within(cinta).queryByText('IDR')).toBeNull();
+
+    await userEvent.click(section);
+    expect(document.querySelector('[data-product-row]')).toBeNull();
   });
 
   it('P19.23-T4 AC-3 + Produk baru makes a product no KPM has yet, and opens it', async () => {

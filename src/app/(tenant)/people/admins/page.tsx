@@ -8,20 +8,25 @@ import { Avatar } from '@/components/ui/avatar';
 import { Dialog } from '@/components/ui/dialog';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Button, ErrorBanner } from '@/components/ui/field';
+import { KpmOwnersList } from '@/components/admin/kpm-owner-admin-section';
 import { LineIcon } from '@/components/ui/line-icon';
+import { REMOVED_ON_PHONE } from '@/components/ui/phone';
+import { TippedGlyph } from '@/components/ui/tipped-glyph';
 import type { NavIconName } from '@/components/ui/nav-icon';
 import { rungShort, useLadder } from '@/components/ui/role-badge';
 import { SkeletonCards } from '@/components/ui/skeleton';
 import { kept } from '@/i18n/kept';
 import { useFigureLanguage, useMessages } from '@/i18n/language-provider';
 import { adminsMessages } from '@/i18n/messages/admins';
+import { kpmOwnersMessages } from '@/i18n/messages/kpm-owners';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
-import { displayName } from '@/lib/display-name';
 import { formatOfficeMonth, OFFICE_TIME_ZONE } from '@/lib/format';
 import { grantAdmin, listAdmins, readOrgTree, revokeAdmin, type DelegatedAdmin } from '@/lib/org';
 import { firstNameOf, readStewards, type KpmStewards } from '@/lib/people';
-import { useCan } from '@/lib/session';
+import { useCan, useSession } from '@/lib/session';
+import { enteredKpmId } from '@/lib/super-admin-kpm';
+import { usePhone } from '@/lib/use-phone';
 
 /** A delegated admin, with their photo (P19.20-T4 AC-2). */
 type AdminRow = DelegatedAdmin & { photoUrl?: string | null };
@@ -41,9 +46,12 @@ type AdminRow = DelegatedAdmin & { photoUrl?: string | null };
  */
 export default function AdminsPage() {
   const t = useMessages(adminsMessages);
+  const o = useMessages(kpmOwnersMessages);
+  const { me } = useSession();
   const figures = useFigureLanguage();
   const ladder = useLadder();
   const manages = useCan('kpm_admin:grant');
+  const phone = usePhone();
   const [admins, setAdmins] = useState<AdminRow[] | null>(null);
   const [stewards, setStewards] = useState<KpmStewards | null>(null);
   const [candidates, setCandidates] = useState<PickerPerson[]>([]);
@@ -79,7 +87,9 @@ export default function AdminsPage() {
       const tree = await readOrgTree(undefined, 'kpm');
       const already = new Set((admins ?? []).map((a) => a.membershipId));
       setCandidates(tree.nodes
-        .filter((n) => !n.isSelf && !already.has(n.membershipId) && n.membershipId !== stewards?.owner?.membershipId)
+        // Never an owner (ADR-0285: any of them) — an owner's rights are the KPM's own, not a grant.
+        .filter((n) => !n.isSelf && !already.has(n.membershipId) && !(stewards?.owners ?? []).some((w) => w.membershipId === n.membershipId)
+          && n.membershipId !== stewards?.owner?.membershipId)
         .map((n) => ({ membershipId: n.membershipId, fullName: n.fullName, preferredName: n.preferredName, agentCode: n.agentCode, role: n.role, photoUrl: n.photoUrl }))
         .sort((a, b) => a.fullName.localeCompare(b.fullName)));
     } catch (err) {
@@ -107,13 +117,31 @@ export default function AdminsPage() {
       {error && !picking && <div className="mb-3"><ErrorBanner {...error} /></div>}
 
       <div className="mb-5 grid gap-2 md:grid-cols-3">
-        <Tile icon="building" title={t.tiles.owner} line={t.tiles.ownerLine}
-          foot={stewards?.owner ? <span className="uppercase">{displayName(stewards.owner)}</span> : null} />
-        <Tile icon="shield" title={t.tiles.admin} line={t.tiles.adminLine}
+        {/*
+          * No name at the tile's foot: *KPM Owner · n* below names every owner, and the tile named the first a second time
+          * (the integration round's walk, 2026-11-22; F-2 keeps the list). The tile keeps its title and what an owner may do.
+          */}
+        <Tile icon="building" title={t.tiles.owner} line={t.tiles.ownerLine} about={o.about} foot={null} />
+        <Tile icon="shield" title={t.tiles.admin} line={t.tiles.adminLine} about={o.about}
           foot={stewards ? t.tiles.people({ n: stewards.admins }) : null} />
-        <Tile icon="star" title={t.tiles.core} line={t.tiles.coreLine}
+        <Tile icon="star" title={t.tiles.core} line={t.tiles.coreLine} about={o.about}
           foot={stewards ? `${t.tiles.people({ n: stewards.coreLeaders })} · ${t.tiles.coreWhere}` : null} />
       </div>
+
+      {/*
+        * ***KPM Owner · n*** (P19.27-T4 AC-1; ADR-0285): every owner, the same list as the KPM page's. An owner adds and
+        * removes the others, never the last and never themselves; an Admin reads it without the controls, and the API
+        * refuses them besides (`PERM_OWNER_ONLY`).
+        */}
+      {stewards && (
+        <section aria-label={o.title({ n: String(stewards.owners.length) })} className="mb-5 rounded-lg bg-card px-4 py-2" data-owners-card="">
+          <KpmOwnersList
+            list={{ owners: stewards.owners, canManage: stewards.canManageOwners }}
+            kpmId={me?.membership?.kpmId ?? enteredKpmId()}
+            onChanged={() => void load()}
+          />
+        </section>
+      )}
 
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
         <h2 className="font-display text-md font-bold text-navy">{t.listTitle}</h2>
@@ -126,7 +154,8 @@ export default function AdminsPage() {
 
       {admins === null && !error && <SkeletonCards count={2} label={t.loading} />}
       {admins?.length === 0 && !error && (
-        <div className="rounded-lg border border-card-edge bg-card"><EmptyState title={t.empty} /></div>
+        // On a phone *Belum ada admin* alone (mockup screen 6; UI-213 (21 Nov)): who looks after the KPM then is the tile's ⓘ.
+        <div className="rounded-lg border border-card-edge bg-card"><EmptyState title={phone ? o.noAdmins : t.empty} /></div>
       )}
       {admins && admins.length > 0 && (
         <ul aria-label={t.caption} className="flex flex-col gap-2">
@@ -155,7 +184,9 @@ export default function AdminsPage() {
         </ul>
       )}
       <p className="mt-2 text-sm text-muted">
-        {!manages && <>{t.readOnly} · </>}{t.coreNote}
+        {!manages && <>{t.readOnly}<span className={REMOVED_ON_PHONE}> · </span></>}
+        {/* Not on a phone (P19.27-T4 AC-2; UI-213 (21 Nov)). */}
+        <span className={REMOVED_ON_PHONE}>{t.coreNote}</span>
       </p>
 
       {picking && (
@@ -184,16 +215,28 @@ export default function AdminsPage() {
   );
 }
 
-/** One of the three tiles: its icon, who, what they may do, and the line at its foot. */
-function Tile({ icon, title, line, foot }: { icon: NavIconName; title: string; line: string; foot: React.ReactNode }) {
+/**
+ * One of the three tiles: its icon, who, what they may do, and the line at its foot. *On a phone the description is
+ * behind ⓘ beside the title* (P19.27-T4 AC-2; UI-213 (21 Nov)); from 768px it reads under the title as before.
+ */
+function Tile({ icon, title, line, foot, about }: { icon: NavIconName; title: string; line: string; foot: React.ReactNode; about: string }) {
   return (
     <div className="flex gap-3 rounded-lg bg-card p-4">
       <span className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-base text-navy')}>
         <LineIcon name={icon} className="h-5 w-5" />
       </span>
       <div className="min-w-0">
-        <h2 className="text-md font-bold text-navy">{title}</h2>
-        <p className="text-sm text-muted">{line}</p>
+        <h2 className="flex items-center gap-1 text-md font-bold text-navy">
+          {title}
+          <TippedGlyph
+            glyph={<LineIcon name="info" className="h-[18px] w-[18px]" />}
+            name={`${about}: ${title}`}
+            tip={line}
+            align="fit"
+            className="md:hidden"
+          />
+        </h2>
+        <p className={cn('text-sm text-muted', REMOVED_ON_PHONE)}>{line}</p>
         {foot && <p className="mt-1 text-sm font-bold text-navy">{foot}</p>}
       </div>
     </div>

@@ -74,7 +74,8 @@ describe('/admin/tenants — the KPM list (P19.23-T2)', () => {
     expect(bsd.getByText('57%')).toHaveClass('bg-pill-amber');
     expect(bsd.getByText('Tidak ada yang perlu')).toBeInTheDocument();
     expect(bsd.queryByText('Aktif')).not.toBeInTheDocument();
-    expect(card(MAGNI).getByText('Belum ada anggota')).toBeInTheDocument();
+    // OD-477: the issue says what it means, so it never contradicts the card's *1 anggota* (the owner).
+    expect(card(MAGNI).getByText('Belum ada anggota selain owner')).toBeInTheDocument();
     expect(card(CEMPAKA).getByText('Owner belum diundang')).toBeInTheDocument();
     expect(card(GADING).getByText('Langganan berakhir')).toBeInTheDocument();
     expect(card(HOLD).getByText('Ditangguhkan · anggota tidak bisa masuk')).toBeInTheDocument();
@@ -106,14 +107,18 @@ describe('/admin/tenants — the KPM list (P19.23-T2)', () => {
     expect(enteredKpmId()).toBe(BSD);
   });
 
-  it('P19.23-T2 AC-2 ⋯: Ganti owner · Pindah perusahaan · Tangguhkan · Arsipkan · Hapus KPM, the last red', async () => {
+  it('P19.27-T3 AC-4 ⋯: Kelola owner · Pindah perusahaan · Tangguhkan · Arsipkan · Hapus KPM; Kelola owner opens the KPM page’s owners', async () => {
     renderInIndonesian(<KpmListPage />, { me: CONSOLE_SUPER_ADMIN });
     await screen.findByText('BSD City Branch');
     await userEvent.click(card(BSD).getByRole('button', { name: 'Tindakan untuk BSD City Branch' }));
     const items = screen.getAllByRole('menuitem').map((i) => i.textContent?.trim());
-    expect(items).toEqual(['Ganti owner', 'Pindah perusahaan', 'Tangguhkan', 'Arsipkan', 'Hapus KPM']);
-    await userEvent.click(screen.getByRole('menuitem', { name: 'Ganti owner' }));
-    expect(push).toHaveBeenCalledWith(`/admin/tenants/${BSD}/owner`);
+    expect(items).toEqual(['Kelola owner', 'Pindah perusahaan', 'Tangguhkan', 'Arsipkan', 'Hapus KPM']);
+    // *Hapus KPM* red and last (the Super Admin spec §5); the rest navy.
+    expect(screen.getByRole('menuitem', { name: 'Hapus KPM' })).toHaveClass('text-alert');
+    expect(screen.getByRole('menuitem', { name: 'Arsipkan' })).not.toHaveClass('text-alert');
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Kelola owner' }));
+    expect(push).toHaveBeenCalledWith(`/admin/tenants/${BSD}#owners`);
+    expect(enteredKpmId()).toBe(BSD);
   });
 
   it('P19.23-T2 AC-2 a suspended KPM offers Aktifkan lagi where Tangguhkan stood', async () => {
@@ -121,7 +126,7 @@ describe('/admin/tenants — the KPM list (P19.23-T2)', () => {
     await screen.findByText('Suspended Branch');
     await userEvent.click(card(HOLD).getByRole('button', { name: 'Tindakan untuk Suspended Branch' }));
     expect(screen.getAllByRole('menuitem').map((i) => i.textContent?.trim()))
-      .toEqual(['Ganti owner', 'Pindah perusahaan', 'Aktifkan lagi', 'Arsipkan', 'Hapus KPM']);
+      .toEqual(['Kelola owner', 'Pindah perusahaan', 'Aktifkan lagi', 'Arsipkan', 'Hapus KPM']);
   });
 
   it('P19.23-T2 AC-2 Tangguhkan asks a reason, saves it, and the list reads again', async () => {
@@ -184,18 +189,111 @@ describe('/admin/tenants — the KPM list (P19.23-T2)', () => {
     expect(screen.getByRole('button', { name: /Kirim undangan/ })).toBeInTheDocument();
   });
 
+  it('?created=<id> — Buat KPM & jadikan owner landing here — puts that KPM first, the others in their order (stop motion B)', async () => {
+    const order = () => Array.from(document.querySelectorAll('[data-kpm-card]')).map((el) => el.getAttribute('data-kpm-card'));
+    const { unmount } = renderInIndonesian(<KpmListPage />, { me: CONSOLE_SUPER_ADMIN });
+    await screen.findByText('BSD City Branch');
+    const before = order();
+    expect(before[0]).not.toBe(CEMPAKA);
+    unmount();
+    query.value = new URLSearchParams(`created=${CEMPAKA}`);
+    renderInIndonesian(<KpmListPage />, { me: CONSOLE_SUPER_ADMIN });
+    await screen.findByText('BSD City Branch');
+    expect(order()).toEqual([CEMPAKA, ...before.filter((id) => id !== CEMPAKA)]);
+  });
+
   it('P19.23-T2 AC-3 ?baru=1 — the old three-step address — opens KPM baru', async () => {
     query.value = new URLSearchParams('baru=1');
     renderInIndonesian(<KpmListPage />, { me: CONSOLE_SUPER_ADMIN });
     expect(await screen.findByRole('dialog', { name: 'KPM baru' })).toBeInTheDocument();
   });
 
-  it('P19.23-T7 AC-1 on a phone the filter is a dropdown beside the search, and KPM baru full width', async () => {
+  it('P19.27-T3 AC-3 on a phone the filter is chips — Semua · Perlu tindakan · per company — 44px, wrapping; KPM baru full width', async () => {
     atWidth(375);
     renderInIndonesian(<KpmListPage />, { me: CONSOLE_SUPER_ADMIN });
     await screen.findByText('BSD City Branch');
     expect(screen.getByRole('button', { name: 'KPM baru' })).toHaveClass('max-md:w-full');
-    expect(document.querySelector('[role="group"][aria-label="Tampilkan"]')).toHaveClass('max-md:hidden');
+    const chips = document.querySelector('[role="group"][aria-label="Tampilkan"]') as HTMLElement;
+    expect(chips).not.toHaveClass('max-md:hidden');
+    // They wrap onto a second line rather than scroll in their own box, so none is cut (UI-207; the walk of 2026-11-22).
+    expect(chips).toHaveClass('flex-wrap');
+    expect(chips).not.toHaveClass('max-md:overflow-x-auto');
+    expect(chips).not.toHaveClass('max-md:flex-nowrap');
+    expect(within(chips).getAllByRole('button').map((b) => b.textContent)).toEqual(['Semua 5', 'Perlu tindakan 3', 'Prudential', 'Sejahtera Baru Life']);
+    expect(within(chips).getByRole('button', { name: 'Semua 5' })).toHaveClass('max-md:h-11');
+    // No dropdown in its place any more.
+    expect(screen.queryByRole('button', { name: /^Tampilkan/ })).not.toBeInTheDocument();
+  });
+
+  it('P19.27-T3 AC-1, AC-2 on a phone a card is one tap into the KPM: name, company · n anggota, ♛ FIRST OWNER +n, %, one warning', async () => {
+    atWidth(375);
+    const kpms = DASHBOARD.kpms.map((k) => (k.kpmId === BSD ? { ...k, ownerNames: ['WILSON TANOTO', 'SARI PUSPITA'] } : k));
+    stubFetch({ '/admin/dashboard': { body: { ...DASHBOARD, kpms } } });
+    renderInIndonesian(<KpmListPage />, { me: CONSOLE_SUPER_ADMIN });
+    await screen.findByText('BSD City Branch');
+    const bsd = document.querySelector(`[data-kpm-card="${BSD}"]`) as HTMLElement;
+    expect(bsd).toHaveTextContent('Prudential · 30 anggota');
+    expect(bsd).toHaveTextContent('WILSON TANOTO+1');
+    expect(bsd).toHaveTextContent('dan 1 owner lain');
+    // The whole card is the link; no *Masuk ke KPM →* row and no *Tidak ada yang perlu*.
+    const link = card(BSD).getByRole('link', { name: 'Masuk ke KPM · BSD City Branch' });
+    expect(link).toHaveAttribute('href', `/admin/tenants/${BSD}`);
+    expect(bsd).not.toHaveTextContent('Tidak ada yang perlu');
+    expect(card(BSD).getAllByRole('link')).toHaveLength(1);
+    await userEvent.click(link);
+    expect(enteredKpmId()).toBe(BSD);
+    // One warning pill, only when there is one: Cempaka's first.
+    expect(document.querySelector(`[data-kpm-card="${CEMPAKA}"] [data-kpm-issue]`)).toHaveTextContent('Owner belum diundang');
+    expect(document.querySelector(`[data-kpm-card="${BSD}"] [data-kpm-issue]`)).toBeNull();
+  });
+
+  it('P19.27-T3 AC-2 a KPM with nobody besides its owner says “1 anggota” once, never beside “Belum ada anggota” (OD-454)', async () => {
+    atWidth(375);
+    renderInIndonesian(<KpmListPage />, { me: CONSOLE_SUPER_ADMIN });
+    await screen.findByText('Magni');
+    const magni = document.querySelector(`[data-kpm-card="${MAGNI}"]`) as HTMLElement;
+    expect(magni).toHaveTextContent('Prudential · 1 anggota');
+    expect(magni).not.toHaveTextContent('Belum ada anggota');
+    expect(magni.querySelector('[data-kpm-issue]')).toBeNull();
+    // Still *Perlu tindakan*: the filter finds it.
+    await userEvent.click(screen.getByRole('button', { name: 'Perlu tindakan 3' }));
+    expect(screen.getByText('Magni')).toBeInTheDocument();
+  });
+
+  it('OD-477 a KPM in its trial with nothing to act on reads *Trial n hari* on a phone; not from 768px', async () => {
+    const trial = { ...DASHBOARD, kpms: DASHBOARD.kpms.map((k) => (k.kpmId === BSD ? { ...k, trialDaysLeft: 30 } : k)) };
+    stubFetch({ '/admin/dashboard': { body: trial } });
+    atWidth(375);
+    const { unmount } = renderInIndonesian(<KpmListPage />, { me: CONSOLE_SUPER_ADMIN });
+    await screen.findByText('BSD City Branch');
+    const bsd = document.querySelector(`[data-kpm-card="${BSD}"]`) as HTMLElement;
+    expect(bsd.querySelector('[data-kpm-trial]')).toHaveTextContent('Trial 30 hari');
+    expect(bsd.querySelector('[data-kpm-issue]')).toBeNull();
+    // A KPM with something to act on shows that, never the trial.
+    expect(document.querySelector(`[data-kpm-card="${CEMPAKA}"] [data-kpm-trial]`)).toBeNull();
+    unmount();
+    atWidth(1024);
+    renderInIndonesian(<KpmListPage />, { me: CONSOLE_SUPER_ADMIN });
+    await screen.findByText('BSD City Branch');
+    expect(document.querySelector('[data-kpm-trial]')).toBeNull();
+  });
+
+  it('P19.27-T3 AC-5 on a phone the two notes are not drawn; from 768px they read as before', async () => {
+    atWidth(375);
+    renderInIndonesian(<KpmListPage />, { me: CONSOLE_SUPER_ADMIN });
+    await screen.findByText('BSD City Branch');
+    expect(screen.getByText('Ketuk KPM = masuk sebagai owner-nya').closest('ul')).toHaveClass('max-md:hidden');
+    expect(screen.getByText('⋯ = kelola owner, pindah perusahaan, tangguhkan, arsipkan, hapus')).toBeInTheDocument();
+  });
+
+  it('P19.27-T3 the search finds a KPM by any of its owners', async () => {
+    const kpms = DASHBOARD.kpms.map((k) => (k.kpmId === BSD ? { ...k, ownerNames: ['WILSON TANOTO', 'SARI PUSPITA'] } : k));
+    stubFetch({ '/admin/dashboard': { body: { ...DASHBOARD, kpms } } });
+    renderInIndonesian(<KpmListPage />, { me: CONSOLE_SUPER_ADMIN });
+    await screen.findByText('BSD City Branch');
+    await userEvent.type(screen.getByRole('searchbox'), 'sari');
+    expect(screen.getByText('BSD City Branch')).toBeInTheDocument();
+    expect(screen.queryByText('Magni')).not.toBeInTheDocument();
   });
 
   it('P19.23-T2 axe on the populated list', async () => {

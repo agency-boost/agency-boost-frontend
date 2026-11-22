@@ -26,12 +26,15 @@ const STATUS_TONE: Record<string, PillTone> = {
  * answers at once and *Yang kami pahami* opens, asking again until the reading is done.
  *
  * - **Without the Anthropic key** the button is disabled and one line says reading is not switched on, naming the
- *   premium table's own Excel/CSV upload, which still works.
+ *   premium table's own Excel/CSV upload, which still works. `explainOff={false}` leaves the line out: *Perusahaan*,
+ *   where Platform › Pengaturan alone says it (P19.26-T5 AC-1; UI-213 (21 Nov), ADR-0283 §7).
  * - **A reader who may only read** (a KPM Owner or Admin without *Kelola data produk*) gets no button — the server refuses
  *   the upload too — and still opens the uploads to read them.
  * - **One line under it** opens the recent uploads, saying how many questions wait.
  */
-export function IntakePanel({ companyId, canManage }: { companyId: string | null; canManage: boolean }) {
+export function IntakePanel({
+  companyId, canManage, explainOff = true,
+}: { companyId: string | null; canManage: boolean; explainOff?: boolean }) {
   const t = useMessages(productDataIntakeMessages).intake;
   const [list, setList] = useState<IntakeList | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
@@ -59,12 +62,12 @@ export function IntakePanel({ companyId, canManage }: { companyId: string | null
       {error && <ErrorBanner {...error} />}
       {canManage && (
         <div className="flex">
-          <Button onClick={() => setUploading(true)} disabled={list === null || off} aria-describedby={off ? offId : undefined} className="max-md:flex-1">
+          <Button onClick={() => setUploading(true)} disabled={list === null || off} aria-describedby={off && explainOff ? offId : undefined} className="max-md:flex-1">
             {t.button}
           </Button>
         </div>
       )}
-      {canManage && off && <p id={offId} className="text-sm text-muted">{t.off}</p>}
+      {canManage && off && explainOff && <p id={offId} className="text-sm text-muted">{t.off}</p>}
       {list && list.intakes.length > 0 && (
         <button type="button" className="self-start text-sm text-navy underline underline-offset-2" onClick={() => setListOpen(true)}>
           {t.recent({ count: list.intakes.length })}

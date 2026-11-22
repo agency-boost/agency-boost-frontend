@@ -123,7 +123,8 @@ export default function CompaniesPage() {
   return (
     <Page title={t.title}>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <p className="text-md text-muted">{t.lead}</p>
+        {/* No subtitle on a phone (UI-213 (21 Nov)); from 768px as before. */}
+        <p className="text-md text-muted max-md:hidden">{t.lead}</p>
         <Button className="gap-1 max-md:w-full" onClick={() => setCreating(true)}>
           <LineIcon name="plus" className="h-4 w-4" />
           {t.newCompany}
@@ -180,7 +181,7 @@ export default function CompaniesPage() {
                       {count ? t.card.members({ n: count.memberCount }) : '—'}
                     </span>
                   </p>
-                  {summary && <TemplateLine summary={summary} />}
+                  {summary && <TemplateLine summary={summary} kpms={count?.kpmCount ?? null} />}
                   <CardLink href={companyHref(c._id)}>{t.card.open}</CardLink>
                 </article>
               </li>
@@ -195,7 +196,8 @@ export default function CompaniesPage() {
 
       {/* P19.15-T3 (ADR-0259): *Unggah file* for a file of any insurer — kept from before. */}
       <div className="mt-6">
-        <IntakeButton companyId={null} canManage />
+        {/* *Pembacaan file belum dinyalakan…* is Platform › Pengaturan's alone, at every size (UI-213 (21 Nov); ADR-0283 §7). */}
+        <IntakeButton companyId={null} canManage explainOff={false} />
       </div>
 
       {creating && (
@@ -264,16 +266,19 @@ function CardLink({ href, children }: { href: string; children: string }) {
 }
 
 /** The template's one line: changes waiting (amber), every KPM current (green), or an empty template (amber). */
-function TemplateLine({ summary }: { summary: PublicationSummary }) {
+function TemplateLine({ summary, kpms }: { summary: PublicationSummary; kpms: number | null }) {
   const t = useMessages(adminCompaniesConsoleMessages).card;
   const [words, good] = summary.templateEmpty ? [t.empty, false]
     : summary.changes > 0 ? [t.waiting({ n: summary.changes }), false] : [t.current, true];
+  // *Semua KPM memakai versi terbaru* of a company with no KPM says nothing true: on a phone it goes (UI-218 (21 Nov)).
+  const noKpm = good && kpms === 0;
   return (
     <p
       data-template-line={good ? 'current' : summary.templateEmpty ? 'empty' : 'waiting'}
       className={cn(
         'flex items-center gap-1.5 rounded-md px-3 py-1.5 text-md font-semibold',
         good ? 'bg-success/10 text-success' : 'bg-primary-50 text-primary-ink',
+        noKpm && 'max-md:hidden',
       )}
     >
       <LineIcon name={good ? 'check' : 'info'} className="h-4 w-4" />

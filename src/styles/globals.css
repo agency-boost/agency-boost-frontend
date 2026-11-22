@@ -154,6 +154,12 @@
   --color-tenure-3: #c2611e;
   --color-tenure-4: #7e3a0e;
   --color-on-navy-red: #f27979;
+  /*
+   * **The navy card's light orange** (P19.26-T0 AC-4, T2 AC-2; ADR-0283 §4, ADR-0284 §4; UI-206 (21 Nov): *"the big numbers
+   * and the % values use the light orange #F5B67A"*): a figure on the Dashboard's navy card, lighter than the accent.
+   * 8.3:1 on navy.
+   */
+  --color-on-navy-orange: #f5b67a;
   --color-on-navy-green: #97c459;
   --color-on-navy-lavender: #9aa6e0;
   --color-ink: #1c1c1a;
@@ -281,6 +287,14 @@
    * `text-title`, whose width is the stylesheet's (*V1 surfaces*, below).
    */
   --text-title: 1.25rem;
+  /*
+   * **The Super Admin's phone type scale, its two sizes the scale lacked** (P19.26-T0 AC-4; ADR-0283 §4, ADR-0284 §4;
+   * `revisions/2026-11-21/BRIEF-ADJUSTMENTS-2026-11-21.md`, *One type scale*): `text-row`, 15px — a list row (600), a
+   * message's body (400), a section title or a main button (700); `text-figure`, 24px — a big number (800). Every other
+   * size of the brief's table is a step the scale has (`tokens.md`, *The phone type scale*).
+   */
+  --text-row: 0.9375rem;
+  --text-figure: 1.5rem;
 
   /* The width of a scrolling tab row's edge fade on a phone: the sub-tab gap, `--space-6`. */
   --tab-fade: 1.5rem;

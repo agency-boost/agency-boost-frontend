@@ -7,6 +7,6 @@ import { IntakePanel } from './intake-panel';
  * renders `<IntakeButton companyId canManage />` at its top, and *Perusahaan* renders it with `companyId` `null` for a
  * file of any insurer. The button, the upload, the recent uploads and *Yang kami pahami* are `IntakePanel`'s.
  */
-export function IntakeButton({ companyId, canManage }: { companyId: string | null; canManage: boolean }) {
-  return <IntakePanel companyId={companyId} canManage={canManage} />;
+export function IntakeButton({ companyId, canManage, explainOff }: { companyId: string | null; canManage: boolean; explainOff?: boolean }) {
+  return <IntakePanel companyId={companyId} canManage={canManage} explainOff={explainOff} />;
 }

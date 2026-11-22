@@ -13,6 +13,12 @@ export interface ActionMenuItem {
   glyph?: string;
   /** Which way the glyph reads: green where it succeeds, red where it does not. */
   tone?: 'neutral' | 'success' | 'alert';
+  /**
+   * **A destructive act, its words in red** (`text-alert`, the danger token) while it is live — *Hapus sebagai owner*,
+   * *Hapus KPM*, which the design draws red and last (the 21 November brief, screen 8; the Super Admin spec §5). `tone`
+   * colours the glyph alone, and most items have none. Unavailable, it greys as any other.
+   */
+  danger?: boolean;
   /** There and not live: still reached by the arrows, announced as unavailable, and doing nothing. */
   disabled?: boolean;
   /** Why it is not live — beneath it on the screen, and its accessible description. */
@@ -64,8 +70,11 @@ export function ActionMenu({
   items: readonly ActionMenuItem[];
   /** A row that is not yet anything to act on: ⋮ is there and plainly not live, and opens nothing. */
   inert?: boolean;
-  /** The button's glyph: ⋮ by default; ⋯ where the design draws it (`/admin`'s rows, UI-126). */
-  glyph?: '⋮' | '⋯';
+  /**
+   * The button's glyph: ⋮ by default; ⋯ where the design draws it (`/admin`'s rows, UI-126); or a line icon where the
+   * design draws one (P19.29-T1: the KPM page's phone header, UI-200 (21 Nov)), hidden from assistive technology as these are.
+   */
+  glyph?: '⋮' | '⋯' | React.ReactElement;
   /** The button's own size where a page needs more than the primitive's (UI-135: 44px on a tablet too). */
   triggerClassName?: string;
 }) {
@@ -221,7 +230,7 @@ export function ActionMenu({
                 className={cn(
                   'flex w-full items-start gap-2.5 px-3 py-2 text-left text-md',
                   'hover:bg-secondary/[0.04] focus:bg-secondary/[0.06]',
-                  item.disabled ? 'cursor-not-allowed text-muted' : 'text-navy',
+                  item.disabled ? 'cursor-not-allowed text-muted' : item.danger ? 'text-alert' : 'text-navy',
                 )}
               >
                 <span

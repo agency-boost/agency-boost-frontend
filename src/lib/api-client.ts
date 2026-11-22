@@ -3,7 +3,7 @@
 import { LANGUAGE_UNCHOSEN, type Language } from '@/i18n/language';
 import { uiMessages } from '@/i18n/messages/ui';
 import { ApiConfigError, apiUrl } from './api';
-import { kpmHeaderFor } from './super-admin-kpm';
+import { KPM_HEADER, kpmHeaderFor } from './super-admin-kpm';
 
 /**
  * The API client.
@@ -201,6 +201,12 @@ interface RequestOptions {
    * it would count the wrong password twice against the sign-in limiter; any other `401` is still refreshed once.
    */
   answers401?: readonly string[];
+  /**
+   * **One request inside a named KPM** (P19.28-T4 AC-2): `X-Kpm-Id` for this call alone, whatever KPM the tab has entered
+   * — the Super Admin's *Isi nomor WhatsApp* on Anggota's detail, which saves through the KPM's own route as its Owner
+   * (ADR-0268 §3) without entering the KPM. Never on a platform route.
+   */
+  inKpm?: string;
 }
 
 async function raw(path: string, options: RequestOptions = {}): Promise<Response> {
@@ -213,7 +219,7 @@ async function raw(path: string, options: RequestOptions = {}): Promise<Response
       // The screen's language (AC-6). CORS-safelisted for these two values: the API's allowed headers need not name it.
       'Accept-Language': requestLanguage,
       // ADR-0268 §3: the KPM a Super Admin is working inside, as its Owner — never on a platform route (`super-admin-kpm.ts`).
-      ...kpmHeaderFor(path),
+      ...(options.inKpm && !/^\/admin(\/|$|\?)/.test(path) ? { [KPM_HEADER]: options.inKpm } : kpmHeaderFor(path)),
     },
     // Sends and receives the httpOnly refresh cookie.
     credentials: 'include',

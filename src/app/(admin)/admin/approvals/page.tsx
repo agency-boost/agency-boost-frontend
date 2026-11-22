@@ -17,6 +17,7 @@ import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-pro
 import { adminApprovalsMessages } from '@/i18n/messages/admin-approvals';
 import { approveKpmRequest, declineKpmRequest, deleteKpmRequest, type KpmRequestRow } from '@/lib/admin';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
+import { cn } from '@/lib/cn';
 import { APPROVALS_CHANGED, readApprovals, type Approval } from '@/lib/approvals';
 import { listInsurers, type Insurer } from '@/lib/companies';
 import { dayInZone, formatShortDay, OFFICE_TIME_ZONE } from '@/lib/format';
@@ -134,7 +135,8 @@ export default function ApprovalsPage() {
               />
             )}
             {rows && (
-              <p className="text-xs text-muted">{active === 'waiting' ? t.waitingNote : t.decidedNote}</p>
+              // *"Semua yang perlu persetujuan…"* is not said on a phone (UI-213 (21 Nov)); from 768px as before.
+              <p className={cn('text-xs text-muted', active === 'waiting' && 'max-md:hidden')}>{active === 'waiting' ? t.waitingNote : t.decidedNote}</p>
             )}
           </div>
         )}

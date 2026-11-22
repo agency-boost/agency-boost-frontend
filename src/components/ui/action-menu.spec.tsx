@@ -200,3 +200,28 @@ describe('ActionMenu (P13.1-T4 AC-3)', () => {
     expect((await axe(container, { rules: { 'color-contrast': { enabled: false } } })).violations ?? []).toHaveLength(0);
   });
 });
+
+/**
+ * **A destructive item, its words red** (the integration round's walk, 2026-11-22: *Hapus sebagai owner* read navy, `tone`
+ * colouring a glyph it does not have): `danger` puts the label in the danger token while it is live.
+ */
+describe('ActionMenu — a danger item', () => {
+  it('draws a live danger item’s words in text-alert, and greys it as any other when unavailable', async () => {
+    render(
+      <ActionMenu
+        label="Actions for Sinta"
+        items={[
+          { label: 'Lihat profil', onSelect: vi.fn() },
+          { label: 'Hapus sebagai owner', danger: true, onSelect: vi.fn() },
+          { label: 'Hapus KPM', danger: true, disabled: true, reason: 'Tambah owner lain dulu', onSelect: vi.fn() },
+        ]}
+      />,
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Actions for Sinta' }));
+    expect(item('Lihat profil')).toHaveClass('text-navy');
+    expect(item('Hapus sebagai owner')).toHaveClass('text-alert');
+    expect(item('Hapus sebagai owner')).not.toHaveClass('text-navy');
+    expect(item('Hapus KPM')).toHaveClass('text-muted');
+    expect(item('Hapus KPM')).not.toHaveClass('text-alert');
+  });
+});

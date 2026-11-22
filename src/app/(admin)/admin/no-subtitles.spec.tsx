@@ -7,13 +7,12 @@ import { describe, expect, it } from 'vitest';
  * removed at every size). Read off the pages' sources, so a sub-line added back to any of them fails here whatever its
  * words: every `/admin` page draws its title through `Page`, and its `subtitle` is the grey line.
  *
- * **Three keep a line that names the record being changed** — which office's owner, which template — because without it
+ * **Two keep a line that names the record being changed** — which template — because without it
  * a reader can change the wrong one (UI-112: *no subtitle unless it prevents a mistake*). They are listed, with why.
  */
 const ROOT = join(__dirname);
 
 const NAMES_THE_RECORD: Record<string, string> = {
-  'tenants/[kpmId]/owner/page.tsx': 'the office whose owner is being set, by its code and branch',
   'companies/[companyId]/templates/[templateId]/page.tsx': 'the template whose sections are listed',
   'companies/[companyId]/templates/[templateId]/[section]/page.tsx': 'the template whose section is being edited',
 };

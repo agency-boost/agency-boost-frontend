@@ -135,6 +135,8 @@ export const KEPT_ENGLISH = {
     'Activity target for the last 7 days, pro-rated', 'Activation completion', 'Activation day', 'Training completion',
     // P19.25-T4 (ADR-0282 §2): `TRAINING_MODULE_DONE_COUNT`.
     'Members who finished a module',
+    // P19.26-T1 (ADR-0284 §1; `metrics-and-definitions.md`, `COUNTED_MEMBERS`): the console's one count of members.
+    'Anggota (counted member)',
     // P19.25 (ADR-0281; `metrics-and-definitions.md`, `EVENT_KEHADIRAN`): an event's roll call, hadir or tidak hadir.
     'Kehadiran — hadir or tidak hadir',
     'Event attendance status', 'Event attendance rate', 'Event NPS', 'Campaign qualification',
@@ -443,6 +445,9 @@ export const KEPT_ELSEWHERE = [
   // perusahaan*'s three parts, *Produk · Campaign · Rekrutmen*, translated as the developer wrote them for the product
   // owner — where the Owner's own nav keeps *Activation checklist*, *Products*, *Campaigns* and *Recruitment* (§A.1).
   'Activation checklist', 'Products', 'Campaigns', 'Recruitment',
+  // P19.26-T5 AC-5 (UI-218 (21 Nov), ADR-0284): *Notifications* is the inbox's kept title (§A.2, `kept('Notifications')`)
+  // and the Super Admin's title on a phone, *Notifikasi* in ID mode — the owner's later request wins (ADR-0283 §5).
+  'Notifications',
   // P19.5-T3 (ADR-0215): *Demographics* and *Weekly activity target* are metric names (§A.4, kept on the KPM's page) and
   // two of the template editor's *Ambang & benchmark* labels, translated as the template mockup writes them — *Demografi*,
   // *Target aktivitas mingguan* (P19.5-T1).

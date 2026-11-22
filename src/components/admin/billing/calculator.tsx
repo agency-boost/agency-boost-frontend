@@ -246,8 +246,9 @@ export function Calculator({
   const ready = pricing !== null && !datesWrong && !!start && !!end;
 
   // ---- The parts.
+  // *Kalkulator harga* repeats the tab on a phone: it goes there (P19.26-T6 AC-2; UI-218 (21 Nov)), and stays from 768px.
   const head = variant === 'page' && (
-    <div className="mb-3 flex items-center gap-2.5">
+    <div data-calculator-head="" className="mb-3 flex items-center gap-2.5 max-md:hidden">
       <span aria-hidden="true" className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary-50 text-primary-ink">
         <NavIcon name="receipt" />
       </span>
@@ -311,7 +312,7 @@ export function Calculator({
       {pricing && <BreakEven pricing={pricing} prices={prices} />}
       {failure && <ErrorBanner code={failure.error.code} message={failure.words} requestId={failure.error.requestId} />}
       <div className="grid grid-cols-2 gap-2">
-        <Button variant="secondary" onClick={confirm} disabled={!ready || busy !== null} className="w-full">
+        <Button variant="secondary" onClick={confirm} disabled={!ready || busy !== null} className="w-full max-md:whitespace-nowrap max-md:px-2">
           {busy === 'confirm' ? T.actions.saving : (kpm ? T.actions.confirm : T.actions.use)}
         </Button>
         {pricing && ready ? (
@@ -319,13 +320,15 @@ export function Calculator({
             href={whatsappLink(target?.owner?.phone ?? null, offerText(pricing))}
             target="_blank"
             rel="noopener noreferrer"
-            className={buttonClass('secondary', 'w-full gap-1.5')}
+            data-send-offer=""
+            // *Kirim penawaran* on one line on a phone (P19.26-T6 AC-2; UI-218).
+            className={buttonClass('secondary', 'w-full gap-1.5 max-md:whitespace-nowrap max-md:px-2')}
           >
             <NavIcon name="whatsapp" className="h-4 w-4 shrink-0" />
             {T.actions.whatsapp}
           </a>
         ) : (
-          <Button variant="secondary" disabled className="w-full">
+          <Button variant="secondary" disabled data-send-offer="" className="w-full max-md:whitespace-nowrap max-md:px-2">
             <NavIcon name="whatsapp" className="h-4 w-4 shrink-0" />
             {T.actions.whatsapp}
           </Button>
@@ -556,9 +559,10 @@ function CalculatorForm(p: FormProps) {
         />
       </Row>
       <Row label={C.dates} labelId={ids.dates} error={p.datesError}>
-        <div className="flex items-center gap-2">
+        {/* On a phone one under the other, each the row's width, so neither day is cut (P19.26-T6 AC-2; UI-218). */}
+        <div data-calculator-dates="" className="flex items-center gap-2 max-md:flex-col max-md:items-stretch">
           <DateField value={p.start} onChange={p.onStart} aria-label={C.start} className="min-w-0 flex-1" />
-          <span aria-hidden="true" className="text-muted">–</span>
+          <span aria-hidden="true" className="text-muted max-md:hidden">–</span>
           <DateField value={p.end} onChange={p.onEnd} aria-label={C.end} min={p.start || undefined} invalid={!!p.datesError} className="min-w-0 flex-1" />
         </div>
       </Row>

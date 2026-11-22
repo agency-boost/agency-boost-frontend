@@ -2,7 +2,7 @@ import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import TenantLayout from '@/app/(tenant)/layout';
-import { atWidth, makeMe, renderInLayout, stubFetch } from '@test/harness';
+import { atWidth, makeMe, renderInIndonesian, renderInLayout, stubFetch } from '@test/harness';
 import { row } from '@test/people-fixtures';
 import MembersPage from './page';
 
@@ -330,5 +330,59 @@ describe('P19.20-T1 All members', () => {
     renderInLayout(TenantLayout, <MembersPage />, { me: OWNER });
 
     expect(await screen.findByRole('tab', { name: /Waiting/ })).toHaveAttribute('aria-selected', 'true');
+  });
+});
+
+/**
+ * ***All members* on a phone** (P19.29-T5; UI-215, UI-213 (21 Nov); ADR-0287 §5): one labelled line for when a member was
+ * last active and last coached, the five chips that fit the width, and no legend — from 768px the table as before.
+ */
+describe('P19.29-T5 All members on a phone', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('P19.29-T5 AC-1 one line, both labelled: Aktivitas: … · Coaching: …, in the pills’ colours', async () => {
+    atWidth(375);
+    stubFetch({ '/members': page([row(), dewi]) });
+    renderInIndonesian(<TenantLayout><MembersPage /></TenantLayout>, { me: OWNER });
+
+    const list = await screen.findByRole('list', { name: 'Anggota KPM' });
+    const [agus, dewiItem] = within(list).getAllByRole('listitem');
+    const line = agus.querySelector('[data-recency-line]') as HTMLElement;
+    expect(line).toHaveTextContent(/^Aktivitas: Hari ini · Coaching: Tidak pernah$/);
+    expect(line).toHaveClass('text-base', 'text-muted');
+    expect(within(line).getByText('Hari ini')).toHaveAttribute('data-tone', 'green');
+    expect(within(line).getByText('Tidak pernah')).toHaveAttribute('data-tone', 'red');
+    expect(dewiItem.querySelector('[data-recency-line]')).toHaveTextContent(/^Aktivitas: 23 hari lalu · Coaching: Tidak pernah$/);
+    // No unlabelled pills on the phone's rows any more; the table keeps its two pill columns.
+    expect(list.querySelector('[data-tone] [class*="sr-only"]')).toBeNull();
+    expect(within(screen.getByRole('table')).getAllByText('Tidak pernah')[0].closest('[data-tone]')).toHaveAttribute('data-tone', 'red');
+  });
+
+  it('P19.29-T5 AC-2 the chips fit the width: ★ alone on a phone, its words still its name', async () => {
+    atWidth(375);
+    stubFetch({ '/members': page([row()]) });
+    renderInLayout(TenantLayout, <MembersPage />, { me: OWNER });
+
+    const chips = await screen.findByRole('group', { name: /filter/i });
+    const core = within(chips).getByRole('button', { name: '★ Core leader' });
+    const short = core.querySelector('[data-chip-short]') as HTMLElement;
+    expect(short).toHaveTextContent('★');
+    expect(short).toHaveClass('md:hidden');
+    expect(short).toHaveAttribute('aria-hidden', 'true');
+    expect(within(core).getByText('★ Core leader')).toHaveClass('max-md:sr-only');
+    // The other four keep their words at every width.
+    expect(within(chips).getAllByRole('button').map((b) => b.textContent)).toEqual(['All', 'AB', 'AAB', 'Agent', '★★ Core leader']);
+  });
+
+  it('P19.29-T5 AC-3 the legend is not drawn on a phone; from 768px it reads as before', async () => {
+    atWidth(375);
+    stubFetch({ '/members': page([row()]) });
+    renderInLayout(TenantLayout, <MembersPage />, { me: OWNER });
+
+    const legend = await screen.findByText(/^★ = core leader/);
+    expect(legend).toHaveClass('max-md:hidden');
+    expect(legend).toHaveAttribute('data-members-legend');
   });
 });

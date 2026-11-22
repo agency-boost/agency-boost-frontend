@@ -114,6 +114,8 @@ const PAGES: Readonly<Record<RouteFamily, readonly string[]>> = {
     '/leader-meetings/[meetingId]', '/leader-meetings/shared/[token]', '/notifications', '/profile',
     // P19.23-T2 AC-3 (OD-420): a KPM Owner's claim link, opened signed out or signed in, sign-in coming back to it.
     '/owner-invite/[token]',
+    // P19.28-T1 AC-4 (ADR-0286 §2): *Tambah user*'s invitation link, opened signed out or signed in, as the claim link is.
+    '/user-invite/[token]',
     // P19.24-T2 (ADR-0280 §5): the KPM report's *Kirim ke owner* link — signed out it asks to sign in, coming back to it.
     '/laporan-kpm/[token]',
     // P19.23-T2 AC-7 (ADR-0277): *Lihat sebagai*'s new window, chrome-less — the Super Admin's for a moment, then the person's.

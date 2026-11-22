@@ -780,6 +780,7 @@ export function AppShell({
   labelledFrom1024 = false,
   search,
   pinned,
+  aboveTitle,
   children,
 }: {
   sections: readonly NavSection[];
@@ -849,6 +850,12 @@ export function AppShell({
   title?: string;
   subtitle?: string;
   actions?: React.ReactNode;
+  /**
+   * **What stands above the page's title row, in its flow** (P19.29-T2 AC-1; UI-201 (21 Nov), ADR-0287 §2): the Super
+   * Admin's strip on the owner pages inside a KPM, on a phone — first in `main`, before the shell's header or a page's own,
+   * so it scrolls with the page and covers nothing. Absent, `main` is as it was.
+   */
+  aboveTitle?: React.ReactNode;
   children: React.ReactNode;
 }) {
   const t = useMessages(shellMessages);
@@ -1138,6 +1145,7 @@ export function AppShell({
         )}
       >
         <FieldChromeContext.Provider value={{ ...field, compact }}>
+          {aboveTitle}
           {/* P19-T1 AC-4 (UI-163, ADR-0190 §4; P19.12-T2 AC-4): *Email Anda belum diverifikasi · Kirim ulang tautan* until verified. */}
           <VerifyEmailBanner />
           {title !== undefined && (

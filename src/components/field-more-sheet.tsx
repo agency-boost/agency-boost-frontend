@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useRef, type RefObject } from 'react';
+import { useContext, useEffect, useRef, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
 import { MORE_SHEET_ID } from '@/components/field-nav';
 import { FieldAvatar, type FieldChrome } from '@/components/field-chrome';
@@ -13,6 +13,7 @@ import { useMessages } from '@/i18n/language-provider';
 import { shellMessages } from '@/i18n/messages/shell';
 import { cn } from '@/lib/cn';
 import type { FieldDestination, FieldGroupTag } from '@/lib/field-nav';
+import { SessionContext } from '@/lib/session';
 import { hasSurveyDot, useSurveyPending } from '@/lib/survey-pending';
 import { useScrollLock } from '@/lib/use-scroll-lock';
 
@@ -43,6 +44,9 @@ const SWIPE_CLOSE_PX = 72;
  *
  * A modal dialog named *Lainnya*, drawn at the end of `<body>` so nothing on the page stands over it; the page behind
  * holds still (`useScrollLock`). Following any link in it closes it.
+ *
+ * *Changed 2026-11-22 (P19.26-T6 AC-1; UI-218 (21 Nov)):* **the Super Admin's, on a phone** — their name is never cut
+ * (*PLATFORM OP…*), and *ID | EN* sits on its own row under the account row. Every other reader, and the tablet, as before.
  */
 export function MoreSheet({
   chrome,
@@ -59,6 +63,8 @@ export function MoreSheet({
   const closer = useRef<HTMLButtonElement>(null);
   const dragFrom = useRef<number | null>(null);
   const { account, nav } = chrome;
+  // P19.26-T6 AC-1: the Super Admin's account row on a phone. Read without throwing where no session is mounted.
+  const superAdmin = useContext(SessionContext)?.me?.user.platformRole === 'super_admin';
   // P19.5-T4 (C-R2): the surveys waiting — the cards above the groups, and the *Survei* tile's dot.
   const surveys = useSurveyPending(nav.groups.some((g) => g.items.some((i) => i.id === 'surveys')));
   const surveyDot = hasSurveyDot(surveys);
@@ -128,7 +134,7 @@ export function MoreSheet({
       >
         <div {...head} data-sheet-head="" className="touch-none">
           <div aria-hidden="true" className="mx-auto mb-2.5 h-[5px] w-10 rounded-pill bg-line" />
-          <div className="flex items-center gap-2.5 rounded-row bg-hover-row py-2 pl-2 pr-1">
+          <div className={cn('flex items-center gap-2.5 rounded-row bg-hover-row py-2 pl-2 pr-1', superAdmin && 'max-md:flex-wrap')}>
             <Link
               href={account.profileHref}
               data-change-photo=""
@@ -139,10 +145,30 @@ export function MoreSheet({
             </Link>
             <span className="min-w-0 flex-1 leading-snug">
               {/* P19.17-T3 (`DESIGN-RULES.md`, *Names*; `lainnya-owner-mobile`): a person's name in capitals. */}
-              <b className="block truncate text-md font-bold uppercase text-ink">{account.name}</b>
+              <b
+                // The Super Admin's alone: every other reader's sheet is drawn exactly as before (P19.2-T1 AC-2's digests).
+                data-account-name={superAdmin ? '' : undefined}
+                className={cn(
+                  'block truncate text-md font-bold uppercase text-ink',
+                  superAdmin && 'max-md:overflow-visible max-md:whitespace-normal max-md:break-words',
+                )}
+              >
+                {account.name}
+              </b>
               <span className="block truncate text-xs text-muted" title={account.role}>{account.role}</span>
             </span>
-            <LanguageSwitch tone="page" />
+            {/*
+              * The Super Admin's *ID | EN* on its own row on a phone (UI-218), so the name keeps the row's width: one switch,
+              * moved by its box — `contents` from 768px, so the tablet's row is as before. Every other reader's switch is
+              * not wrapped at all, so their sheet's markup is unchanged (P19.2-T1 AC-2's digests).
+              */}
+            {superAdmin ? (
+              <span data-language-row="" className="contents max-md:order-last max-md:flex max-md:basis-full max-md:justify-end">
+                <LanguageSwitch tone="page" />
+              </span>
+            ) : (
+              <LanguageSwitch tone="page" />
+            )}
             <button
               ref={closer}
               type="button"

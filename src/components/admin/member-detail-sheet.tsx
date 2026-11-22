@@ -1,16 +1,22 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useState } from 'react';
+import { PhoneNumberSheet } from '@/components/phone-number-sheet';
+import { ActionMenu } from '@/components/ui/action-menu';
 import { Avatar } from '@/components/ui/avatar';
-import { buttonClass, ErrorBanner, Switch } from '@/components/ui/field';
+import { Button, buttonClass, ErrorBanner } from '@/components/ui/field';
+import { LineIcon } from '@/components/ui/line-icon';
+import { Modal } from '@/components/ui/modal';
 import { NavIcon } from '@/components/ui/nav-icon';
+import { REMOVED_ON_PHONE } from '@/components/ui/phone';
 import { ResponsiveSheet } from '@/components/ui/responsive-sheet';
 import { SkeletonText } from '@/components/ui/skeleton';
 import { TonePill } from '@/components/ui/tone-pill';
 import { useToast } from '@/components/ui/toast';
 import { useFigureLanguage, useMessages } from '@/i18n/language-provider';
 import { adminMembersMessages } from '@/i18n/messages/admin-members';
+import { saveMemberPhoneInKpm } from '@/lib/add-user';
 import {
   readMemberDetail, setTestAccount, type AnggotaRow, type LastActiveStatus, type MemberDetail,
 } from '@/lib/admin-members';
@@ -38,6 +44,12 @@ const NONE = '—';
  *   *All members* — where the role, the leader and removal are changed (the spec: *"role / leader / remove are changed
  *   inside that KPM"*).
  * - ***WhatsApp*** opens the chat (`wa.me`, OD-359) on the number on file; with none it is not offered as a link.
+ *
+ * *Changed 2026-11-22 (P19.28-T4; UI-210, UI-213 (21 Nov); ADR-0286), every size:* **the *Akun tes* switch is in a ⋯ menu
+ * beside the name, with a confirmation** — a flag that takes a person out of every count is not one tap away — and
+ * **WhatsApp with no number opens *Isi nomor WhatsApp***, which saves the number through the member's KPM's own route as
+ * its Owner (`saveMemberPhoneInKpm`, ADR-0268 §3), then opens the chat. *Owner* beside every owner's name. On a phone the
+ * line *"Ubah peran, leader…"* is not drawn.
  */
 export function MemberDetailSheet({
   row,
@@ -53,9 +65,9 @@ export function MemberDetailSheet({
   const figures = useFigureLanguage();
   const router = useRouter();
   const { show } = useToast();
-  const switchId = useId();
-  const hintId = useId();
   const [detail, setDetail] = useState<MemberDetail | null>(null);
+  const [confirming, setConfirming] = useState(false);
+  const [askingPhone, setAskingPhone] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
   const [testAccount, setTestFlag] = useState(row.testAccount);
   const [saving, setSaving] = useState(false);
@@ -81,6 +93,7 @@ export function MemberDetailSheet({
     setSaveError(null);
     try {
       const answer = await setTestAccount(shown.userId, next);
+      setConfirming(false);
       setTestFlag(answer.testAccount);
       show(answer.testAccount ? t.detail.testOn({ name: shown.fullName }) : t.detail.testOff({ name: shown.fullName }));
       onTestAccountChanged();
@@ -128,7 +141,15 @@ export function MemberDetailSheet({
               {t.detail.whatsApp}
             </a>
           ) : (
-            <button type="button" disabled className={buttonClass('secondary', 'min-h-11 w-full justify-center')}>
+            // UI-210: no number on file — *Isi nomor WhatsApp*, then the chat. Waiting for the detail, not yet live.
+            <button
+              type="button"
+              disabled={detail === null}
+              onClick={() => setAskingPhone(true)}
+              aria-haspopup="dialog"
+              data-fill-phone=""
+              className={buttonClass('secondary', 'min-h-11 w-full justify-center')}
+            >
               <NavIcon name="whatsapp" className="h-5 w-5" />
               {t.detail.whatsApp}
             </button>
@@ -149,6 +170,16 @@ export function MemberDetailSheet({
           </span>
           <span className="block truncate text-sm text-muted">{`${shown.kpm.branch} · ${shown.company.name}`}</span>
         </div>
+        {/* UI-210 (21 Nov): *Akun tes* behind ⋯, with a confirmation — every size. */}
+        <ActionMenu
+          label={t.detail.more({ name: shown.fullName })}
+          glyph={<LineIcon name="more" className="h-5 w-5" />}
+          triggerClassName="h-11 w-11"
+          items={[{
+            label: testAccount ? t.detail.testUnset : t.detail.testSet,
+            onSelect: () => { setSaveError(null); setConfirming(true); },
+          }]}
+        />
       </div>
 
       <dl className="mt-4 grid grid-cols-1 gap-x-4 gap-y-3 rounded-lg bg-base p-3 sm:grid-cols-2">
@@ -160,22 +191,38 @@ export function MemberDetailSheet({
         ))}
       </dl>
 
-      <p className="mt-3 text-center text-xs text-muted">{t.detail.changeNote}</p>
+      {/* UI-213 (21 Nov): not drawn on a phone; from 768px it reads as before. */}
+      <p className={cn('mt-3 text-center text-xs text-muted', REMOVED_ON_PHONE)}>{t.detail.changeNote}</p>
 
-      <div className="mt-4 border-t border-hairline pt-3">
-        <Switch
-          id={switchId}
-          label={t.detail.testSwitch}
-          checked={testAccount}
-          disabled={saving}
-          describedBy={hintId}
-          onChange={(next) => void flip(next)}
-          phoneTarget
-          tabletTarget
+      {confirming && (
+        <Modal
+          open
+          placement="popup"
+          title={testAccount ? t.detail.confirmUnsetTitle({ name: shown.fullName }) : t.detail.confirmSetTitle({ name: shown.fullName })}
+          onClose={() => setConfirming(false)}
+          footer={(
+            <div className="grid grid-cols-2 gap-2">
+              <Button variant="secondary" className="min-h-11" onClick={() => setConfirming(false)}>{t.detail.cancel}</Button>
+              <Button className="min-h-11" disabled={saving} aria-busy={saving || undefined} onClick={() => void flip(!testAccount)}>
+                {testAccount ? t.detail.confirmUnset : t.detail.confirmSet}
+              </Button>
+            </div>
+          )}
+        >
+          <p className="text-row text-muted">{t.detail.testHint}</p>
+          {saveError && <div className="mt-2"><ErrorBanner {...saveError} /></div>}
+        </Modal>
+      )}
+      {askingPhone && detail && (
+        <PhoneNumberSheet
+          open
+          name={shown.fullName}
+          phone={null}
+          onClose={() => setAskingPhone(false)}
+          onSave={async (phone) => (await saveMemberPhoneInKpm(shown.kpm.id, shown.membershipId, phone)).phone}
+          onSaved={(stored) => { setDetail({ ...detail, phone: stored }); setAskingPhone(false); }}
         />
-        <p id={hintId} className="mt-1 text-xs text-muted">{t.detail.testHint}</p>
-        {saveError && <div className="mt-2"><ErrorBanner {...saveError} /></div>}
-      </div>
+      )}
     </ResponsiveSheet>
   );
 }

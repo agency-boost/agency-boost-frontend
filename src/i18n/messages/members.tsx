@@ -41,6 +41,8 @@ const en = {
   clearFilters: 'Clear the filter',
   loading: 'Loading the members…',
   legend: '★ = core leader · red = never · yellow = more than 14 days · test accounts are not shown',
+  // P19.29-T5 AC-1 (UI-215 (21 Nov)): a phone's row, one line — *Aktivitas: … · Coaching: …*.
+  recency: { activity: 'Activity', coaching: kept('Coaching') },
   open: ({ name }: { name: string }) => `Open ${name}`,
   changeGroupOf: ({ name }: { name: string }) => `Change the group of ${name}`,
   /* Menunggu. */
@@ -99,6 +101,7 @@ const id: MessagesOf<typeof en> = {
   clearFilters: 'Hapus filter',
   loading: 'Memuat anggota…',
   legend: '★ = core leader · merah = belum pernah · kuning = lebih dari 14 hari · akun tes tidak ditampilkan',
+  recency: { activity: 'Aktivitas', coaching: kept('Coaching') },
   open: ({ name }) => `Buka ${name}`,
   changeGroupOf: ({ name }) => `Ubah group ${name}`,
   waiting: {

@@ -21,7 +21,7 @@ const en = {
   /** The browser refused the new window, so nothing could be opened. */
   blocked: 'The browser blocked the new window. Allow pop-ups for AgencyBoost, then try again.',
   /** The number on file is not one WhatsApp can open. */
-  noNumber: ({ name }: { name: string }) => `${name}'s WhatsApp number cannot be opened. Correct it with "Ganti owner", then try again.`,
+  noNumber: ({ name }: { name: string }) => `${name}'s WhatsApp number cannot be opened. Correct it on their profile ("View profile"), then try again.`,
   /** The message itself, to the Owner: a claim link, or the link to choose a password. */
   message: {
     claim: ({ name, kpm, company, link }: { name: string; kpm: string; company: string; link: string }) =>
@@ -55,7 +55,7 @@ const id: MessagesOf<typeof en> = {
   sending: 'Membuka WhatsApp…',
   sent: ({ name }) => `WhatsApp terbuka untuk ${name}. Kirim pesannya di sana.`,
   blocked: 'Browser memblokir jendela baru. Izinkan pop-up untuk AgencyBoost, lalu coba lagi.',
-  noNumber: ({ name }) => `Nomor WhatsApp ${name} tidak bisa dibuka. Perbaiki lewat "Ganti owner", lalu coba lagi.`,
+  noNumber: ({ name }) => `Nomor WhatsApp ${name} tidak bisa dibuka. Perbaiki di profilnya ("Lihat profil"), lalu coba lagi.`,
   message: {
     claim: ({ name, kpm, company, link }) =>
       `Halo ${name}, KPM ${kpm} · ${company} Anda sudah siap di AgencyBoost. Buka tautan ini untuk masuk sebagai owner: ${link}`,

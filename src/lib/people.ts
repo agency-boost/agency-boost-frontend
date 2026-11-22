@@ -3,6 +3,7 @@
 import { api } from './api-client';
 import type { RosterPreview, RosterImportResult } from './admin';
 import type { HierarchyRole, Member, MemberPage } from './org';
+import type { KpmOwnerView } from './kpm-owners';
 
 /*
  * **People** (P19.20; ADR-0273): what All members, the member sheet, KPM admins and Import people read and write beyond
@@ -101,7 +102,12 @@ export const readPeopleHistory = (kind: HistoryFilter = 'all') =>
 
 /** *KPM admins*' three tiles. */
 export interface KpmStewards {
+  /** The first owner (ADR-0285 §3); every owner is in `owners`. */
   owner: { membershipId: string; fullName: string; agentCode: string; role: HierarchyRole; photoUrl: string | null } | null;
+  /** ***KPM Owner · n*** (P19.27-T4): every owner in order of `since`. */
+  owners: KpmOwnerView[];
+  /** The reader may add and remove owners: an owner, or the Super Admin inside the KPM — never an Admin. */
+  canManageOwners: boolean;
   admins: number;
   coreLeaders: number;
 }

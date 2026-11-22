@@ -64,6 +64,15 @@ const en = {
   emptyAll: 'Nothing recorded yet.',
   note: `Every ${kept('Super Admin')} change: who, when, before → after`,
   officeNote: `Every change in this ${kept('KPM')}: who, when, before → after`,
+
+  /*
+   * P19.26-T3 (UI-217 (21 Nov); ADR-0284 §3): changes only by default, the looks behind a chip; on a phone the search and
+   * one *Filter* button, which opens a sheet holding the five filters.
+   */
+  includeViewed: 'Including views',
+  filter: 'Filter',
+  filterOn: ({ n }: { n: number }) => `Filter, ${n} on`,
+  done: 'Done',
 };
 
 const id: MessagesOf<typeof en> = {
@@ -102,6 +111,11 @@ const id: MessagesOf<typeof en> = {
   emptyAll: 'Belum ada yang dicatat.',
   note: `Semua perubahan ${kept('Super Admin')}: siapa, kapan, sebelum → sesudah`,
   officeNote: `Semua perubahan di ${kept('KPM')} ini: siapa, kapan, sebelum → sesudah`,
+
+  includeViewed: 'Termasuk dilihat',
+  filter: 'Filter',
+  filterOn: ({ n }) => `Filter, ${n} aktif`,
+  done: 'Selesai',
 };
 
 export const adminAuditMessages = defineMessages({ en, id });

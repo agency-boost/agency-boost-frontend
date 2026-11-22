@@ -83,6 +83,13 @@ describe('P19.23-T3 AC-2 — Persetujuan (/admin/approvals)', () => {
     expect(screen.getByText('Everything that needs a Super Admin\'s approval is here')).toBeInTheDocument();
   });
 
+  it('P19.26-T5 AC-4 on a phone the line “Semua yang perlu persetujuan…” goes; from 768px it stays (UI-213 (21 Nov))', async () => {
+    atWidth(375);
+    show();
+    await screen.findByRole('list', { name: 'Requests waiting' });
+    expect(screen.getByText('Everything that needs a Super Admin\'s approval is here')).toHaveClass('max-md:hidden');
+  });
+
   it('P19.23-T3 AC-2 Sudah diputuskan: the result, the day and who decided, and a decline’s reason', async () => {
     atWidth(1280);
     show();

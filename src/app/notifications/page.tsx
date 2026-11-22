@@ -13,6 +13,7 @@ import { notificationMessages } from '@/i18n/messages/notifications';
 import { INBOX_PAGE_SIZE } from '@/lib/notifications';
 import { useSession } from '@/lib/session';
 import { useCanMark, useInbox } from '@/lib/use-inbox';
+import { useMediaQuery } from '@/lib/use-media-query';
 
 /**
  * Your notifications.
@@ -49,6 +50,9 @@ import { useCanMark, useInbox } from '@/lib/use-inbox';
  *
  * **A read-only support session marks nothing** (roles-and-permissions §7.2; the Phase 12.1 exit
  * review, N2): no *Mark all read*, no toggle, and a row opens without reading itself (`useCanMark`).
+ *
+ * **The Super Admin's, on a phone** (P19.26-T5 AC-5; UI-213, UI-218 (21 Nov)): the title *Notifikasi*, and the empty state
+ * *Belum ada notifikasi* alone — a Super Admin has no unit to hear about. From 768px, and for every other role, unchanged.
  */
 export default function NotificationsPage() {
   const t = useMessages(notificationMessages);
@@ -63,23 +67,30 @@ export default function NotificationsPage() {
   }, [signedIn, load]);
 
   const pages = inbox ? Math.max(1, Math.ceil(inbox.total / (inbox.pageSize || INBOX_PAGE_SIZE))) : 1;
+  const phone = useMediaQuery('phone');
+  const superAdminPhone = phone && me?.user.platformRole === 'super_admin';
+  const markAll = canMark && inbox && inbox.unread > 0 ? (
+    <Button variant="secondary" onClick={() => void list.readAll()}>
+      {t.markAllRead}
+    </Button>
+  ) : undefined;
 
   return (
     // The sub-line is not drawn on a phone: the client's *Remove* (P18.7-T7 AC-1, grey text row 25). The shell draws
     // the header, so the page says it through the context rather than a prop.
     <SubtitleOnPhone.Provider value={false}>
       <RoleShell
-        title={t.title}
+        title={superAdminPhone ? t.superAdminTitle : t.title}
         subtitle={t.subtitle}
         permission="notification:read_inbox"
-        actions={
-          canMark && inbox && inbox.unread > 0 ? (
-            <Button variant="secondary" onClick={() => void list.readAll()}>
-              {t.markAllRead}
-            </Button>
-          ) : undefined
-        }
+        actions={phone ? undefined : markAll}
       >
+        {/*
+          * On a phone *Tandai semua sudah dibaca* stands under the title row, not in it: beside the avatar it covered the
+          * title (*Notifika…* at 375px; the integration round's walk, 2026-11-22), and a title is never cut. From 768px it
+          * is the row's action, as before.
+          */}
+        {phone && markAll && <div className="mb-3 flex justify-end" data-mark-all-row="">{markAll}</div>}
         {error && (
           <div className="mb-4">
             <ErrorBanner {...error} />
@@ -104,7 +115,7 @@ export default function NotificationsPage() {
 
         {inbox && inbox.items.length === 0 && (
           <Card>
-            <EmptyState title={t.empty} />
+            <EmptyState title={superAdminPhone ? t.superAdminEmpty : t.empty} />
           </Card>
         )}
 

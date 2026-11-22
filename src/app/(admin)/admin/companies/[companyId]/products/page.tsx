@@ -36,6 +36,10 @@ const CODE = /^[A-Za-z][A-Za-z0-9_]*$/;
  * ⋯ holds ***Detail lengkap*** — the full editor (riders, needs, bands, commission, lifecycle), kept and saving as it
  * always did (OD-423) — and *Hapus draf* where a draft waits. Withdrawn products are left off, as agents never see them.
  * Super Admin only (`product_catalog:crud`).
+ *
+ * **On a phone** (P19.26-T4; UI-216 (21 Nov), ADR-0284): each category a section that opens and closes, with its count;
+ * each product a 56px row — its name, a *Syariah* pill only when it is syariah, a currency chip only when it is not IDR,
+ * *Draf* where an edit waits, ⋯ and ›. From 768px the cards, as before.
  */
 export default function CompanyProductsPage({ params }: { params: Promise<{ companyId: string }> }) {
   const { companyId } = use(params);
@@ -48,6 +52,8 @@ export default function CompanyProductsPage({ params }: { params: Promise<{ comp
   const [filter, setFilter] = useState<'all' | Category>('all');
   const [adding, setAdding] = useState(false);
   const [discarding, setDiscarding] = useState<Product | null>(null);
+  /** The phone's open sections (UI-216): none at first; one shown alone opens. */
+  const [opened, setOpened] = useState<ReadonlySet<Category>>(new Set());
 
   const load = useCallback(async () => {
     try {
@@ -87,7 +93,7 @@ export default function CompanyProductsPage({ params }: { params: Promise<{ comp
               aria-pressed={filter === key}
               onClick={() => setFilter(key)}
               className={cn(
-                'min-h-10 rounded-pill px-3 text-md font-semibold',
+                'min-h-10 rounded-pill px-3 text-md font-semibold max-md:min-h-11',
                 filter === key ? 'bg-secondary text-secondary-contrast' : 'text-muted hover:text-navy',
               )}
             >
@@ -121,13 +127,58 @@ export default function CompanyProductsPage({ params }: { params: Promise<{ comp
 
       {sections.map((category) => {
         const rows = shown.filter((p) => p.category === category);
+        const open = opened.has(category) || sections.length === 1;
+        const menuOf = (p: Product, state: string) => [
+          { label: t.products.details, onSelect: () => router.push(`${productDetailsHref(companyId)}#${p.code}`) },
+          ...(state === 'draft' ? [{ label: t.products.discard, tone: 'alert' as const, onSelect: () => setDiscarding(p) }] : []),
+        ];
         return (
-          <section key={category} aria-label={t.products.categories[category]} className="mb-6">
-            <h2 className="mb-3 flex items-baseline gap-2 border-b border-divider pb-2">
+          <section key={category} aria-label={t.products.categories[category]} className="mb-6 max-md:mb-3">
+            {/* A phone (UI-216): a section that opens and closes, with its count; its rows 56px. */}
+            <div className="overflow-hidden rounded-lg bg-card md:hidden" data-product-section={category}>
+              <h2>
+                <button
+                  type="button"
+                  aria-expanded={open}
+                  onClick={() => setOpened((was) => {
+                    const next = new Set(was);
+                    if (next.has(category)) next.delete(category); else next.add(category);
+                    return next;
+                  })}
+                  className="flex min-h-14 w-full items-center gap-2 px-4 text-left"
+                >
+                  <span className="min-w-0 flex-1 truncate text-row font-bold text-navy">{t.products.categories[category]}</span>
+                  <span className="text-base text-muted">{t.products.count({ n: rows.length })}</span>
+                  <LineIcon name="chevronDown" className={cn('h-5 w-5 text-muted transition-transform', open && 'rotate-180')} />
+                </button>
+              </h2>
+              {open && (
+                <ul className="border-t border-divider [&>li+li]:border-t [&>li+li]:border-divider">
+                  {rows.map((p) => {
+                    const state = drafts.get(p.id)?.state ?? 'published';
+                    const foreign = p.currencies.filter((c) => c !== 'IDR');
+                    return (
+                      <li key={p.id} data-product-row={p.code} className="flex min-h-14 items-center gap-1 pl-4 pr-1">
+                        <Link href={productHref(companyId, p.id)} className="flex min-h-14 min-w-0 flex-1 items-center gap-2">
+                          <span className="min-w-0 truncate text-row font-semibold text-navy">{p.name}</span>
+                          {p.channel === 'syariah' && <Chip tone="amber">{t.products.channels.syariah}</Chip>}
+                          {foreign.map((c) => <Chip key={c} tone="grey">{c}</Chip>)}
+                          {state !== 'published' && <Chip tone="draft">{t.products.draft}</Chip>}
+                          <LineIcon name="chevronRight" className="ml-auto h-5 w-5 shrink-0 text-muted" />
+                        </Link>
+                        <RowMenu name={t.products.more({ name: p.name })} items={menuOf(p, state)} />
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+
+            <h2 className="mb-3 flex items-baseline gap-2 border-b border-divider pb-2 max-md:hidden">
               <span className="font-display text-lg font-bold text-navy">{t.products.categories[category]}</span>
               <span className="text-sm text-muted">{t.products.count({ n: rows.length })}</span>
             </h2>
-            <ul className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            <ul className="grid gap-3 max-md:hidden md:grid-cols-2 xl:grid-cols-3">
               {rows.map((p) => {
                 const state = drafts.get(p.id)?.state ?? 'published';
                 return (
@@ -145,13 +196,7 @@ export default function CompanyProductsPage({ params }: { params: Promise<{ comp
                           {t.products.edit}
                           <LineIcon name="chevronRight" className="h-4 w-4" />
                         </Link>
-                        <RowMenu
-                          name={t.products.more({ name: p.name })}
-                          items={[
-                            { label: t.products.details, onSelect: () => router.push(`${productDetailsHref(companyId)}#${p.code}`) },
-                            ...(state === 'draft' ? [{ label: t.products.discard, tone: 'alert' as const, onSelect: () => setDiscarding(p) }] : []),
-                          ]}
-                        />
+                        <RowMenu name={t.products.more({ name: p.name })} items={menuOf(p, state)} />
                       </div>
                     </article>
                   </li>
@@ -187,7 +232,7 @@ function Chip({ tone, children }: { tone: 'grey' | 'amber' | 'draft'; children: 
   return (
     <span
       className={cn(
-        'rounded-pill px-2 py-0.5 text-xs font-bold uppercase tracking-wide',
+        'shrink-0 rounded-pill px-2 py-0.5 text-xs font-bold uppercase tracking-wide max-md:text-sm max-md:font-semibold max-md:normal-case max-md:tracking-normal',
         tone === 'grey' && 'bg-pill-grey text-navy',
         tone === 'amber' && 'bg-primary-50 text-primary-ink',
         tone === 'draft' && 'bg-primary-50 text-primary-ink normal-case',

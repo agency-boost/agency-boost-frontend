@@ -38,8 +38,12 @@ const CalculatorDialog = dynamic(
  *   user, each with its count, its share and its change on the same day last month.
  * - ***Perlu tindakan***: one row per issue, every KPM named by its name and company, one button straight to where it
  *   is acted on — inside that KPM (the owner page), the invitation by WhatsApp, *Langganan*, *Persetujuan*.
- * - ***Adopsi per KPM***: company first with its totals, its active KPMs beneath (name, the code small); *Semua · Leader
- *   · Agent* changes every number; a KPM's name goes inside it. The pills on the server's scale (`scale`).
+ * - ***Adopsi per KPM***: company first with its totals, every KPM of it beneath (name, the code small) — a suspended one
+ *   with *Ditangguhkan* in place of its shares (P19.26-T1 AC-4; UI-205); *Semua · Leader · Agent* changes every number; a
+ *   KPM's name goes inside it. The pills on the server's scale (`scale`).
+ * - **On a phone** (P19.26-T2; UI-206 (21 Nov), ADR-0284): no *Keseluruhan* and no *Anggota 100%* row, the navy card's big
+ *   numbers and its % in the light orange. From 768px nothing changes. Every count of members is the counted member
+ *   (`COUNTED_MEMBERS`, ADR-0284 §1); *Perlu tindakan* counts KPMs (§2).
  *
  * The page is outside every KPM: arriving here leaves the one a tab had entered (`leaveKpm`).
  */
@@ -95,7 +99,7 @@ function Summary({ data, t }: { data: ConsoleDashboard; t: Words }) {
     <div className="min-w-0 rounded-xl bg-secondary-contrast/[0.08] px-3 py-2">
       <dt className="text-sm font-semibold">{label}</dt>
       <dd>
-        <b className="block text-[1.625rem] font-extrabold leading-tight text-primary">{value}</b>
+        <b className="block text-[1.625rem] font-extrabold leading-tight text-primary max-md:text-figure max-md:text-on-navy-orange">{value}</b>
         <span className="block truncate text-xs text-secondary-contrast/75">{sub}</span>
       </dd>
     </div>
@@ -108,8 +112,9 @@ function Summary({ data, t }: { data: ConsoleDashboard; t: Words }) {
       className="rounded-[20px] bg-secondary p-4 text-secondary-contrast md:p-5 lg:grid lg:grid-cols-2 lg:gap-6"
     >
       <div>
-        <h2 id="console-overall" className="text-md font-bold">{t.overall}</h2>
-        <dl className="mt-3 grid grid-cols-2 gap-2">
+        {/* UI-206 (21 Nov): no *Keseluruhan* on a phone — kept for a screen reader, which names the card by it. */}
+        <h2 id="console-overall" className="text-md font-bold max-md:sr-only">{t.overall}</h2>
+        <dl className="mt-3 grid grid-cols-2 gap-2 max-md:mt-0">
           {tile(t.kpm, n(overall.kpms), t.newThisMonth({ n: n(overall.kpmsNewThisMonth) }))}
           {tile(t.companies, n(overall.companies), (
             <>
@@ -170,8 +175,11 @@ function FunnelRow({ label, count, pct, change, first = false, t }: {
   ) : null;
   return (
     <li
+      // UI-206 (21 Nov): the *Anggota 100%* row repeats the tile; on a phone it goes.
+      data-funnel-row={first ? 'members' : undefined}
       className={cn(
         'grid items-center gap-x-3 gap-y-1.5 py-2',
+        first && 'max-md:hidden',
         "grid-cols-[minmax(0,1fr)_auto_auto] [grid-template-areas:'label_pct_count''bar_bar_bar']",
         "md:grid-cols-[minmax(0,11rem)_minmax(0,1fr)_2.75rem_3rem_5rem] md:[grid-template-areas:'label_bar_count_pct_change']",
       )}
@@ -184,7 +192,7 @@ function FunnelRow({ label, count, pct, change, first = false, t }: {
         <span className="block h-full rounded-pill bg-primary" style={{ width: `${Math.min(100, Math.max(0, pct))}%` }} />
       </span>
       <b className="text-right text-lg font-extrabold tabular-nums [grid-area:count]">{formatNumber(count, {}, fig)}</b>
-      <span className={cn('text-right text-md font-bold tabular-nums text-primary [grid-area:pct]', first && 'md:invisible')}>{pct}%</span>
+      <span className={cn('text-right text-md font-bold tabular-nums text-primary max-md:text-on-navy-orange [grid-area:pct]', first && 'md:invisible')}>{pct}%</span>
       <span className="text-right max-md:hidden md:[grid-area:change]">{changeNode}</span>
     </li>
   );
@@ -241,7 +249,13 @@ function Attention({ data, t, onChanged }: { data: ConsoleDashboard; t: Words; o
   if (rows.length === 0) return null;
   return (
     <section aria-labelledby="console-attention">
-      <h2 id="console-attention" className="mb-2 text-md font-bold text-navy">{t.attention({ n: formatNumber(rows.length, {}, fig) })}</h2>
+      {/*
+        * *Perlu tindakan* counts KPMs (P19.26-T1 AC-3; ADR-0284 §2): the server's number, the KPM list's tile's — never the
+        * rows, of which a KPM may have two and the approvals one more.
+        */}
+      <h2 id="console-attention" className="mb-2 text-md font-bold text-navy">
+        {data.overall.needsAction > 0 ? t.attention({ n: formatNumber(data.overall.needsAction, {}, fig) }) : t.attentionTitle}
+      </h2>
       <ul className="grid gap-2 md:grid-cols-2" data-console-attention="">
         {rows.map((row) => (
           <li key={row.key} data-attention-row={row.key} className="flex items-center gap-3 rounded-xl bg-card px-3.5 py-2.5">
@@ -300,7 +314,8 @@ function Adoption({ data, t }: { data: ConsoleDashboard; t: Words }) {
   const [audience, setAudience] = useState<Audience>('all');
   const groups = useMemo(() => data.companies.map((company) => ({
     company,
-    kpms: data.kpms.filter((k) => k.active && k.companyId === company.companyId),
+    // Every KPM of the company, a suspended one included (P19.26-T1 AC-4; UI-205); an archived one is in no count.
+    kpms: data.kpms.filter((k) => k.status !== 'archived' && k.companyId === company.companyId),
   })), [data]);
   const tabs = [{ id: 'all', label: t.all }, { id: 'leader', label: t.leader }, { id: 'agent', label: t.agent }];
   return (
@@ -400,12 +415,18 @@ function AdoptionTree({ groups, audience, scale, t }: { groups: Group[]; audienc
                         </Link>
                       </td>
                       <td className="px-2 py-2.5"><MembersCell total={c.members} split={kpm.usage} name={kpm.name} t={t} /></td>
-                      <td className="px-2 py-2.5"><PctCell part={c.everUsed} of={c.members} scale={scale} t={t} /></td>
-                      <td className="px-2 py-2.5"><PctCell part={c.used14} of={c.members} scale={scale} t={t} /></td>
-                      <td className="px-2 py-2.5"><PctCell part={c.powerUsers} of={c.members} scale={scale} t={t} /></td>
+                      {kpm.status === 'suspended' ? (
+                        <td colSpan={3} className="px-2 py-2.5"><Suspended t={t} /></td>
+                      ) : (
+                        <>
+                          <td className="px-2 py-2.5"><PctCell part={c.everUsed} of={c.members} scale={scale} t={t} /></td>
+                          <td className="px-2 py-2.5"><PctCell part={c.used14} of={c.members} scale={scale} t={t} /></td>
+                          <td className="px-2 py-2.5"><PctCell part={c.powerUsers} of={c.members} scale={scale} t={t} /></td>
+                        </>
+                      )}
                       {KPM_REPORT_READY && (
                         <td className="px-2 py-2.5 text-center">
-                          <KpmReportSlot kpm={{ kpmId: kpm.kpmId, name: kpm.name, code: kpm.code, companyName: kpm.companyName }} placement="row" />
+                          <KpmReportSlot kpm={{ kpmId: kpm.kpmId, name: kpm.name, code: kpm.code, companyName: kpm.companyName, owners: kpm.ownerNames.length }} placement="row" />
                         </td>
                       )}
                     </tr>
@@ -440,14 +461,20 @@ function AdoptionTree({ groups, audience, scale, t }: { groups: Group[]; audienc
                         <span className="block text-xs text-muted">{t.code({ code: kpm.code })}</span>
                       </Link>
                       {KPM_REPORT_READY && (
-                        <KpmReportSlot kpm={{ kpmId: kpm.kpmId, name: kpm.name, code: kpm.code, companyName: kpm.companyName }} placement="row" />
+                        <KpmReportSlot kpm={{ kpmId: kpm.kpmId, name: kpm.name, code: kpm.code, companyName: kpm.companyName, owners: kpm.ownerNames.length }} placement="row" />
                       )}
                     </div>
                     <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-2">
                       <div><dt className="text-xs font-semibold text-muted">{t.columns.members}</dt><dd><MembersCell total={c.members} split={kpm.usage} name={kpm.name} t={t} /></dd></div>
-                      <div><dt className="text-xs font-semibold text-muted">{t.columns.everUsed}</dt><dd><PctCell part={c.everUsed} of={c.members} scale={scale} t={t} /></dd></div>
-                      <div><dt className="text-xs font-semibold text-muted">{t.columns.used14}</dt><dd><PctCell part={c.used14} of={c.members} scale={scale} t={t} /></dd></div>
-                      <div><dt className="text-xs font-semibold text-muted">{t.columns.powerUsers}</dt><dd><PctCell part={c.powerUsers} of={c.members} scale={scale} t={t} /></dd></div>
+                      {kpm.status === 'suspended' ? (
+                        <div className="flex items-end"><dt className="sr-only">{t.columns.used14}</dt><dd><Suspended t={t} /></dd></div>
+                      ) : (
+                        <>
+                          <div><dt className="text-xs font-semibold text-muted">{t.columns.everUsed}</dt><dd><PctCell part={c.everUsed} of={c.members} scale={scale} t={t} /></dd></div>
+                          <div><dt className="text-xs font-semibold text-muted">{t.columns.used14}</dt><dd><PctCell part={c.used14} of={c.members} scale={scale} t={t} /></dd></div>
+                          <div><dt className="text-xs font-semibold text-muted">{t.columns.powerUsers}</dt><dd><PctCell part={c.powerUsers} of={c.members} scale={scale} t={t} /></dd></div>
+                        </>
+                      )}
                     </dl>
                   </div>
                 );
@@ -457,6 +484,15 @@ function AdoptionTree({ groups, audience, scale, t }: { groups: Group[]; audienc
         })}
       </div>
     </>
+  );
+}
+
+/** *Ditangguhkan* in place of a suspended KPM's shares (P19.26-T1 AC-4; UI-205): nobody in it can sign in. */
+function Suspended({ t }: { t: Words }) {
+  return (
+    <span data-adoption-suspended="" className="inline-flex rounded-pill bg-pill-grey px-2 py-0.5 text-sm font-semibold text-pill-grey-ink">
+      {t.suspended}
+    </span>
   );
 }
 

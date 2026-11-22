@@ -206,7 +206,7 @@ const en = {
     unknown: 'No account uses that address.',
     /*
      * The `mailto:` *Kirim undangan* (UI-168 point 2) is retired with its four strings (P19.4-T3; ADR-0212 §3): an address
-     * nobody holds is made the Owner and invited by the API now — `admin-kpm-owner.tsx`, `newPerson`.
+     * nobody holds is made the Owner and invited by the API now — the owner page and its words are retired (ADR-0285).
      */
     /** What an account already holds, beside its name. */
     ownerOf: ({ office }: { office: string }) => `Owner · ${office}`,
