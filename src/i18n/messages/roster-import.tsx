@@ -71,6 +71,16 @@ const en = {
     `${created} new, ${updated} updated · saved`,
   whatsAppTitle: 'Invitations to send on WhatsApp',
   sendOnWhatsApp: ({ name }: { name: string }) => `Send ${name} the invitation on WhatsApp`,
+  /** P19.30-T2 AC-1 (ADR-0288 §5): how new people get in, on the save's step. */
+  access: {
+    legend: 'How new people get in',
+    invite: 'Send an email invitation',
+    temporary: 'Temporary password (PDF)',
+  },
+  /** The note under the rows when *Password sementara (PDF)* is chosen. */
+  noteTemporary: 'Nobody is emailed. Once saved, download the PDF of the new accounts and give each person their line. Data that cannot be read is left empty; the person is still added.',
+  /** P19.30-T2 AC-2: the result's card. */
+  madeForPdf: ({ n }: { n: number }) => `${n} new ${n === 1 ? 'account' : 'accounts'} ready to hand out, each with a temporary password.`,
 };
 
 const id: MessagesOf<typeof en> = {
@@ -118,6 +128,13 @@ const id: MessagesOf<typeof en> = {
   done: ({ created, updated }) => `${created} baru, ${updated} diperbarui · tersimpan`,
   whatsAppTitle: 'Undangan untuk dikirim lewat WhatsApp',
   sendOnWhatsApp: ({ name }) => `Kirim undangan ke ${name} lewat WhatsApp`,
+  access: {
+    legend: 'Cara orang baru masuk',
+    invite: 'Kirim undangan email',
+    temporary: 'Password sementara (PDF)',
+  },
+  noteTemporary: 'Tidak ada email yang dikirim. Setelah disimpan, unduh PDF akun baru dan berikan ke masing-masing orang barisnya. Data yang tidak terbaca dikosongkan, orangnya tetap masuk.',
+  madeForPdf: ({ n }) => `${n} akun baru siap dibagikan, masing-masing dengan password sementara.`,
 };
 
 export const rosterImportMessages = defineMessages({ en, id });

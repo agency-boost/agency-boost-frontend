@@ -386,3 +386,42 @@ describe('P19.29-T5 All members on a phone', () => {
     expect(legend).toHaveAttribute('data-members-legend');
   });
 });
+
+/**
+ * ***Unduh akun & password (PDF)*** **on All members** (P19.30-T1 AC-6; ADR-0288 §3; OD-479, OD-481): an Owner's ⋯ beside
+ * *Undang anggota*, holding the one item; a KPM Admin, who may not, sees no ⋯ at all.
+ */
+describe('P19.30-T1 All members — Unduh akun & password', () => {
+  const ISSUER = makeMe({ ...OWNER, permissions: [...STEWARD, 'member:issue_temporary_password'] });
+  const ADMIN = makeMe({
+    membership: { ...OWNER.membership!, membershipId: 'mem-maya', isKpmOwner: false, isKpmAdmin: true },
+    permissions: STEWARD,
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('P19.30-T1 AC-6 an Owner’s ⋯ beside Undang anggota holds it, and it opens the confirmation', async () => {
+    const { calls } = stubFetch({
+      '/members': page([wilson, row(), dewi]),
+      'POST /members/temporary-passwords/preview': { body: { count: 3, kpmName: 'BSD City Branch', fileName: 'Akun-password-BSD-City-Branch-2026-11-22.pdf' } },
+    });
+    renderInIndonesian(<MembersPage />, { me: ISSUER });
+    const more = await screen.findByRole('button', { name: 'Lainnya untuk semua anggota' });
+    expect(more.closest('[data-members-actions]')).toHaveTextContent('Undang anggota');
+    // Below 768px the actions take their own row under the title, which keeps its line (the 2026-11-23 browser walk).
+    expect(more.closest('[data-members-actions]')).toHaveClass('max-md:basis-full');
+    await userEvent.click(more);
+    expect(screen.getAllByRole('menuitem').map((item) => item.textContent)).toEqual(['Unduh akun & password (PDF)']);
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Unduh akun & password (PDF)' }));
+    const box = await screen.findByRole('dialog', { name: 'Akun & password' });
+    expect(await within(box).findByText(/PDF ini memuat 3 orang/)).toBeInTheDocument();
+    expect(calls.some((c) => c.url.endsWith('/members/temporary-passwords/preview'))).toBe(true);
+  });
+
+  it('P19.30-T1 AC-3 a KPM Admin sees no ⋯ (OD-479): the PDF is the Owner’s', async () => {
+    stubFetch({ '/members': page([wilson, row(), dewi]) });
+    renderInIndonesian(<MembersPage />, { me: ADMIN });
+    await screen.findByRole('tab', { name: /Anggota/ });
+    expect(screen.queryByRole('button', { name: 'Lainnya untuk semua anggota' })).toBeNull();
+    expect(screen.queryByText('Unduh akun & password (PDF)')).toBeNull();
+  });
+});

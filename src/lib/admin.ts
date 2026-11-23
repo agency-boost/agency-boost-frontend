@@ -690,6 +690,11 @@ export interface RosterPreview {
 export interface RosterImportResult extends RosterPreview {
   /** How many new people were emailed an invitation. Those invited on WhatsApp are `counts.invited`. */
   invited: number;
+  /**
+   * **The memberships the commit made** (P19.30-T2 AC-2; ADR-0288 §5), one per `imported` row: what *Password sementara
+   * (PDF)* narrows the *Akun & password* PDF to.
+   */
+  membershipIds: string[];
 }
 
 export const rosterTemplate = () =>

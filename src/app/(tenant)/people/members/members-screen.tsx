@@ -1,5 +1,6 @@
 'use client';
 
+import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AddUserButton } from '@/components/admin/add-user-button';
@@ -10,6 +11,7 @@ import { MemberSheet } from '@/components/people/member-sheet';
 import { PeoplePicker, type PickerPerson } from '@/components/people/people-picker';
 import { GroupChip, HIT_AREA, PersonName, RecencyPill, StewardChip } from '@/components/people/people-parts';
 import { TransferRequests } from '@/components/transfer-requests';
+import { ActionMenu } from '@/components/ui/action-menu';
 import { Avatar } from '@/components/ui/avatar';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Button, ErrorBanner } from '@/components/ui/field';
@@ -24,6 +26,7 @@ import { kept } from '@/i18n/kept';
 import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
 import { memberSheetMessages } from '@/i18n/messages/member-sheet';
 import { membersMessages } from '@/i18n/messages/members';
+import { temporaryPasswordsMessages } from '@/i18n/messages/temporary-passwords';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
 import { displayName } from '@/lib/display-name';
@@ -37,6 +40,11 @@ import {
 } from '@/lib/people';
 import { useCan } from '@/lib/session';
 import { useDebounced } from '@/lib/use-debounced';
+
+/** *Unduh akun & password (PDF)*'s confirmation, loaded the first time it opens (P19.30-T1 AC-6). */
+const TemporaryPasswordsDialog = dynamic(
+  () => import('@/components/temporary-passwords-dialog').then((m) => m.TemporaryPasswordsDialog), { ssr: false },
+);
 
 type Tab = 'members' | 'waiting' | 'history';
 const TABS: readonly Tab[] = ['members', 'waiting', 'history'];
@@ -76,6 +84,10 @@ export function MembersScreen({ openMemberId }: { openMemberId?: string }) {
   const { show } = useToast();
   const steward = useCan('member:tag_group');
   const mayDecideMoves = useCan('member:transfer_approve');
+  // P19.30-T1 AC-6 (ADR-0288 §3; OD-479): the KPM's Owners, and the Super Admin inside it — never a KPM Admin.
+  const mayIssuePasswords = useCan('member:issue_temporary_password');
+  const [issuing, setIssuing] = useState(false);
+  const p = useMessages(temporaryPasswordsMessages);
   const [tab, setTab] = useState<Tab>('members');
   const [sheet, setSheet] = useState<string | null>(openMemberId ?? null);
   const [q, setQ] = useState('');
@@ -160,13 +172,31 @@ export function MembersScreen({ openMemberId }: { openMemberId?: string }) {
     <Page
       title={kept('All members')}
       actions={(
-        // P19.28-T2 AC-1 (UI-203 (21 Nov)): the shared *Tambah user* sheet, this KPM fixed (`AddUserButton`).
-        <AddUserButton
-          label={t.invite}
-          icon={<LineIcon name="userPlus" className="h-4 w-4" />}
-          fallbackHref="/user-management/add"
-          className="inline-flex min-h-11 items-center gap-2 rounded-pill border border-hairline bg-card px-4 text-md font-semibold text-navy hover:bg-hover-row"
-        />
+        /*
+         * Below 768px the actions take a row of their own under the title (the P19.30 browser walk, 2026-11-23: beside a
+         * round ⋯ the title was squeezed to about 60px and *members* ran under *Undang anggota*). From 768px as before.
+         */
+        <div className="flex items-center gap-2 max-md:basis-full" data-members-actions="">
+          {/* P19.28-T2 AC-1 (UI-203 (21 Nov)): the shared *Tambah user* sheet, this KPM fixed (`AddUserButton`). */}
+          <AddUserButton
+            label={t.invite}
+            icon={<LineIcon name="userPlus" className="h-4 w-4" />}
+            fallbackHref="/user-management/add"
+            className="inline-flex min-h-11 items-center gap-2 rounded-pill border border-hairline bg-card px-4 text-md font-semibold text-navy hover:bg-hover-row"
+          />
+          {/*
+            * P19.30-T1 AC-6 (ADR-0288; OD-481): *Unduh akun & password (PDF)* behind ⋯ beside *Undang anggota* — the
+            * page had no menu, so ⋯ holds this one item, for its holders alone; nobody else sees a ⋯.
+            */}
+          {mayIssuePasswords && (
+            <ActionMenu
+              label={p.more}
+              glyph="⋯"
+              items={[{ label: p.item, onSelect: () => setIssuing(true) }]}
+              triggerClassName="h-11 w-11 rounded-full border border-hairline bg-card text-base font-semibold text-navy"
+            />
+          )}
+        </div>
       )}
     >
       <div role="tablist" aria-label={kept('All members')} className="mb-3 inline-flex max-w-full gap-1 overflow-x-auto rounded-pill bg-card p-1">
@@ -250,6 +280,7 @@ export function MembersScreen({ openMemberId }: { openMemberId?: string }) {
       {tab === 'history' && <History onOpen={setSheet} />}
 
       {sheet && <MemberSheet membershipId={sheet} onClose={closeSheet} onChanged={() => void loadRoster()} />}
+      {issuing && <TemporaryPasswordsDialog onClose={() => setIssuing(false)} />}
       {groupFor && (
         <GroupDialog
           ab={{ membershipId: groupFor.membershipId, name: displayName(groupFor), role: rungShort(groupFor.orgLevelCode ?? 'AB', ladder), people: groupFor.subtreeCount + 1 }}

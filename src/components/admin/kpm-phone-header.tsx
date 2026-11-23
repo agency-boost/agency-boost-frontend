@@ -19,8 +19,8 @@ import { adminConsoleMessages } from '@/i18n/messages/admin-console';
  *   the 36px avatar on the right (`TitleAvatar`, as every title row has it). **The KPM's name is here once.**
  * - **Row 2: one 44px row in one type style, 13/600** (D-38): the navy pill *Super Admin · akses penuh* (the shield a
  *   line icon), which takes the room left; the white round *PDF*, 44px — the report's own slot (`placement="round"`); and
- *   the white round ⋯, 44px, whose menu holds `menu` — *Simpan sebagai template*, moved here from the foot of the page.
- *   A reader with nothing in it gets no ⋯.
+ *   the white round ⋯, 44px, whose menu holds `menu` — *Simpan sebagai template*, moved here from the foot of the page,
+ *   and since P19.30-T1 *Unduh akun & password (PDF)* (ADR-0288). A reader with nothing in it gets no ⋯.
  */
 export function KpmPhoneHeader({ kpm, menu }: { kpm: KpmReportTarget; menu: readonly ActionMenuItem[] }) {
   const t = useMessages(adminConsoleMessages).inside;

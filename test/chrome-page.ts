@@ -46,11 +46,22 @@ ${body}</html>`;
 export class Tab {
   private next = 0;
   private waiting = new Map<number, (value: unknown) => void>();
+  /** Who listens to an event the browser sends unasked — `Browser.downloadProgress`, say (`on`). */
+  private listeners = new Map<string, Set<(params: unknown) => void>>();
   private constructor(private readonly socket: WebSocket) {
     socket.addEventListener('message', (event) => {
-      const message = JSON.parse(String(event.data)) as { id?: number; result?: unknown };
+      const message = JSON.parse(String(event.data)) as { id?: number; result?: unknown; method?: string; params?: unknown };
       if (message.id !== undefined) this.waiting.get(message.id)?.(message.result);
+      else if (message.method) for (const listener of this.listeners.get(message.method) ?? []) listener(message.params);
     });
+  }
+
+  /** **An event the browser sends** (P19.30's download spec): `listener` with its params, until the answer is called. */
+  on<T = unknown>(method: string, listener: (params: T) => void): () => void {
+    const set = this.listeners.get(method) ?? new Set();
+    set.add(listener as (params: unknown) => void);
+    this.listeners.set(method, set);
+    return () => { set.delete(listener as (params: unknown) => void); };
   }
 
   static async open(devtools: string): Promise<Tab> {

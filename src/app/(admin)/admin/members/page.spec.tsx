@@ -349,6 +349,75 @@ describe('P19.28-T3 — Anggota’s chips and pills', () => {
     expect(await screen.findByText('Rina Kartika’s invitation cancelled.'.replace('’', "'"))).toBeInTheDocument();
   });
 
+  /*
+   * **P19.31-T2 (ADR-0289): *Hapus akun*** — the Super Admin's alone (`account:retire`): in red, last in the member
+   * sheet's ⋯; and for an account in no KPM, a ⋯ beside *Masukkan* (OD-487). Done, the sheet closes, the toast names
+   * them, and the lists are read again.
+   */
+  describe('P19.31-T2 Hapus akun', () => {
+    const RETIRER = makeMe({ ...SUPER_ADMIN, permissions: [...SUPER_ADMIN.permissions, 'account:retire'] });
+    const PREVIEW_RINA = {
+      userId: 'u-2', fullName: 'Rina Kurnia', email: 'rina@contoh.test', kpmsWithHistory: 1, refusal: null,
+      membership: { membershipId: 'm-2', kpmId: KPM, kpmName: 'BSD City Branch', kpmCode: '0417', status: 'active' },
+    };
+    const showAs = (me: typeof SUPER_ADMIN, routes: Record<string, unknown> = {}) => {
+      const stub = stubFetch({ ...LISTS, '/admin/members': { body: { ...PAGE, chips: CHIPS } }, ...routes } as never);
+      renderInLayout(AdminLayout, <AnggotaPage />, { me });
+      return stub;
+    };
+
+    it('P19.31-T2 AC-1, AC-3 the sheet’s ⋯ holds Hapus akun in red, last; done, the toast names them and the list is read again', async () => {
+      atWidth(1280);
+      const { calls } = showAs(RETIRER, {
+        '/admin/members/m-2': { body: { ...RINA, phone: null, email: 'rina@contoh.test' } },
+        'GET /admin/accounts/u-2/retirement': { body: PREVIEW_RINA },
+        'POST /admin/accounts/u-2/retirement': { body: { userId: 'u-2', fullName: 'Rina Kurnia', retiredAt: '2026-11-23T03:00:00.000Z', membershipEnded: { membershipId: 'm-2', kpmId: KPM }, invitationsCancelled: 0 } },
+      });
+      await userEvent.click(await screen.findByRole('button', { name: /Details of Rina Kurnia/ }));
+      const sheet = await screen.findByRole('dialog', { name: 'Member details' });
+      await userEvent.click(within(sheet).getByRole('button', { name: 'More for Rina Kurnia' }));
+      const items = await screen.findAllByRole('menuitem');
+      expect(items.map((i) => i.textContent)).toEqual(['Mark as test account', 'Delete account']);
+      expect(items[1]).toHaveClass('text-alert');
+      const reads = calls.filter((c) => c.url.includes('/admin/members?')).length;
+      await userEvent.click(items[1]);
+      const confirm = await screen.findByRole('dialog', { name: 'Delete account' });
+      await within(confirm).findByRole('region', { name: 'What ends' });
+      await userEvent.type(within(confirm).getByLabelText('Reason'), 'Dibuat ulang.');
+      await userEvent.type(within(confirm).getByLabelText('Type “Rina Kurnia” to confirm'), 'Rina Kurnia');
+      await userEvent.click(within(confirm).getByRole('button', { name: 'Delete account' }));
+      expect(await screen.findByText('Account RINA KURNIA deleted.')).toBeInTheDocument();
+      expect(screen.queryByRole('dialog', { name: 'Member details' })).toBeNull();
+      await waitFor(() => expect(calls.filter((c) => c.url.includes('/admin/members?')).length).toBeGreaterThan(reads));
+    });
+
+    it('P19.31-T2 AC-1 without account:retire the ⋯ holds Akun tes alone', async () => {
+      atWidth(1280);
+      showAs(SUPER_ADMIN, { '/admin/members/m-2': { body: { ...RINA, phone: null, email: 'rina@contoh.test' } } });
+      await userEvent.click(await screen.findByRole('button', { name: /Details of Rina Kurnia/ }));
+      const sheet = await screen.findByRole('dialog', { name: 'Member details' });
+      await userEvent.click(within(sheet).getByRole('button', { name: 'More for Rina Kurnia' }));
+      expect((await screen.findAllByRole('menuitem')).map((i) => i.textContent)).toEqual(['Mark as test account']);
+    });
+
+    it('P19.31-T2 an account in no KPM: a ⋯ beside Masukkan holds Hapus akun (OD-487), in Indonesian', async () => {
+      atWidth(390);
+      stubFetch({
+        ...LISTS, '/admin/members': { body: { ...PAGE, chips: CHIPS } }, '/admin/waiting-members': { body: WAITING },
+        'GET /admin/accounts/u-fajar/retirement': { body: { ...PREVIEW_RINA, userId: 'u-fajar', fullName: 'Fajar Nugroho', email: 'untagged@kpm0417.test', membership: null, kpmsWithHistory: 0 } },
+      } as never);
+      renderInIndonesian(<AnggotaPage />, { me: RETIRER });
+      await userEvent.click(await screen.findByRole('radio', { name: /Menunggu/ }));
+      const list = await screen.findByRole('list', { name: 'Menunggu' });
+      await userEvent.click(within(list).getByRole('button', { name: 'Lainnya untuk Fajar Nugroho' }));
+      await userEvent.click(await screen.findByRole('menuitem', { name: 'Hapus akun' }));
+      const confirm = await screen.findByRole('dialog', { name: 'Hapus akun' });
+      expect(await within(confirm).findByRole('region', { name: 'Yang tetap' })).toHaveTextContent('Tidak ada yang lain');
+      // The invited row (no account) has no such ⋯.
+      expect(within(list).queryByRole('button', { name: 'Lainnya untuk Rina Kartika' })).toBeNull();
+    });
+  });
+
   it('P19.28-T2 AC-5 Masukkan opens the sheet as Masukkan ke KPM — NAME and email, the KPM it registered to prefilled', async () => {
     atWidth(390);
     show({

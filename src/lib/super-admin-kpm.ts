@@ -83,11 +83,28 @@ export function onKpmChange(listener: (kpmId: string | null) => void): () => voi
 }
 
 /**
+ * ***Import people*'s routes, which are the KPM's though they sit under `/admin`** (the 2026-11-22 District 41 test;
+ * P19.30-T2): `/admin/tenants/<id>/roster…` and the template's `/admin/tenants/roster-template?…kpmId=<id>`. The API
+ * answers them only to the KPM's own people and the Super Admin inside it (`kpm:import_roster`), so the Super Admin's call
+ * carries the header — for the KPM the path names, when it is the one entered, and no other.
+ */
+const KPM_ROUTE_UNDER_ADMIN = /^\/admin\/tenants\/(?:([0-9a-f]{24})\/roster(?:\/|$|\?)|roster-template\?(?:[^#]*&)?kpmId=([0-9a-f]{24})(?:&|$))/i;
+
+/**
  * **The header a request carries**: `X-Kpm-Id` while a KPM is entered, and never on a platform route (`/admin/…`), which
  * is the Super Admin's own, in no KPM.
+ *
+ * *Changed 2026-11-22 (P19.30-T2):* **except *Import people*'s own routes** (`KPM_ROUTE_UNDER_ADMIN`), for the KPM the
+ * path names when it is the one entered. Without the header the Super Admin's *Import people* was refused at its first
+ * step — the page was theirs (ADR-0268 §3), its calls were not.
  */
 export function kpmHeaderFor(path: string): Record<string, string> {
-  if (entered === null || /^\/admin(\/|$|\?)/.test(path)) return {};
+  if (entered === null) return {};
+  if (/^\/admin(\/|$|\?)/.test(path)) {
+    const route = KPM_ROUTE_UNDER_ADMIN.exec(path);
+    const named = route?.[1] ?? route?.[2] ?? null;
+    return named !== null && named.toLowerCase() === entered.toLowerCase() ? { [KPM_HEADER]: entered } : {};
+  }
   return { [KPM_HEADER]: entered };
 }
 

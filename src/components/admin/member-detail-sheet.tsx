@@ -15,6 +15,7 @@ import { SkeletonText } from '@/components/ui/skeleton';
 import { TonePill } from '@/components/ui/tone-pill';
 import { useToast } from '@/components/ui/toast';
 import { useFigureLanguage, useMessages } from '@/i18n/language-provider';
+import { accountRetirementMessages } from '@/i18n/messages/account-retirement';
 import { adminMembersMessages } from '@/i18n/messages/admin-members';
 import { saveMemberPhoneInKpm } from '@/lib/add-user';
 import {
@@ -24,8 +25,10 @@ import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
 import { formatMonth } from '@/lib/format';
 import { whatsAppHref } from '@/lib/phone-number';
+import { useCan } from '@/lib/session';
 import { enterKpm } from '@/lib/super-admin-kpm';
 import { MemberName } from './member-name';
+import { RetireAccountDialog } from './retire-account-dialog';
 
 
 /** A detail nobody gave: a dash, the same in both languages (no message holds it). */
@@ -55,11 +58,14 @@ export function MemberDetailSheet({
   row,
   onClose,
   onTestAccountChanged,
+  onRetired,
 }: {
   row: AnggotaRow;
   onClose: () => void;
   /** The flag changed: the list is read again, since the person leaves it (or joins *Akun tes*). */
   onTestAccountChanged: () => void;
+  /** *Hapus akun* is done (P19.31-T2 AC-3): the sheet closes, the toast names them and the lists are read again. */
+  onRetired?: (fullName: string) => void;
 }) {
   const t = useMessages(adminMembersMessages);
   const figures = useFigureLanguage();
@@ -72,6 +78,10 @@ export function MemberDetailSheet({
   const [testAccount, setTestFlag] = useState(row.testAccount);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<ApiError | null>(null);
+  // P19.31-T2 AC-1 (ADR-0289 §3): *Hapus akun*, the Super Admin's alone.
+  const mayRetire = useCan('account:retire');
+  const [retiring, setRetiring] = useState(false);
+  const r = useMessages(accountRetirementMessages);
 
   useEffect(() => {
     let live = true;
@@ -175,10 +185,14 @@ export function MemberDetailSheet({
           label={t.detail.more({ name: shown.fullName })}
           glyph={<LineIcon name="more" className="h-5 w-5" />}
           triggerClassName="h-11 w-11"
-          items={[{
-            label: testAccount ? t.detail.testUnset : t.detail.testSet,
-            onSelect: () => { setSaveError(null); setConfirming(true); },
-          }]}
+          items={[
+            {
+              label: testAccount ? t.detail.testUnset : t.detail.testSet,
+              onSelect: () => { setSaveError(null); setConfirming(true); },
+            },
+            // P19.31-T2 AC-1: *Hapus akun* in red, last — the danger item.
+            ...(mayRetire ? [{ label: r.item, danger: true, onSelect: () => setRetiring(true) }] : []),
+          ]}
         />
       </div>
 
@@ -212,6 +226,17 @@ export function MemberDetailSheet({
           <p className="text-row text-muted">{t.detail.testHint}</p>
           {saveError && <div className="mt-2"><ErrorBanner {...saveError} /></div>}
         </Modal>
+      )}
+      {retiring && (
+        <RetireAccountDialog
+          userId={shown.userId}
+          fallbackName={shown.fullName}
+          onClose={() => setRetiring(false)}
+          onDone={(fullName) => {
+            setRetiring(false);
+            onRetired?.(fullName);
+          }}
+        />
       )}
       {askingPhone && detail && (
         <PhoneNumberSheet
