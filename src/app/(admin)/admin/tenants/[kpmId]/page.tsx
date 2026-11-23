@@ -18,6 +18,7 @@ import { SkeletonCards } from '@/components/ui/skeleton';
 import { useToast } from '@/components/ui/toast';
 import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
 import { adminConsoleMessages, type AdminConsoleWords } from '@/i18n/messages/admin-console';
+import { temporaryPasswordsMessages } from '@/i18n/messages/temporary-passwords';
 import { readKpmPeople, type ConsoleKpmPeople } from '@/lib/admin-console';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
@@ -27,6 +28,11 @@ import { useCan } from '@/lib/session';
 import { enterKpm } from '@/lib/super-admin-kpm';
 import { savedTemplateSentence } from '@/lib/templates';
 import { usePhone } from '@/lib/use-phone';
+
+/** *Unduh akun & password (PDF)*'s confirmation, loaded the first time it opens (P19.30-T1 AC-6). */
+const TemporaryPasswordsDialog = dynamic(
+  () => import('@/components/temporary-passwords-dialog').then((m) => m.TemporaryPasswordsDialog), { ssr: false },
+);
 
 /** *Simpan sebagai template*'s dialog, loaded the first time it opens. */
 const SaveAsTemplateDialog = dynamic(
@@ -68,6 +74,10 @@ const OWNER_PAGES: readonly { key: keyof Words['pages']; href: string; icon: Nav
  * switcher, with one 44px row of the pill, *PDF* and ⋯ (`KpmPhoneHeader`), *Simpan sebagai template* in ⋯; the navy card
  * names the month alone; the owner pages are 44px rows; *Lihat sebagai* is one card; the two notes are not drawn. From
  * 768px the page is as it was.
+ *
+ * *Changed 2026-11-22 (P19.30-T1 AC-6; ADR-0288 §3):* ***Unduh akun & password (PDF)*** — in the phone header's ⋯, and
+ * from 768px an inline button at the foot beside *Simpan sebagai template* — for `member:issue_temporary_password` (the
+ * Super Admin inside the KPM), opening the *Akun & password* confirmation (`TemporaryPasswordsDialog`).
  */
 export default function KpmPage({ params }: { params: Promise<{ kpmId: string }> }) {
   const { kpmId } = use(params);
@@ -78,6 +88,10 @@ export default function KpmPage({ params }: { params: Promise<{ kpmId: string }>
   const phone = usePhone();
   const canTemplate = useCan('company_template:write');
   const [savingTemplate, setSavingTemplate] = useState(false);
+  // P19.30-T1 AC-6 (ADR-0288 §3): the Super Admin inside the KPM, as its Owner.
+  const canIssuePasswords = useCan('member:issue_temporary_password');
+  const [issuing, setIssuing] = useState(false);
+  const p = useMessages(temporaryPasswordsMessages);
 
   const load = useCallback(async () => {
     try {
@@ -133,7 +147,11 @@ export default function KpmPage({ params }: { params: Promise<{ kpmId: string }>
       {phone && (
         <KpmPhoneHeader
           kpm={report}
-          menu={canTemplate ? [{ label: t.saveAsTemplate, onSelect: () => setSavingTemplate(true) }] : []}
+          menu={[
+            ...(canTemplate ? [{ label: t.saveAsTemplate, onSelect: () => setSavingTemplate(true) }] : []),
+            // P19.30-T1 AC-6 (ADR-0288): *Unduh akun & password (PDF)*, in the ⋯ that holds the KPM's one-off actions.
+            ...(canIssuePasswords ? [{ label: p.item, onSelect: () => setIssuing(true) }] : []),
+          ]}
         />
       )}
       <div className="flex flex-col gap-5" data-kpm-page={kpmId}>
@@ -198,14 +216,24 @@ export default function KpmPage({ params }: { params: Promise<{ kpmId: string }>
           <li>{t.notes.tap}</li>
           <li>{t.notes.change}</li>
         </ul>
-        <SaveAsTemplate
-          kpm={{ _id: kpmId, code: kpm.code, companyId: kpm.companyId, companyName: kpm.companyName }}
-          t={t}
-          open={savingTemplate}
-          onOpen={() => setSavingTemplate(true)}
-          onClose={() => setSavingTemplate(false)}
-          button={!phone}
-        />
+        {/*
+          * The page's foot from 768px — the larger screens' equivalent of the phone header's ⋯ (P19.29-T1): *Simpan sebagai
+          * template*, and *Unduh akun & password (PDF)* beside it (P19.30-T1 AC-6).
+          */}
+        <div className="flex flex-wrap justify-end gap-x-4" data-kpm-foot-actions="">
+          {!phone && canIssuePasswords && (
+            <Button variant="inline" onClick={() => setIssuing(true)}>{p.item}</Button>
+          )}
+          <SaveAsTemplate
+            kpm={{ _id: kpmId, code: kpm.code, companyId: kpm.companyId, companyName: kpm.companyName }}
+            t={t}
+            open={savingTemplate}
+            onOpen={() => setSavingTemplate(true)}
+            onClose={() => setSavingTemplate(false)}
+            button={!phone}
+          />
+        </div>
+        {issuing && <TemporaryPasswordsDialog onClose={() => setIssuing(false)} />}
       </div>
     </Page>
   );
@@ -295,11 +323,7 @@ function SaveAsTemplate({ kpm, t, open, onOpen, onClose, button }: {
   if (!can) return null;
   return (
     <>
-      {button && (
-        <div className="flex justify-end">
-          <Button variant="inline" onClick={onOpen}>{t.saveAsTemplate}</Button>
-        </div>
-      )}
+      {button && <Button variant="inline" onClick={onOpen}>{t.saveAsTemplate}</Button>}
       {open && (
         <SaveAsTemplateDialog
           open

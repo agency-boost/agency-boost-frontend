@@ -11,12 +11,19 @@ import { authMessages } from '@/i18n/messages/auth';
 import { PASSWORD_MIN_LENGTH } from '@/lib/password';
 
 /**
+ * **A field a phone can type into** (the P19.30 browser walk, 2026-11-23): 44px, and its text 16px so an iPhone does not
+ * zoom the page on focus. The page has no shell, so the shell's 48px fields (`FIELD_TOUCH`) do not reach it. From 768px
+ * as before.
+ */
+const PHONE_FIELD = 'max-md:h-11 max-md:text-lg';
+
+/**
  * Where somebody lands when the password they signed in with is not theirs.
  *
- * An account created by the roster import (P3.2-T4) starts on a password an operator
- * generated, read, and put in an email. Until it is replaced, `AuthGuard` refuses every
- * route but three — so this screen is not a suggestion or a nag, it is the only thing
- * that account can do.
+ * An account handed out on the *Akun & password* PDF (ADR-0288; the roster import did it
+ * before ADR-0205 §10) starts on a password its KPM's Owner was given to pass on. Until it
+ * is replaced, `AuthGuard` refuses every route but three — so this screen is not a
+ * suggestion or a nag, it is the only thing that account can do.
  *
  * **Cross-family, and deliberately chrome-less.** It is reached by an Agent, an AB and a
  * KPM Owner alike, and offering a sidebar would be offering navigation that every link
@@ -86,6 +93,7 @@ export default function ChooseAPasswordPage() {
               id="currentPassword"
               autoComplete="current-password"
               required
+              className={PHONE_FIELD}
               value={form.currentPassword}
               onChange={set('currentPassword')}
             />
@@ -109,6 +117,7 @@ export default function ChooseAPasswordPage() {
               id="newPassword"
               autoComplete="new-password"
               required
+              className={PHONE_FIELD}
               value={form.newPassword}
               onChange={set('newPassword')}
               invalid={tooShort || padded || unchanged}
@@ -124,6 +133,7 @@ export default function ChooseAPasswordPage() {
               id="confirmPassword"
               autoComplete="new-password"
               required
+              className={PHONE_FIELD}
               value={form.confirmPassword}
               onChange={set('confirmPassword')}
               invalid={mismatch}

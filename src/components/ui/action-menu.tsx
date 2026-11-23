@@ -228,7 +228,8 @@ export function ActionMenu({
                 title={item.hint}
                 onClick={() => choose(item)}
                 className={cn(
-                  'flex w-full items-start gap-2.5 px-3 py-2 text-left text-md',
+                  // 44px a row on a phone (the P19.30 browser walk, 2026-11-23: 36px at 375); from 768px as before.
+                  'flex w-full items-start gap-2.5 px-3 py-2 text-left text-md max-md:min-h-11 max-md:items-center',
                   'hover:bg-secondary/[0.04] focus:bg-secondary/[0.06]',
                   item.disabled ? 'cursor-not-allowed text-muted' : item.danger ? 'text-alert' : 'text-navy',
                 )}

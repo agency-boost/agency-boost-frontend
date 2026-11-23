@@ -1,5 +1,6 @@
 'use client';
 
+import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { KpmStructure } from '@/components/org-tree/kpm-tree';
@@ -13,6 +14,7 @@ import { TonePill, type PillTone } from '@/components/ui/tone-pill';
 import { useToast } from '@/components/ui/toast';
 import { useFigureLanguage, useMessages } from '@/i18n/language-provider';
 import { rosterImportMessages } from '@/i18n/messages/roster-import';
+import { temporaryPasswordsMessages } from '@/i18n/messages/temporary-passwords';
 import {
   downloadRosterTemplate, importRosterFile, previewRosterFile, ROSTER_TEMPLATE_FILENAME,
 } from '@/lib/admin';
@@ -26,6 +28,19 @@ import {
   type RosterImportView,
 } from '@/lib/people';
 import { saveFile } from '@/lib/save-file';
+import { useCan } from '@/lib/session';
+
+/** *Unduh akun & password (PDF)*'s confirmation, loaded the first time it opens (P19.30-T2 AC-2). */
+const TemporaryPasswordsDialog = dynamic(
+  () => import('@/components/temporary-passwords-dialog').then((m) => m.TemporaryPasswordsDialog), { ssr: false },
+);
+
+/**
+ * **How new people get in** (P19.30-T2 AC-1; ADR-0288 §5, restoring ADR-0205 §10's tick): *Kirim undangan email* — each
+ * new person emailed a link to choose their password, the default — or *Password sementara (PDF)*: nobody emailed, and
+ * the *Akun & password* PDF of the accounts just made offered at once.
+ */
+type Access = 'invite' | 'temporary';
 
 /** The template's eleven columns, in its order — the file's contract (ADR-0205 §5), the same in both languages. */
 const COLUMNS = [
@@ -64,7 +79,10 @@ const stateOf = (row: PeopleRow): RowState =>
  *   yellow; *Periksa lagi* checks the corrected rows again, and ***Simpan semua (n orang)*** saves — the file as it came,
  *   or the corrected rows with its name (`roster`, `fileName`). The same agent code updates, never duplicates; an
  *   unreadable optional cell is left empty, *perlu dicek*, and the person still added; new people are invited by email or
- *   WhatsApp — the WhatsApp ones shared from here once saved.
+ *   WhatsApp — the WhatsApp ones shared from here once saved. *Since P19.30-T2 (ADR-0288 §5):* the step asks how new
+ *   people get in — ***Kirim undangan email*** (the default) or ***Password sementara (PDF)*** — and with the second
+ *   nobody is emailed (`invite: false`) and the *Akun & password* PDF of the accounts just made is offered at once
+ *   (`membershipIds`), and again from a card above the structure.
  * - **Below** (AC-3): ***Struktur saat ini*** — the KPM's tree, AB → AAB → Agent under each leader, *Lihat seluruh struktur
  *   di Org tree ›*; after a save the new people under their upline with a green *Baru* on a light green row — then
  *   ***Riwayat unggah*** (`GET /people/imports`). A row of the tree opens the member sheet.
@@ -92,6 +110,18 @@ export function RosterImport({ kpmId }: { kpmId: string }) {
   const [history, setHistory] = useState<RosterImportView[] | null>(null);
   const [fresh, setFresh] = useState<Set<string>>(new Set());
   const [sheet, setSheet] = useState<string | null>(null);
+  const [access, setAccess] = useState<Access>('invite');
+  /*
+   * **Only a reader who may download the PDF is asked** (OD-485's default): the KPM's Owners and the Super Admin inside it
+   * (`member:issue_temporary_password`). An Admin or a core leader importing invites by email, as before — a choice whose
+   * PDF they would then be refused is a dead end; the Owner hands out the passwords from *All members* ⋯ afterwards.
+   */
+  const mayIssue = useCan('member:issue_temporary_password');
+  /** The accounts a *Password sementara* save made, for their PDF (P19.30-T2 AC-2); `null` when none is offered. */
+  const [madeForPdf, setMadeForPdf] = useState<string[] | null>(null);
+  const [issuing, setIssuing] = useState(false);
+  const p = useMessages(temporaryPasswordsMessages);
+  const accessName = useId();
 
   const loadBelow = useCallback(async () => {
     const [read, files] = await Promise.all([
@@ -112,6 +142,7 @@ export function RosterImport({ kpmId }: { kpmId: string }) {
   async function choose(chosen: File | undefined) {
     if (!chosen) return;
     setFile(chosen);
+    setMadeForPdf(null);
     setDirty(false);
     setEdited(false);
     setOpenRow(null);
@@ -146,10 +177,15 @@ export function RosterImport({ kpmId }: { kpmId: string }) {
     if (!preview || !file) return;
     setBusy('saving');
     setError(null);
+    const invite = !mayIssue || access === 'invite' || preview.counts.imported === 0;
     try {
       const result = dirty
-        ? await savePeopleRows(kpmId, rowsToCsv(preview.header, cells), file.name)
-        : await importRosterFile(kpmId, file) as PeopleSaved;
+        ? await savePeopleRows(kpmId, rowsToCsv(preview.header, cells), file.name, invite)
+        : await importRosterFile(kpmId, file, invite) as PeopleSaved;
+      // *Password sementara (PDF)*: the PDF of the accounts just made, offered at once (P19.30-T2 AC-2).
+      const made = result.membershipIds ?? [];
+      setMadeForPdf(!invite && made.length > 0 ? made : null);
+      setIssuing(!invite && made.length > 0);
       const created = result.counts.imported + result.counts.invited;
       show(t.done({ created, updated: result.counts.updated }));
       setSaved(result);
@@ -226,6 +262,27 @@ export function RosterImport({ kpmId }: { kpmId: string }) {
             ))}
           </dl>
           <p className="mt-2 text-sm text-muted"><span className="text-alert" aria-hidden="true">*</span>{t.columnsNote.slice(1)}</p>
+        </section>
+      )}
+
+      {madeForPdf && (
+        /*
+         * P19.30-T2 AC-2 (ADR-0288 §5): the save chose *Password sementara (PDF)* — the accounts it made, their PDF a tap
+         * away (the confirmation opens by itself once; this brings it back).
+         */
+        <section
+          aria-labelledby="temporary-title"
+          // On a phone the button goes under the words, full width (the P19.30 browser walk: at 375 it left the words a word wide).
+          className="flex flex-wrap items-center gap-3 rounded-lg bg-card p-4 max-md:flex-col max-md:items-stretch"
+          data-roster-temporary=""
+        >
+          <div className="min-w-0 flex-1">
+            <h2 id="temporary-title" className="text-md font-bold text-navy">{p.title}</h2>
+            <p className="text-sm text-muted">{t.madeForPdf({ n: madeForPdf.length })}</p>
+          </div>
+          <Button className="min-h-11 rounded-pill max-md:w-full" onClick={() => setIssuing(true)}>
+            <LineIcon name="download" className="h-4 w-4" />{p.item}
+          </Button>
         </section>
       )}
 
@@ -361,7 +418,29 @@ export function RosterImport({ kpmId }: { kpmId: string }) {
                     />
                   ))}
                 </ul>
-                <p className="text-sm text-muted">{t.note}</p>
+                {mayIssue && preview.counts.imported > 0 && (
+                  /*
+                   * P19.30-T2 AC-1 (ADR-0288 §5; ADR-0205 §10's tick restored): how the new people get in — only when the
+                   * file makes anybody new with an email, the people it is about.
+                   */
+                  <fieldset className="flex flex-col gap-1 rounded-md border border-hairline px-3 py-2" data-roster-access="">
+                    <legend className="px-1 text-sm font-semibold text-muted">{t.access.legend}</legend>
+                    {(['invite', 'temporary'] as const).map((choice) => (
+                      <label key={choice} className="flex min-h-11 cursor-pointer items-center gap-3">
+                        <input
+                          type="radio"
+                          name={accessName}
+                          value={choice}
+                          checked={access === choice}
+                          onChange={() => setAccess(choice)}
+                          className="h-5 w-5 shrink-0 accent-secondary"
+                        />
+                        <span className="text-md font-semibold text-navy">{t.access[choice]}</span>
+                      </label>
+                    ))}
+                  </fieldset>
+                )}
+                <p className="text-sm text-muted">{mayIssue && access === 'temporary' && preview.counts.imported > 0 ? t.noteTemporary : t.note}</p>
               </>
             )}
           </div>
@@ -369,6 +448,7 @@ export function RosterImport({ kpmId }: { kpmId: string }) {
       )}
 
       {sheet && <MemberSheet membershipId={sheet} onClose={() => setSheet(null)} onChanged={() => void loadBelow()} />}
+      {issuing && madeForPdf && <TemporaryPasswordsDialog membershipIds={madeForPdf} onClose={() => setIssuing(false)} />}
     </div>
   );
 }

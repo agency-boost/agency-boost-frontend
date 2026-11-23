@@ -141,11 +141,14 @@ export type PeopleSaved = Omit<RosterImportResult, 'rows'> & { rows: PeopleRow[]
 export const previewPeopleRows = (kpmId: string, rows: string) =>
   api<PeoplePreview>(`/admin/tenants/${encodeURIComponent(kpmId)}/roster/preview`, { method: 'POST', body: { rows } });
 
-/** The corrected rows, saved (`roster`), with the file they came from for *Riwayat unggah*. */
-export const savePeopleRows = (kpmId: string, rows: string, fileName: string | null) =>
+/**
+ * The corrected rows, saved (`roster`), with the file they came from for *Riwayat unggah*. `invite`: *Kirim undangan
+ * email* (the default), or `false` for *Password sementara (PDF)* (P19.30-T2; ADR-0288 §5).
+ */
+export const savePeopleRows = (kpmId: string, rows: string, fileName: string | null, invite = true) =>
   api<PeopleSaved>(`/admin/tenants/${encodeURIComponent(kpmId)}/roster`, {
     method: 'POST',
-    body: { rows, invite: true, ...(fileName ? { fileName } : {}) },
+    body: { rows, invite, ...(fileName ? { fileName } : {}) },
   });
 
 /** A CSV cell, quoted when it must be: a comma, a quote or a line break inside. */

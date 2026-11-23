@@ -18,6 +18,7 @@ import { SkeletonPeople } from '@/components/ui/skeleton';
 import { useToast } from '@/components/ui/toast';
 import { useFigureLanguage, useMessages } from '@/i18n/language-provider';
 import { addUserMessages } from '@/i18n/messages/add-user';
+import { accountRetirementMessages } from '@/i18n/messages/account-retirement';
 import { adminMembersMessages } from '@/i18n/messages/admin-members';
 import { cancelInvitation, resendInvitation } from '@/lib/add-user';
 import { insurersOf, listCompanies, listTenants, type Company, type TenantListRow } from '@/lib/admin';
@@ -29,10 +30,12 @@ import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
 import { dayInZone, formatMonth, formatShortDay, OFFICE_TIME_ZONE } from '@/lib/format';
 import type { MemberStatus } from '@/lib/platform-reads';
+import { useCan } from '@/lib/session';
 import { useMediaQuery } from '@/lib/use-media-query';
 import { AddUserSheet, type AddUserDone, type SheetPerson } from './add-user-sheet';
 import { MemberDetailSheet, MemberTags } from './member-detail-sheet';
 import { MemberName } from './member-name';
+import { RetireAccountDialog } from './retire-account-dialog';
 
 const TABS: readonly ('all' | MemberClass)[] = ['all', 'ab', 'aab', 'agent'];
 /** *Aktif · Menunggu · Keluar* (UI-209 (21 Nov)): the chips, *Aktif* first and the default. */
@@ -117,6 +120,18 @@ export function Anggota({ initial = {} }: { initial?: AnggotaFilters }) {
 
   const set = (next: Partial<AnggotaFilters>) => setFilters((now) => ({ ...now, ...next, page: next.page ?? 1 }));
   const reload = () => setAttempt((n) => n + 1);
+  /*
+   * ***Hapus akun*** done (P19.31-T2 AC-3; ADR-0289): the sheet closed, the toast *"Akun <nama> dihapus."*, and the lists
+   * read again — the person is in none of them now (OD-487).
+   */
+  const r = useMessages(accountRetirementMessages);
+  const mayRetire = useCan('account:retire');
+  const [retiringRow, setRetiringRow] = useState<WaitingRow | null>(null);
+  const retired = (fullName: string) => {
+    setOpen(null);
+    show(r.done({ name: fullName.toUpperCase() }));
+    reload();
+  };
   const search = (event: React.FormEvent) => {
     event.preventDefault();
     // The shortest search is the server's to say (`PLATFORM_READ.SEARCH_MIN_LENGTH`): a shorter one is refused, in words.
@@ -317,7 +332,10 @@ export function Anggota({ initial = {} }: { initial?: AnggotaFilters }) {
             )}
 
             {chip === 'pending' && waiting && waiting.rows.length > 0 && (
-              <WaitingList rows={waiting.rows} phone={phone} today={today} figures={figures} onResend={resend} onCancel={cancel} onPlace={masukkan} />
+              <WaitingList
+                rows={waiting.rows} phone={phone} today={today} figures={figures} onResend={resend} onCancel={cancel} onPlace={masukkan}
+                onRetire={mayRetire ? setRetiringRow : undefined}
+              />
             )}
 
             {chip !== 'pending' && page && page.rows.length > 0 && (
@@ -468,7 +486,22 @@ export function Anggota({ initial = {} }: { initial?: AnggotaFilters }) {
         </ResponsiveSheet>
       )}
 
-      {open && <MemberDetailSheet row={open} onClose={() => setOpen(null)} onTestAccountChanged={reload} />}
+      {open && (
+        <MemberDetailSheet
+          row={open}
+          onClose={() => setOpen(null)}
+          onTestAccountChanged={reload}
+          onRetired={retired}
+        />
+      )}
+      {retiringRow && retiringRow.userId && (
+        <RetireAccountDialog
+          userId={retiringRow.userId}
+          fallbackName={retiringRow.fullName}
+          onClose={() => setRetiringRow(null)}
+          onDone={(fullName) => { setRetiringRow(null); retired(fullName); }}
+        />
+      )}
       {sheet?.mode === 'add' && <AddUserSheet mode="add" onClose={() => setSheet(null)} onDone={saved} />}
       {sheet?.mode === 'place' && (
         <AddUserSheet mode="place" person={sheet.person} onClose={() => setSheet(null)} onDone={saved} />
@@ -501,7 +534,7 @@ function LeftPill({ row, figures }: { row: AnggotaRow; figures: ReturnType<typeo
  * Batalkan*, *Belum ada KPM* with **Masukkan**. Below 768px 60px rows in one card; from 768px the table's columns.
  */
 function WaitingList({
-  rows, phone, today, figures, onResend, onCancel, onPlace,
+  rows, phone, today, figures, onResend, onCancel, onPlace, onRetire,
 }: {
   rows: WaitingRow[];
   phone: boolean;
@@ -510,8 +543,11 @@ function WaitingList({
   onResend: (row: WaitingRow) => void;
   onCancel: (row: WaitingRow) => void;
   onPlace: (row: WaitingRow) => void;
+  /** *Hapus akun* for an account in no KPM (P19.31-T2; OD-487): a ⋯ beside *Masukkan*, for the Super Admin. */
+  onRetire?: (row: WaitingRow) => void;
 }) {
   const t = useMessages(adminMembersMessages);
+  const r = useMessages(accountRetirementMessages);
   const pill = (row: WaitingRow) => (
     <span
       className="inline-flex h-6 w-fit shrink-0 items-center rounded-pill bg-pill-amber px-2.5 text-sm font-semibold text-pill-amber-ink"
@@ -534,15 +570,25 @@ function WaitingList({
       ]}
     />
   ) : (
-    <button
-      type="button"
-      onClick={() => onPlace(row)}
-      aria-label={t.placeFor({ name: row.fullName })}
-      data-masukkan={row.userId ?? ''}
-      className="inline-flex min-h-11 shrink-0 items-center rounded-pill bg-primary px-3.5 text-base font-semibold text-primary-contrast"
-    >
-      {t.place}
-    </button>
+    <span className="flex shrink-0 items-center gap-1">
+      <button
+        type="button"
+        onClick={() => onPlace(row)}
+        aria-label={t.placeFor({ name: row.fullName })}
+        data-masukkan={row.userId ?? ''}
+        className="inline-flex min-h-11 shrink-0 items-center rounded-pill bg-primary px-3.5 text-base font-semibold text-primary-contrast"
+      >
+        {t.place}
+      </button>
+      {onRetire && row.userId && (
+        <ActionMenu
+          label={r.more({ name: row.fullName })}
+          glyph={<LineIcon name="more" className="h-5 w-5" />}
+          triggerClassName="h-11 w-11"
+          items={[{ label: r.item, danger: true, onSelect: () => onRetire(row) }]}
+        />
+      )}
+    </span>
   ));
   const name = (row: WaitingRow) => (row.role
     ? <MemberName name={row.fullName} role={row.role} className={phone ? 'text-base' : undefined} />

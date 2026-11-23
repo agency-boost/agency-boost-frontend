@@ -224,4 +224,13 @@ describe('ActionMenu — a danger item', () => {
     expect(item('Hapus KPM')).toHaveClass('text-muted');
     expect(item('Hapus KPM')).not.toHaveClass('text-alert');
   });
+
+  /* The P19.30 browser walk (2026-11-23): a row was 36px on a phone — the KPM page header's ⋯ and All members'. */
+  it('P19.30 makes every item at least 44px below 768px, and leaves it as it was from there', async () => {
+    const { trigger } = setup();
+    await userEvent.click(trigger);
+    for (const name of ['Lead details', 'Mark not successful', 'Delete']) {
+      expect(item(name)).toHaveClass('max-md:min-h-11', 'py-2');
+    }
+  });
 });

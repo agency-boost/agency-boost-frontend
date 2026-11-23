@@ -53,6 +53,18 @@ describe('super-admin-kpm (ADR-0268 §3)', () => {
     expect(kpmHeaderFor('/kpm/overview')).toEqual({ 'X-Kpm-Id': KPM });
     expect(kpmHeaderFor('/members?limit=5')).toEqual({ 'X-Kpm-Id': KPM });
     for (const platform of ['/admin', '/admin/tenants', '/admin?x=1']) expect(kpmHeaderFor(platform)).toEqual({});
+    // P19.30-T2: Import people's own routes under /admin carry it — for the KPM entered, never another.
+    expect(kpmHeaderFor(`/admin/tenants/${KPM}/roster/file/preview`)).toEqual({ 'X-Kpm-Id': KPM });
+    expect(kpmHeaderFor(`/admin/tenants/${KPM}/roster`)).toEqual({ 'X-Kpm-Id': KPM });
+    expect(kpmHeaderFor(`/admin/tenants/roster-template?format=xlsx&kpmId=${KPM}`)).toEqual({ 'X-Kpm-Id': KPM });
+    const other = 'aaaaaaaaaaaaaaaaaaaaaaaa';
+    for (const platform of [
+      `/admin/tenants/${other}/roster`, `/admin/tenants/${KPM}`, `/admin/tenants/${KPM}/report?month=2026-10`,
+      `/admin/tenants/${KPM}/rosterx`, `/admin/tenants/roster-template?format=xlsx&kpmId=${other}`,
+      `/admin/tenants/roster-template?format=xlsx&kpmId=${KPM}x`,
+    ]) {
+      expect([platform, kpmHeaderFor(platform)]).toEqual([platform, {}]);
+    }
   });
 
   it('only a Super Admin acting as themselves is inside — never a member, never a support session', () => {

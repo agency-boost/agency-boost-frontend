@@ -134,4 +134,12 @@ describe('choosing your own password (P3.2-T4)', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('not correct');
     expect(replace).not.toHaveBeenCalled();
   });
+
+  /* The P19.30 browser walk (2026-11-23): the three fields were 40px with 13px text on a phone, and an iPhone zooms on that. */
+  it('P19.30 gives the three fields 44px and 16px text below 768px, and leaves them as they were from there', () => {
+    renderWithSession(<ChooseAPasswordPage />, { me: OWED });
+    for (const label of ['The password you were sent', 'Your new password', 'Confirm your new password']) {
+      expect(screen.getByLabelText(label)).toHaveClass('max-md:h-11', 'max-md:text-lg', 'h-10');
+    }
+  });
 });

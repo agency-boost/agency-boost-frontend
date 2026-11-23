@@ -183,7 +183,13 @@ export function TenantConfigProvider({ children }: { children: React.ReactNode }
    */
   const platformOutside = session !== null && session.me !== null
     && session.me.user.platformRole === 'super_admin' && !insideKpm(session.me);
-  const ready = settled && signedIn && inOffice && !platformOutside;
+  /*
+   * **Nor on a temporary password** (the P19.30 browser walk, 2026-11-23; ADR-0288 §4): until the person chooses their own,
+   * the API answers every office read `403 AUTH_PASSWORD_CHANGE_REQUIRED`, and the reader is on their way to
+   * `/choose-a-password`, which reads nothing of the office. The read goes out once the password is theirs.
+   */
+  const temporaryPassword = session !== null && session.me?.mustChangePassword === true;
+  const ready = settled && signedIn && inOffice && !platformOutside && !temporaryPassword;
 
   useEffect(() => {
     if (ready) void refresh();

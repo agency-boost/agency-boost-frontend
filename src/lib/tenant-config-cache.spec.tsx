@@ -146,6 +146,21 @@ describe('the shared tenant configuration (P4-T7)', () => {
         leaveKpm();
       }
     });
+
+    /*
+     * P19.30 (the browser walk of 2026-11-23; ADR-0288 §4): **on a temporary password** every office read answers `403
+     * AUTH_PASSWORD_CHANGE_REQUIRED`, and the reader is on their way to `/choose-a-password`. Nothing is read until the
+     * password is theirs.
+     */
+    it('P19.30 reads nothing on a temporary password, and reads once the person has chosen their own', async () => {
+      const { calls } = stubFetch({ '/kpm/config': { body: CONFIG }, '/kpm/org-levels': { body: LADDER } });
+      const { rerender } = render(inSession(makeSession({ me: makeMe({ mustChangePassword: true }), loading: false })));
+      expect(await screen.findByText('vnone')).toBeInTheDocument();
+      expect(calls).toHaveLength(0);
+      rerender(inSession(makeSession({ me: makeMe({ mustChangePassword: false }), loading: false })));
+      expect(await screen.findByText('v1')).toBeInTheDocument();
+      expect(calls.map((c) => c.url.split('/api/v1')[1])).toEqual(['/kpm/config', '/kpm/org-levels']);
+    });
   });
 
   it('degrades to nothing configured outside a provider, rather than crashing a shell', () => {

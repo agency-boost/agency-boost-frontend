@@ -2,7 +2,7 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { axe } from 'vitest-axe';
-import { atWidth, renderInIndonesian, routeParams, stubFetch } from '@test/harness';
+import { atWidth, makeMe, renderInIndonesian, routeParams, stubFetch } from '@test/harness';
 import { englishOnly, englishShown } from '@test/english-left';
 import { adminConsoleMessages } from '@/i18n/messages/admin-console';
 import { BSD, CONSOLE_SUPER_ADMIN, PEOPLE } from '@test/console-fixtures';
@@ -375,5 +375,59 @@ describe('/admin/tenants/[kpmId] on a phone (P19.29)', () => {
     expect(screen.getByText(/^Jendela baru menampilkan persis/)).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Semua halaman owner untuk KPM ini' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Simpan sebagai template' })).toBeInTheDocument();
+  });
+});
+
+/**
+ * ***Unduh akun & password (PDF)*** **on the KPM page** (P19.30-T1 AC-6; ADR-0288 §3): the Super Admin inside the KPM, as
+ * its Owner — in the phone header's ⋯, and from 768px at the page's foot beside *Simpan sebagai template*. A reader the
+ * API would refuse (no `member:issue_temporary_password` on their `/auth/me`) sees neither.
+ */
+describe('/admin/tenants/[kpmId] — Unduh akun & password (P19.30-T1)', () => {
+  const INSIDE = makeMe({ ...CONSOLE_SUPER_ADMIN, permissions: [...CONSOLE_SUPER_ADMIN.permissions, 'member:issue_temporary_password'] });
+  const renderAs = (me = INSIDE) => renderInIndonesian(<KpmPage params={routeParams({ kpmId: BSD })} />, { me });
+  beforeEach(() => {
+    stubFetch({
+      [`/admin/tenants/${BSD}/people`]: { body: PEOPLE },
+      '/kpm/overview/performance': { body: PERFORMANCE },
+      '/admin/tenants': { body: [] },
+      '/admin/companies': { body: [] },
+      'POST /members/temporary-passwords/preview': { body: { count: 110, kpmName: 'BSD City Branch', fileName: 'Akun-password-BSD-City-Branch-2026-11-22.pdf' } },
+    });
+  });
+  afterEach(() => {
+    leaveKpm();
+    vi.unstubAllGlobals();
+  });
+
+  it('P19.30-T1 AC-6 on a phone: ⋯ holds Unduh akun & password (PDF), which opens the confirmation for this KPM', async () => {
+    atWidth(375);
+    renderAs();
+    await userEvent.click(await screen.findByRole('button', { name: 'Lainnya untuk KPM ini' }));
+    const items = screen.getAllByRole('menuitem').map((item) => item.textContent);
+    expect(items).toEqual(['Simpan sebagai template', 'Unduh akun & password (PDF)']);
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Unduh akun & password (PDF)' }));
+    const box = await screen.findByRole('dialog', { name: 'Akun & password' });
+    expect(await within(box).findByText(/PDF ini memuat 110 orang/)).toBeInTheDocument();
+    // Inside the KPM: the confirmation's call names it (`X-Kpm-Id`), as every owner page's does.
+    expect(enteredKpmId()).toBe(BSD);
+  });
+
+  it('P19.30-T1 AC-6 from 768px: at the page’s foot beside Simpan sebagai template', async () => {
+    atWidth(1280);
+    renderAs();
+    const button = await screen.findByRole('button', { name: 'Unduh akun & password (PDF)' });
+    const foot = button.closest('[data-kpm-foot-actions]') as HTMLElement;
+    expect(within(foot).getByRole('button', { name: 'Simpan sebagai template' })).toBeInTheDocument();
+    await userEvent.click(button);
+    expect(await screen.findByRole('dialog', { name: 'Akun & password' })).toBeInTheDocument();
+  });
+
+  it('P19.30-T1 AC-3 without the grant: neither the ⋯ item nor the button', async () => {
+    atWidth(375);
+    renderAs(CONSOLE_SUPER_ADMIN);
+    await userEvent.click(await screen.findByRole('button', { name: 'Lainnya untuk KPM ini' }));
+    expect(screen.queryByRole('menuitem', { name: 'Unduh akun & password (PDF)' })).toBeNull();
+    atWidth(1280);
   });
 });
