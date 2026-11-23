@@ -129,6 +129,12 @@ export interface FieldNav {
   readonly groups: readonly FieldGroup[];
   /** The reader is on a page the sheet holds and the bar does not: *Lainnya* is then the bar's current tab. */
   readonly inSheet: boolean;
+  /**
+   * **The bar's labels at 11/400, each tab its column's full width, on a phone** (P19.29-T3 AC-1; UI-202 (21 Nov), the
+   * phone type scale's *Bottom tab labels 11/400*; ADR-0287 §4): the Super Admin's bar inside a KPM, whose *All members*
+   * and *Data upload* ran together at 12px. Absent, a phone's bar is as it was (12px, UI-008's floor, ADR-0180).
+   */
+  readonly evenTabs?: boolean;
 }
 
 /**
@@ -422,5 +428,7 @@ export function insideKpmNav(
     search: null,
     groups,
     inSheet: !onBar && groups.some((group) => group.items.some((item) => item.active)),
+    // P19.29-T3 (UI-202 (21 Nov)): five equal columns, 11px labels on one line, on a phone.
+    evenTabs: true,
   };
 }

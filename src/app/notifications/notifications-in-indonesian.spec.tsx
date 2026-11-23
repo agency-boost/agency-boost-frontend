@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { notificationMessages } from '@/i18n/messages/notifications';
 import { uiMessages } from '@/i18n/messages/ui';
 import { englishOnly, englishShown } from '@test/english-left';
-import { makeMe, renderInIndonesian, renderWithSession, stubFetch } from '@test/harness';
+import { atWidth, makeMe, renderInIndonesian, renderWithSession, stubFetch } from '@test/harness';
 import NotificationsPage from './page';
 
 /**
@@ -97,5 +97,57 @@ describe('P18.10-T4 /notifications in Indonesian', () => {
     stubFetch({ '/notifications': { body: pageOf([]) } });
     renderWithSession(<NotificationsPage />, { me: READER });
     expect(await screen.findByText('Nothing yet. This is where you will hear about your unit.')).toBeInTheDocument();
+  });
+
+  /*
+   * **P19.26-T5 AC-5 (UI-213, UI-218 (21 Nov)): the Super Admin's page on a phone** — *Notifikasi*, and *Belum ada
+   * notifikasi* alone: a Super Admin has no unit. From 768px, and for everybody else, as before (ADR-0283 §3).
+   */
+  describe('P19.26-T5 AC-5 the Super Admin on a phone', () => {
+    const SUPER_ADMIN = makeMe({
+      user: {
+        id: 'u-root', email: 'superadmin@agencyboost.test', fullName: 'Platform Operator', preferredName: null,
+        pronoun: 'they', initials: 'PO', platformRole: 'super_admin',
+      },
+      membership: null,
+      permissions: ['notification:read_inbox', 'notification:mark_read'],
+    });
+
+    it('titles it Notifikasi and says only Belum ada notifikasi', async () => {
+      atWidth(375);
+      stubFetch({ '/notifications': { body: pageOf([]) } });
+      renderInIndonesian(<NotificationsPage />, { me: SUPER_ADMIN });
+      expect(await screen.findByText('Belum ada notifikasi')).toBeInTheDocument();
+      expect(screen.getByRole('heading', { level: 1, name: 'Notifikasi' })).toBeInTheDocument();
+      expect(screen.queryByText(/kabar tentang/)).toBeNull();
+    });
+
+    it('from 768px reads as before', async () => {
+      atWidth(1024);
+      stubFetch({ '/notifications': { body: pageOf([]) } });
+      renderInIndonesian(<NotificationsPage />, { me: SUPER_ADMIN });
+      expect(await screen.findByText('Belum ada apa pun. Di sinilah Anda akan mendapat kabar tentang unit Anda.')).toBeInTheDocument();
+      expect(screen.getByRole('heading', { level: 1, name: 'Notifications' })).toBeInTheDocument();
+    });
+
+    /*
+     * The integration round's walk (2026-11-22): beside the avatar *Tandai semua sudah dibaca* covered the title
+     * (*Notifika…* at 375px). On a phone it stands under the title row; from 768px it is the row's action as before.
+     */
+    it.each([[375, false], [1024, true]] as const)('at %ipx Tandai semua sudah dibaca in the title row: %s', async (px, inRow) => {
+      atWidth(px);
+      stubFetch({ '/notifications': { body: pageOf([item()]) } });
+      renderInIndonesian(<NotificationsPage />, { me: SUPER_ADMIN });
+      const button = await screen.findByRole('button', { name: 'Tandai semua sudah dibaca' });
+      expect(button.closest('[data-title-row]') !== null).toBe(inRow);
+      expect(button.closest('[data-mark-all-row]') !== null).toBe(!inRow);
+    });
+
+    it('changes nothing for another role on a phone', async () => {
+      atWidth(375);
+      stubFetch({ '/notifications': { body: pageOf([]) } });
+      renderInIndonesian(<NotificationsPage />, { me: READER });
+      expect(await screen.findByText('Belum ada apa pun. Di sinilah Anda akan mendapat kabar tentang unit Anda.')).toBeInTheDocument();
+    });
   });
 });

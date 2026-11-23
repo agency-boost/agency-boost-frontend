@@ -31,8 +31,9 @@ describe('P18.10-T1 AC-7 the kept-English list', () => {
     // `ABS_NOT_IN_INFORMAL_GROUP` (ADR-0249 §4). 120 since P19.17-T1: the 19 November definitions' six (ADR-0267). 119 on
     // 2026-11-20: P19.19-T3's `MANAGED_LEADS_RATE` (ADR-0272 §6) in, P19.18's `AA_THIS_MONTH` and `REKRUT_THIS_MONTH` out.
     // 121 since P19.22-T6, T7: `NPS_KPM_OVERALL` and `QUAL_PERSON_ISSUE_ITEMS` (ADR-0276 §1, §5). 122 since P19.25-T4:
-    // `TRAINING_MODULE_DONE_COUNT` (ADR-0282 §2). 123 since P19.25: `EVENT_KEHADIRAN` (ADR-0281).
-    expect(names).toHaveLength(123);
+    // `TRAINING_MODULE_DONE_COUNT` (ADR-0282 §2). 123 since P19.25: `EVENT_KEHADIRAN` (ADR-0281). 124 since P19.26-T1:
+    // `COUNTED_MEMBERS` (ADR-0284 §1).
+    expect(names).toHaveLength(124);
     expect([...KEPT_ENGLISH.metrics].sort()).toEqual([...names].sort());
   });
 

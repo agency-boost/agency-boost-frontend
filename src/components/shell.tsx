@@ -246,6 +246,8 @@ function Chrome({
       labelledFrom1024={false}
       // P19.13-T2 AC-3 (UI-196): the field under the logo, for a reader with the agent picker (a leader by role).
       search={nav.search ? { label: nav.search.label, onSelect: () => setSearching(true) } : undefined}
+      // P19.29-T2 AC-1 (UI-201 (21 Nov), ADR-0287 §2): on a phone the Super Admin's strip, above the title row, in the flow.
+      aboveTitle={ownerPagesInside && enteredKpmId() ? <KpmFloatingBar kpmId={enteredKpmId()!} at="top" /> : undefined}
       title={title}
       subtitle={subtitle}
       actions={actions}
@@ -259,8 +261,11 @@ function Chrome({
         ? <NoKpmYet title={[...nav.tabs, ...nav.groups.flatMap((g) => g.items)].find((d) => d.active)?.label} pathname={pathname} />
         : children}
       {searching && <AgentSearchDialog onClose={() => setSearching(false)} />}
-      {/* P19.23-T2 AC-5 (ADR-0277 §3): the owner pages inside a KPM carry the Super Admin's floating bar, and only it. */}
-      {ownerPagesInside && enteredKpmId() && <KpmFloatingBar kpmId={enteredKpmId()!} />}
+      {/*
+        * P19.23-T2 AC-5 (ADR-0277 §3): the owner pages inside a KPM carry the Super Admin's floating bar, and only it —
+        * from 768px; below it the strip above (P19.29-T2, `at="top"`). Each draws itself at its own width alone.
+        */}
+      {ownerPagesInside && enteredKpmId() && <KpmFloatingBar kpmId={enteredKpmId()!} at="floating" />}
     </AppShell>
   );
 }

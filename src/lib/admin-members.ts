@@ -34,8 +34,20 @@ export interface AnggotaRow {
   joinedOn: string | null;
   lastActiveOn: string | null;
   lastActive: { days: number | null; status: LastActiveStatus };
-  /** Listed only under *Akun tes* (OD-421). */
+  /** Listed only under *Akun tes* (OD-421), or beside the others with *Tampilkan akun tes* on. */
   testAccount: boolean;
+  /** *Keluar <Mon YYYY>* (P19.28-T3 AC-5): the office day the membership ended; `null` while it has not. */
+  leftOn?: string | null;
+}
+
+/**
+ * ***Aktif n · Menunggu n · Keluar n*** (P19.28-T3 AC-4; UI-209 (21 Nov); ADR-0286 §5): over the same scope, test accounts
+ * never. *Aktif* is the counted member (ADR-0284 §1).
+ */
+export interface AnggotaChips {
+  active: number;
+  pending: number;
+  removed: number;
 }
 
 export interface AnggotaPage {
@@ -45,6 +57,13 @@ export interface AnggotaPage {
   total: number;
   /** *"n anggota di m KPM"*. */
   kpmCount: number;
+  /** The three chips, whatever status is listed. */
+  chips?: AnggotaChips;
+  /**
+   * ***"n anggota di m KPM"*** (P19.26-T1 AC-1; ADR-0284 §1): the scope's counted members and the KPMs they are in,
+   * whatever status is listed — the Dashboard's *Anggota* with no filter.
+   */
+  counted?: { members: number; kpms: number };
 }
 
 export interface AnggotaFilters {
@@ -53,8 +72,8 @@ export interface AnggotaFilters {
   /** The tabs *AB · AAB · Agent*: a class. */
   role?: MemberClass;
   status?: MemberStatus;
-  /** *Semua status* › *Akun tes*: the test accounts alone. */
-  testAccount?: 'only';
+  /** `only`: the test accounts alone (OD-421); `include`: *Tampilkan akun tes*, beside everybody else (P19.28-T3 AC-4). */
+  testAccount?: 'only' | 'include';
   q?: string;
   page?: number;
 }
@@ -97,3 +116,44 @@ export function statusFilters(choice: StatusChoice | ''): Pick<AnggotaFilters, '
 export function statusChoiceOf(filters: Pick<AnggotaFilters, 'status' | 'testAccount'>): StatusChoice | '' {
   return filters.testAccount === 'only' ? 'test' : (filters.status ?? '');
 }
+
+/**
+ * **One row of *Menunggu*** (`GET /admin/waiting-members`; P19.28-T1 AC-5, T3 AC-5; ADR-0286 §5): not a membership.
+ *
+ * - `invited` — ***Diundang · <date>***: an invitation of *Tambah user*, its KPM and rung; ⋯ *Kirim ulang · Batalkan*.
+ * - `unplaced` — ***Belum ada KPM***: an account with no active membership, its email on the row; **Masukkan** opens the
+ *   sheet with the KPM it registered to (`kpm`) prefilled (OD-441).
+ */
+export interface WaitingRow {
+  kind: 'invited' | 'unplaced';
+  invitationId: string | null;
+  userId: string | null;
+  membershipId: string | null;
+  fullName: string;
+  avatarUrl: string | null;
+  email: string | null;
+  company: CompanyRef | null;
+  kpm: { id: string; code: string; branch: string } | null;
+  role: { code: string; label: string; class: MemberClass } | null;
+  /** An office date: when the invitation went, or the account registered. */
+  since: string;
+  expired: boolean;
+  testAccount: boolean;
+  /**
+   * Whether there is a WhatsApp number to write to — never the number. **Masukkan** opens WhatsApp's window in the tap
+   * only when it is `true`: iPhone Safari blocks a window opened after the save answers.
+   */
+  hasPhone: boolean;
+}
+
+export interface WaitingPage {
+  rows: WaitingRow[];
+  page: number;
+  pageSize: number;
+  total: number;
+  chips: AnggotaChips;
+}
+
+/** *Menunggu*: Anggota's filters, the status the route's own. The Super Admin's alone, audited per read. */
+export const readWaiting = (filters: Omit<AnggotaFilters, 'status'> = {}) =>
+  api<WaitingPage>(`/admin/waiting-members?${membersQuery(filters as Parameters<typeof membersQuery>[0])}`);

@@ -2,7 +2,7 @@ import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import TenantLayout from '@/app/(tenant)/layout';
-import { makeMe, renderInIndonesian, renderInLayout, stubFetch } from '@test/harness';
+import { atWidth, makeMe, renderInIndonesian, renderInLayout, stubFetch } from '@test/harness';
 import AdminsPage from './page';
 
 vi.mock('next/navigation', () => ({
@@ -22,8 +22,19 @@ const maya = {
   membershipId: 'mem-maya', fullName: 'Maya Halim', initials: 'MH', agentCode: '80004', role: 'ab',
   grantedAt: '2026-03-02T02:00:00.000Z', grantedByName: 'Wilson Tanoto', canRevoke: true, photoUrl: null,
 };
+/** *KPM Owner · n* (P19.27-T4; ADR-0285): Wilson — the reader as Owner, `u-1` — and Sinta, invited. */
+const wilsonOwner = {
+  userId: 'u-1', membershipId: 'mem-wilson', fullName: 'Wilson Tanoto', agentCode: '80003', role: 'ab', photoUrl: null,
+  since: '2026-08-04T03:00:00.000Z', state: 'active',
+};
+const sintaOwner = {
+  userId: 'u-sinta', membershipId: 'mem-sari', fullName: 'Sari Puspita', agentCode: '80006', role: 'aab', photoUrl: null,
+  since: '2026-11-22T03:00:00.000Z', state: 'invited',
+};
 const stewards = {
   owner: { membershipId: 'mem-wilson', fullName: 'Wilson Tanoto', agentCode: '80003', role: 'ab', photoUrl: null },
+  owners: [wilsonOwner],
+  canManageOwners: true,
   admins: 1,
   coreLeaders: 4,
 };
@@ -40,12 +51,12 @@ const tree = {
 describe('P19.20-T4 KPM admins', () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it('P19.20-T4 AC-1 three tiles say who can do what: the Owner by name, n Admins, n core leaders · set in All members', async () => {
+  it('P19.20-T4 AC-1 three tiles say who can do what: n Admins, n core leaders · set in All members — the owners in KPM Owner · n', async () => {
     stubFetch({ '/members/admins': { body: [maya] }, '/people/stewards': { body: stewards } });
     renderInLayout(TenantLayout, <AdminsPage />, { me: me(true) });
 
-    expect(await screen.findByText('Wilson Tanoto')).toBeInTheDocument();
-    expect(screen.getByText('Everything in this KPM, adding and revoking admins included')).toBeInTheDocument();
+    expect((await screen.findAllByText('Wilson Tanoto')).length).toBeGreaterThan(0);
+    expect(screen.getByText('Everything in this KPM, adding and revoking admins included', { selector: 'p' })).toBeInTheDocument();
     expect(screen.getByText('1 person')).toBeInTheDocument();
     expect(screen.getByText('4 people · set in All members')).toBeInTheDocument();
   });
@@ -119,13 +130,114 @@ describe('P19.20-T4 KPM admins', () => {
     expect(await screen.findByText('No admin yet: only the KPM Owner looks after this KPM.')).toBeInTheDocument();
   });
 
+  it('on a phone, nobody but the Owner yet reads No admin yet alone (mockup screen 6)', async () => {
+    atWidth(375);
+    stubFetch({ '/members/admins': { body: [] }, '/people/stewards': { body: { ...stewards, admins: 0 } } });
+    renderInLayout(TenantLayout, <AdminsPage />, { me: me(true) });
+
+    expect(await screen.findByText('No admin yet')).toBeInTheDocument();
+    expect(screen.queryByText(/only the KPM Owner looks after/)).toBeNull();
+  });
+
+  it('names each owner once: in KPM Owner · n, never again at the KPM Owner tile’s foot (the walk of 2026-11-22)', async () => {
+    stubFetch({ '/members/admins': { body: [maya] }, '/people/stewards': { body: { ...stewards, owners: [wilsonOwner, sintaOwner] } } });
+    renderInLayout(TenantLayout, <AdminsPage />, { me: me(true) });
+    const owners = await screen.findByRole('region', { name: 'KPM Owner · 2' });
+    expect(within(owners).getByText('Wilson Tanoto')).toBeInTheDocument();
+    // The tile keeps its title and what an owner may do, and names nobody.
+    const tile = screen.getByText('Everything in this KPM, adding and revoking admins included', { selector: 'p' }).parentElement!;
+    expect(tile.textContent).not.toMatch(/wilson|sari|\+1/i);
+  });
+
+  it('P19.27-T4 AC-1 KPM Owner · n: every owner, and the Owner removes another after one question — never themselves', async () => {
+    const { calls } = stubFetch({
+      '/members/admins': { body: [maya] },
+      '/people/stewards': { body: { ...stewards, owners: [wilsonOwner, sintaOwner] } },
+      'DELETE /members/mem-sari/owner': { body: { owners: [wilsonOwner], canManage: true } },
+    });
+    renderInLayout(TenantLayout, <AdminsPage />, { me: me(true) });
+
+    const card = await screen.findByRole('region', { name: 'KPM Owner · 2' });
+    expect(within(card).getByRole('button', { name: /Add owner/ })).toBeInTheDocument();
+    const sinta = card.querySelector('[data-owner-row="u-sinta"]') as HTMLElement;
+    expect(sinta).toHaveTextContent('AABSari Puspita');
+    expect(sinta).toHaveTextContent('Owner since Nov 2026 · Invited');
+    // The reader's own row offers no removal (OD-452): only the profile.
+    await userEvent.click(within(card.querySelector('[data-owner-row="u-1"]') as HTMLElement).getByRole('button', { name: 'Actions for Wilson Tanoto' }));
+    expect(screen.queryByRole('menuitem', { name: /Remove as owner/ })).not.toBeInTheDocument();
+    await userEvent.keyboard('{Escape}');
+
+    await userEvent.click(within(sinta).getByRole('button', { name: 'Actions for Sari Puspita' }));
+    await userEvent.click(screen.getByRole('menuitem', { name: /Remove as owner/ }));
+    const ask = screen.getByRole('dialog', { name: 'Remove Sari as owner?' });
+    expect(ask).toHaveTextContent('Sari stays a member (AAB).');
+    await userEvent.click(within(ask).getByRole('button', { name: 'Remove' }));
+    await vi.waitFor(() => expect(calls.some((c) => c.url.includes('/members/mem-sari/owner') && c.init.method === 'DELETE')).toBe(true));
+  });
+
+  it('P19.27-T4 AC-1 the last owner cannot be removed: the item is there, greyed, saying to add another first', async () => {
+    stubFetch({ '/members/admins': { body: [maya] }, '/people/stewards': { body: { ...stewards, owners: [{ ...wilsonOwner, userId: 'u-other' }] } } });
+    renderInLayout(TenantLayout, <AdminsPage />, { me: me(true) });
+
+    const card = await screen.findByRole('region', { name: 'KPM Owner · 1' });
+    await userEvent.click(within(card).getByRole('button', { name: 'Actions for Wilson Tanoto' }));
+    const item = screen.getByRole('menuitem', { name: /Remove as owner/ });
+    expect(item).toHaveAttribute('aria-disabled', 'true');
+    expect(item).toHaveTextContent('Add another owner first');
+  });
+
+  it('P19.27-T4 AC-1 an Admin reads the owners without the controls', async () => {
+    stubFetch({ '/members/admins': { body: [{ ...maya, canRevoke: false }] }, '/people/stewards': { body: { ...stewards, owners: [wilsonOwner, sintaOwner], canManageOwners: false } } });
+    renderInLayout(TenantLayout, <AdminsPage />, { me: me(false) });
+
+    const card = await screen.findByRole('region', { name: 'KPM Owner · 2' });
+    expect(within(card).queryByRole('button', { name: /Add owner/ })).not.toBeInTheDocument();
+    await userEvent.click(within(card).getByRole('button', { name: 'Actions for Sari Puspita' }));
+    expect(screen.queryByRole('menuitem', { name: /Remove as owner/ })).not.toBeInTheDocument();
+  });
+
+  it('P19.27-T4 AC-1 Add owner: the KPM’s members, the owners left out; Make owner, then the toast', async () => {
+    const { calls } = stubFetch({
+      '/members/admins': { body: [maya] },
+      '/people/stewards': { body: stewards },
+      '/members/tree': { body: tree },
+      'POST /members/mem-agus/owner': { body: { owners: [wilsonOwner], canManage: true } },
+    });
+    renderInLayout(TenantLayout, <AdminsPage />, { me: me(true) });
+
+    const card = await screen.findByRole('region', { name: 'KPM Owner · 1' });
+    await userEvent.click(within(card).getByRole('button', { name: /Add owner/ }));
+    const sheet = await screen.findByRole('dialog', { name: 'Add owner' });
+    await within(sheet).findByText('Agus Prasetyo');
+    // Wilson, an owner already, is not offered.
+    expect(within(sheet).queryByText('Wilson Tanoto')).not.toBeInTheDocument();
+    expect(within(sheet).getByRole('button', { name: 'Make owner' })).toBeDisabled();
+    await userEvent.type(within(sheet).getByRole('searchbox'), 'agus');
+    expect(within(sheet).queryByText('Maya Halim')).not.toBeInTheDocument();
+    await userEvent.click(within(sheet).getByRole('radio'));
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Make owner' }));
+    await vi.waitFor(() => expect(calls.some((c) => c.url.includes('/members/mem-agus/owner') && c.init.method === 'POST')).toBe(true));
+    expect(await screen.findByText('Agus Prasetyo is now an owner')).toBeInTheDocument();
+  });
+
+  it('P19.27-T4 AC-2 on a phone the three descriptions are behind ⓘ, and the core-leader note is not drawn', async () => {
+    stubFetch({ '/members/admins': { body: [maya] }, '/people/stewards': { body: stewards } });
+    renderInLayout(TenantLayout, <AdminsPage />, { me: me(true) });
+
+    await screen.findByRole('region', { name: 'KPM Owner · 1' });
+    // Each description: off the phone (`max-md:hidden`), and an ⓘ beside its title on it (`md:hidden`).
+    expect(screen.getByText('Everything in this KPM, adding and revoking admins included', { selector: 'p' })).toHaveClass('max-md:hidden');
+    expect(screen.getByRole('button', { name: 'What each role can do: KPM Owner' })).toBeInTheDocument();
+    expect(screen.getByText('Core leaders are set in All members (⋯)')).toHaveClass('max-md:hidden');
+  });
+
   it('P19.20-T4 AC-1 in Indonesian, word for word', async () => {
     stubFetch({ '/members/admins': { body: [maya] }, '/people/stewards': { body: stewards } });
     renderInIndonesian(<AdminsPage />, { me: me(true) });
 
-    expect(await screen.findByText('Semua di KPM ini, termasuk tambah / cabut admin')).toBeInTheDocument();
-    expect(screen.getByText('Sama seperti owner: lihat dan ubah semua, buka semua anggota. Hanya tidak bisa tambah / cabut admin')).toBeInTheDocument();
-    expect(screen.getByText('KPM + Pengaturan seperti owner; People hanya bisa membuka timnya')).toBeInTheDocument();
+    expect(await screen.findByText('Semua di KPM ini, termasuk tambah / cabut admin', { selector: 'p' })).toBeInTheDocument();
+    expect(screen.getByText('Sama seperti owner: lihat dan ubah semua, buka semua anggota. Hanya tidak bisa tambah / cabut admin', { selector: 'p' })).toBeInTheDocument();
+    expect(screen.getByText('KPM + Pengaturan seperti owner; People hanya bisa membuka timnya', { selector: 'p' })).toBeInTheDocument();
     expect(screen.getByText('4 orang · atur di All members')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Tambah admin' })).toBeInTheDocument();
     expect(screen.getByText(/admin sejak Mar 2026 · diberikan oleh WILSON TANOTO/)).toBeInTheDocument();

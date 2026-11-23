@@ -367,6 +367,22 @@ describe('Langganan & akses (P19.23-T5)', () => {
     expect(leaders.compareDocumentPosition(plans) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
+  /*
+   * **P19.26-T6 AC-2 (UI-218 (21 Nov)): the calculator on a phone** — no *Kalkulator harga* (the tab says it), the two
+   * days one under the other so neither is cut, *Kirim penawaran* on one line. jsdom applies no media query: the classes.
+   */
+  it('P19.26-T6 AC-2 on a phone: no Kalkulator harga heading, the days stacked, Kirim penawaran on one line', async () => {
+    atWidth(375);
+    stubBilling();
+    renderInIndonesian(<BillingPage />, { me: ME });
+    const heading = await screen.findByRole('heading', { name: 'Kalkulator harga' });
+    expect(heading.closest('[data-calculator-head]')).toHaveClass('max-md:hidden');
+    expect(document.querySelector('[data-calculator-dates]')).toHaveClass('max-md:flex-col', 'max-md:items-stretch');
+    const send = document.querySelector('[data-send-offer]') as HTMLElement;
+    expect(send).toHaveTextContent('Kirim penawaran');
+    expect(send).toHaveClass('max-md:whitespace-nowrap');
+  });
+
   it('P19.23-T7 AC-1 on a phone Langganan per KPM is cards, each value under its column’s name', async () => {
     atWidth(390);
     query.current = new URLSearchParams('tab=kpm');

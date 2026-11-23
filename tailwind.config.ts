@@ -104,6 +104,8 @@ const config: Config = {
         },
         'on-navy': {
           red: token('on-navy-red'),
+          // P19.26-T0 AC-4 (ADR-0284 §4; UI-206): the navy card's light orange, its big numbers and its %.
+          orange: token('on-navy-orange'),
           green: token('on-navy-green'),
           lavender: token('on-navy-lavender'),
           // The ratio card's *Target X*, and the line between its rows (UI-053; W1-B).
@@ -175,6 +177,9 @@ const config: Config = {
         '3xl': ['1.75rem', '1.2'],
         // A page's title (UI V1, UI-004, UI-008): 20px, 22px from 768px, 24px from 1024px — the width is the stylesheet's.
         title: ['var(--text-title)', '1.2'],
+        // The Super Admin's phone type scale's two sizes the scale lacked (P19.26-T0 AC-4; ADR-0284 §4): 15px and 24px.
+        row: ['var(--text-row)', '1.4'],
+        figure: ['var(--text-figure)', '1.2'],
       },
       // `lg` is a card's corner: 12px, and 16px on a V1 surface; `row` a row's or a tile's inside one, 14px there (UI-008).
       // `sidebar` the floating panel's 20px corners (P19.13-T2, UI-196).

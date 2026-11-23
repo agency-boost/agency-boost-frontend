@@ -24,6 +24,8 @@ const KPM_FILTERS = new Set(['none', 'some']);
  * **`?tab=accounts` is *Akun terdaftar*** (ADR-0245 §1; the client's request of 11 November 2026, item 2): every
  * registered account, one in no KPM included — kept, one link under the list, with its way back (parity I-1187). The
  * address's filters (`?role=AB`, `?status=`, `?companyId=`, `?q=`) start the list from them; anything else is dropped.
+ * Since P19.28-T3 (UI-209 (21 Nov)) `?status=` names a chip — *Aktif* (`active`, the default), *Menunggu* (`pending`),
+ * *Keluar* (`removed`) — and `?status=test` turns *Tampilkan akun tes* on.
  */
 export default function AnggotaPage() {
   const t = useMessages(adminMembersMessages);
@@ -65,8 +67,10 @@ function FromAddress() {
       key={`members:${q ?? ''}:${role ?? ''}`}
       initial={{
         role: role && CLASSES.has(role) ? (role as MemberClass) : undefined,
-        status: status && STATUSES.has(status) ? (status as MemberStatus) : undefined,
-        testAccount: status === 'test' ? 'only' : undefined,
+        // P19.28-T3 AC-4 (UI-209 (21 Nov)): a chip — *Aktif* when none is named — and `?status=test`, the old *Akun tes*,
+        // is *Tampilkan akun tes* on.
+        status: status && STATUSES.has(status) ? (status as MemberStatus) : 'active',
+        testAccount: status === 'test' ? 'include' : undefined,
         companyId: one('companyId'),
         q,
       }}

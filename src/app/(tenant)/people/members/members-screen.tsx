@@ -1,8 +1,8 @@
 'use client';
 
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { AddUserButton } from '@/components/admin/add-user-button';
 import { GroupDialog } from '@/components/groups/group-dialog';
 import { Page } from '@/components/page';
 import { MemberRowMenu } from '@/components/people/member-actions';
@@ -15,6 +15,7 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { Button, ErrorBanner } from '@/components/ui/field';
 import { LineIcon } from '@/components/ui/line-icon';
 import { FilterChips, SearchPill, type FilterChip } from '@/components/ui/list-rows';
+import { REMOVED_ON_PHONE } from '@/components/ui/phone';
 import { rungShort, useLadder } from '@/components/ui/role-badge';
 import { SkeletonCards } from '@/components/ui/skeleton';
 import { TonePill } from '@/components/ui/tone-pill';
@@ -32,7 +33,7 @@ import { daysAgoWords } from '@/lib/kpm-overview';
 import { readOrgTree } from '@/lib/org';
 import {
   firstNameOf, placeMember, readPeopleHistory, readRoster, type HistoryEntry, type HistoryFilter, type RosterFilter,
-  type RosterMember,
+  type RecencyStatus, type RosterMember,
 } from '@/lib/people';
 import { useCan } from '@/lib/session';
 import { useDebounced } from '@/lib/use-debounced';
@@ -149,7 +150,8 @@ export function MembersScreen({ openMemberId }: { openMemberId?: string }) {
     { key: 'ab', label: rungShort('AB', ladder) },
     { key: 'aab', label: rungShort('AAB', ladder) },
     { key: 'agent', label: rungShort('AGENT', ladder) },
-    { key: 'core', label: `★ ${t.coreLeaders}` },
+    // P19.29-T5 AC-2 (UI-215 (21 Nov)): *★* alone on a phone, so the five fit the width; its words stay its name.
+    { key: 'core', label: `★ ${t.coreLeaders}`, short: '★' },
   ];
   const waitingCount = (counts?.pending ?? 0) + moves;
   const filtered = query.trim() !== '' || filter !== 'all';
@@ -158,10 +160,13 @@ export function MembersScreen({ openMemberId }: { openMemberId?: string }) {
     <Page
       title={kept('All members')}
       actions={(
-        <Link href="/user-management/add"
-          className="inline-flex min-h-11 items-center gap-2 rounded-pill border border-hairline bg-card px-4 text-md font-semibold text-navy hover:bg-hover-row">
-          <LineIcon name="userPlus" className="h-4 w-4" />{t.invite}
-        </Link>
+        // P19.28-T2 AC-1 (UI-203 (21 Nov)): the shared *Tambah user* sheet, this KPM fixed (`AddUserButton`).
+        <AddUserButton
+          label={t.invite}
+          icon={<LineIcon name="userPlus" className="h-4 w-4" />}
+          fallbackHref="/user-management/add"
+          className="inline-flex min-h-11 items-center gap-2 rounded-pill border border-hairline bg-card px-4 text-md font-semibold text-navy hover:bg-hover-row"
+        />
       )}
     >
       <div role="tablist" aria-label={kept('All members')} className="mb-3 inline-flex max-w-full gap-1 overflow-x-auto rounded-pill bg-card p-1">
@@ -224,7 +229,8 @@ export function MembersScreen({ openMemberId }: { openMemberId?: string }) {
                   <LineIcon name="chevronRight" className="h-4 w-4" />
                 </button>
               )}
-              <p className="mt-2 text-sm text-muted">{t.legend}</p>
+              {/* P19.29-T5 AC-3 (UI-213 (21 Nov)): the legend is not drawn on a phone; from 768px as before. */}
+              <p className={cn('mt-2 text-sm text-muted', REMOVED_ON_PHONE)} data-members-legend="">{t.legend}</p>
             </>
           )}
         </>
@@ -321,14 +327,49 @@ function Roster({
               <MemberRowMenu member={m} steward={steward} onChanged={onChanged} onChangeGroup={() => onChangeGroup(m)} />
             </div>
             <div className="pl-12"><GroupCell member={m} steward={steward} onChangeGroup={onChangeGroup} /></div>
-            <div className="flex flex-wrap gap-1.5 pl-12">
-              <RecencyPill days={m.lastActivityDays} status={m.lastActivityStatus} label={t.columns.lastActivity} />
-              <RecencyPill days={m.lastCoachedDays} status={m.lastCoachedStatus} label={t.columns.lastCoached} />
-            </div>
+            <RecencyLine member={m} />
           </li>
         ))}
       </ul>
     </>
+  );
+}
+
+/** The value's ink: the server's bucket in its pill's colour (`RecencyPill`'s tones — red never, yellow after 14 days). */
+const RECENCY_TONE: Record<RecencyStatus, { tone: 'green' | 'amber' | 'red'; ink: string }> = {
+  recent: { tone: 'green', ink: 'text-pill-green-ink' },
+  lapsed: { tone: 'amber', ink: 'text-pill-amber-ink' },
+  never: { tone: 'red', ink: 'text-pill-red-ink' },
+};
+
+/**
+ * **A phone's row: when they were last active and last coached, on one line** (P19.29-T5 AC-1; UI-215 (21 Nov): two
+ * unlabelled *Tidak pernah* pills) — *Aktivitas: Tidak pernah · Coaching: Tidak pernah*, 13/400 grey, both labelled, each
+ * value in its pill's ink. It starts at the row's edge, not under the name: at 360px the row has 304px and the longest
+ * line, both *Tidak pernah*, is 297px; under the name it would wrap. Each half keeps together, so a narrower screen breaks
+ * it at the dot. From 768px the table's two pill columns, as before.
+ */
+function RecencyLine({ member }: { member: RosterMember }) {
+  const t = useMessages(membersMessages);
+  const language = useLanguage();
+  const part = (label: string, days: number | null | undefined, status: RecencyStatus | undefined) => {
+    if (days === undefined || !status) return null;
+    const { tone, ink } = RECENCY_TONE[status];
+    return (
+      <span key={label} className="whitespace-nowrap">
+        {label}: <span className={ink} data-tone={tone}>{daysAgoWords(days, language)}</span>
+      </span>
+    );
+  };
+  const parts = [
+    part(t.recency.activity, member.lastActivityDays, member.lastActivityStatus),
+    part(t.recency.coaching, member.lastCoachedDays, member.lastCoachedStatus),
+  ].filter((p) => p !== null);
+  if (parts.length === 0) return null;
+  return (
+    <p className="text-base text-muted" data-recency-line="">
+      {parts.flatMap((p, i) => (i === 0 ? [p] : [' · ', p]))}
+    </p>
   );
 }
 

@@ -55,6 +55,7 @@ export function Segmented({
   onSelect,
   children,
   className,
+  panelClassName,
   phoneLayout = 'scroll',
 }: {
   /** Names the group for a screen reader — *"How you want to set it"*. */
@@ -65,6 +66,11 @@ export function Segmented({
   /** The active panel's contents. Called with the active tab's id. */
   children: (activeId: string) => ReactNode;
   className?: string;
+  /**
+   * The panel's own classes, merged over its `mt-3.5` — for a page that hides the track at a width and wants no room
+   * left where it stood (Anggota on a phone, whose role tabs are in its filter sheet).
+   */
+  panelClassName?: string;
   /**
    * Below 768px: `scroll`, a row that scrolls when its words do not fit (the default), or `wrap`, equal halves whose
    * words wrap inside them — for two options, which must both be seen (P18.7-T5 AC-7).
@@ -136,7 +142,7 @@ export function Segmented({
           );
         })}
       </div>
-      <div role="tabpanel" id={panelId} aria-labelledby={tabId(active)} className="mt-3.5">
+      <div role="tabpanel" id={panelId} aria-labelledby={tabId(active)} className={cn('mt-3.5', panelClassName)}>
         {children(active)}
       </div>
     </>

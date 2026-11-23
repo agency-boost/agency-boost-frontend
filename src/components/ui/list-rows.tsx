@@ -142,6 +142,12 @@ export interface FilterChip<K extends string = string> {
   readonly label: string;
   /** The count after the words — *Semua 28*; absent, the words alone. */
   readonly count?: number;
+  /**
+   * **What the chip shows below 768px instead of its words** (P19.29-T5 AC-2; UI-215 (21 Nov): *Semua · AB · AAB · Agent
+   * · ★* fit the width): All members' *★ Core leader* as *★*. Its words stay its name, read by a screen reader at every
+   * width; from 768px they are drawn as before. Absent, the words at every width.
+   */
+  readonly short?: string;
 }
 
 /**
@@ -185,7 +191,12 @@ export function FilterChips<K extends string>({
               on ? 'bg-secondary text-secondary-contrast' : 'bg-card text-pill-grey-ink hover:bg-hover-row',
             )}
           >
-            {chip.label}
+            {chip.short === undefined ? chip.label : (
+              <>
+                <span aria-hidden="true" className="md:hidden" data-chip-short="">{chip.short}</span>
+                <span className="max-md:sr-only">{chip.label}</span>
+              </>
+            )}
             {chip.count !== undefined && <span className="tabular-nums">{chip.count}</span>}
           </button>
         );

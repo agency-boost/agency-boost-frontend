@@ -24,7 +24,7 @@ import ImpersonatePage from './impersonate/[userId]/page';
 import RetiredApprovalAddress from './impersonation/[sessionId]/page';
 import ApprovalsPage from './approvals/page';
 import TenantAdminsPage from './tenant-admins/page';
-import AssignOwnerPage from './tenants/[kpmId]/owner/page';
+import RetiredOwnerAddress from './tenants/[kpmId]/owner/page';
 import RetiredRosterAddress from './tenants/[kpmId]/roster/page';
 // P19.23 (ADR-0277 §7, §8; ADR-0279): the console's moved and retired addresses, each a redirect.
 import RetiredAnalyticsAddress from './analytics/page';
@@ -133,11 +133,17 @@ afterEach(() => {
 describe('P18.10-T6 the Super Admin’s console in Indonesian', () => {
   it('reads the English it is looking for, so a silent zero cannot pass: the same page in English shows it', async () => {
     expect(ENGLISH.length).toBeGreaterThan(150);
-    stubFetch({ ...SHELL, '/admin/accounts': { body: [] }, '/admin/tenants/kpm-1': { body: KPM } });
-    nav.pathname = '/admin/tenants/kpm-1/owner';
+    // P19.27 (ADR-0285): *Ganti Owner*'s page, the sample until then, is retired; *KPM Owners & Admins* stands in.
+    stubFetch({
+      ...SHELL,
+      '/admin/tenant-admins': {
+        body: [{ membershipId: 'mem-1', fullName: 'Wilson Tanoto', email: 'wilson@kpm0417.test', initials: 'WT', kpmId: 'kpm-1', kpmLabel: 'KPM 0417 — BSD City Branch', isOwner: true, isAdmin: false, grantedAt: null }],
+      },
+    });
+    nav.pathname = '/admin/tenant-admins';
     render(
       <SessionContext.Provider value={makeSession({ me: SUPER_ADMIN })}>
-        <AdminLayout><AssignOwnerPage params={routeParams({ kpmId: 'kpm-1' })} /></AdminLayout>
+        <AdminLayout><TenantAdminsPage /></AdminLayout>
       </SessionContext.Provider>,
     );
     await screen.findByRole('heading', { level: 1 });
@@ -163,29 +169,6 @@ describe('P18.10-T6 the Super Admin’s console in Indonesian', () => {
     noEnglishLeft();
   });
 
-  it('AC-1, AC-4 P19-T3 AC-5 Ganti Owner: the current Owner as stored, the picker, and an invitation to an address with no account', async () => {
-    stubFetch({
-      ...SHELL,
-      '/admin/accounts': { body: [] },
-      '/admin/tenants/kpm-1': { body: KPM },
-    });
-    inIndonesian('/admin/tenants/kpm-1/owner', <AssignOwnerPage params={routeParams({ kpmId: 'kpm-1' })} />);
-    expect(await screen.findByRole('heading', { level: 1, name: 'Ganti Owner' })).toBeInTheDocument();
-    expect(screen.getByText(/^Owner saat ini adalah/)).toHaveTextContent(
-      'Owner saat ini adalah Rina Wijaya (rina@kpm0417.test). Pemindahan dicatat di audit',
-    );
-    expect(screen.getByRole('button', { name: 'Ganti' })).toBeDisabled();
-    await userEvent.type(screen.getByLabelText('Cari akun'), 'nobody@nowhere.test');
-    expect(await screen.findByText('Tidak ada akun yang memakai alamat itu.')).toBeInTheDocument();
-    // P19.4-T3 AC-6 (ADR-0212 §3): the person is named and invited by the API — no `mailto:` asking them to register.
-    expect(screen.getByRole('heading', { name: 'Jadikan pemilik dan undang' })).toBeInTheDocument();
-    for (const label of ['Nama', 'No. WhatsApp', 'Kode agen pemilik']) expect(screen.getByLabelText(label)).toBeInTheDocument();
-    expect(screen.getByRole('checkbox', { name: 'Kirim undangan lewat email' })).toBeChecked();
-    expect(screen.getByRole('button', { name: 'Jadikan pemilik dan undang' })).toBeDisabled();
-    expect(screen.queryByRole('link', { name: 'Kirim undangan' })).toBeNull();
-    noEnglishLeft();
-  });
-
   /*
    * **P19.4-T2 AC-1, AC-3: the two retired addresses** (ADR-0206 §3, §6) redirect, and say nothing in either language
    * while they do: a skeleton, no English left.
@@ -196,6 +179,11 @@ describe('P18.10-T6 the Super Admin’s console in Indonesian', () => {
     expect(screen.queryByText(/Impor roster|Import a roster/)).toBeNull();
     noEnglishLeft();
     unmount();
+    // P19.27-T3 AC-4 (ADR-0285 §4): *Ganti Owner*'s address too.
+    const owner = inIndonesian('/admin/tenants/kpm-1/owner', <RetiredOwnerAddress params={routeParams({ kpmId: 'kpm-1' })} />);
+    expect(screen.queryByText(/Ganti Owner|Change owner/)).toBeNull();
+    noEnglishLeft();
+    owner.unmount();
     inIndonesian('/admin/impersonation/s1', <RetiredApprovalAddress />);
     expect(screen.queryByText(/Setujui|Approve/)).toBeNull();
     noEnglishLeft();

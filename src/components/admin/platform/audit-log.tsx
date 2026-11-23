@@ -6,6 +6,7 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { Button, ErrorBanner, Field } from '@/components/ui/field';
 import { LineIcon } from '@/components/ui/line-icon';
 import { Modal } from '@/components/ui/modal';
+import { ResponsiveSheet } from '@/components/ui/responsive-sheet';
 import { Skeleton, SkeletonBar } from '@/components/ui/skeleton';
 import { ADMIN_TARGET, ChoicePill, type ChoiceOption } from '@/components/ui/rows-and-sheets';
 import { kept } from '@/i18n/kept';
@@ -96,6 +97,10 @@ function whatOf(group: AuditGroup): string {
  * - **The filters** (f52): *Cari perubahan*, then *Semua perusahaan · Semua KPM · Semua tindakan*; *Pelaku* and
  *   *Tanggal* after them (P19.2-T2 AC-6, UI-132 — earlier requests, kept).
  * - **Each line** (f52): when · what, before → after · who · KPM · company. One list at every width; a phone stacks it.
+ * - ***Termasuk dilihat*** (P19.26-T3 AC-1; UI-217 (21 Nov), ADR-0284 §3): **changes only by default**, at every width —
+ *   the looks (*dilihat*) are filtered by the server, so a page is fifty changes; the chip lists them too.
+ * - **On a phone** (P19.26-T3 AC-2, AC-3): the search and one *Filter* button, which opens a sheet holding the five filters
+ *   and the chip; the note under the list goes. From 768px the row of filters and the note are as before.
  */
 export function AuditLogSection() {
   const t = useMessages(adminAuditMessages);
@@ -108,6 +113,9 @@ export function AuditLogSection() {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [filters, setFilters] = useState<Filters>(() => filtersFrom(address));
   const [typed, setTyped] = useState(filters.q);
+  /** *Termasuk dilihat*: off, changes only (UI-217). */
+  const [viewed, setViewed] = useState(false);
+  const [sheetOpen, setSheetOpen] = useState(false);
   const [error, setError] = useState<{ code: string; message: string; requestId: string } | null>(null);
   /** The read the page is on, so a slower answer to filters since changed never overwrites a newer one. */
   const reading = useRef(0);
@@ -125,7 +133,7 @@ export function AuditLogSection() {
     return () => clearTimeout(timer);
   }, [typed, filters.q]);
 
-  const query = useMemo<AuditQuery>(() => ({ ...filters }), [filters]);
+  const query = useMemo<AuditQuery>(() => ({ ...filters, ...(viewed ? { includeViewed: 'true' as const } : {}) }), [filters, viewed]);
 
   useEffect(() => {
     const read = ++reading.current;
@@ -164,6 +172,9 @@ export function AuditLogSection() {
 
   const set = (key: keyof Filters) => (value: string) => setFilters((f) => ({ ...f, [key]: value }));
   const narrowed = Object.entries(filters).some(([key, value]) => key !== 'kpmId' && value !== ANY);
+  // What the phone's *Filter* button counts: the five filters and the chip, each one that narrows or widens the list.
+  const on = [filters.companyId, filters.kpmId, filters.action, filters.actorUserId].filter((v) => v !== ANY).length
+    + (filters.from !== ANY || filters.to !== ANY ? 1 : 0) + (viewed ? 1 : 0);
 
   const companyOptions: ChoiceOption[] = [
     { key: ANY, label: t.allCompanies },
@@ -187,7 +198,8 @@ export function AuditLogSection() {
   return (
     <>
       <div role="group" aria-label={t.filters} className="mb-3 flex flex-col gap-2 md:flex-row md:flex-wrap md:items-center">
-        <label className="flex min-h-11 items-center gap-2 rounded-pill border border-hairline bg-card px-3.5 md:w-72">
+        <div className="flex items-center gap-2 md:contents">
+        <label className="flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-pill border border-hairline bg-card px-3.5 md:w-72 md:flex-none">
           <LineIcon name="search" className="h-4 w-4 shrink-0 text-muted" />
           <span className="sr-only">{t.search}</span>
           <input
@@ -199,18 +211,68 @@ export function AuditLogSection() {
             className="min-w-0 flex-1 bg-transparent text-base text-ink placeholder:text-muted focus:outline-none"
           />
         </label>
-        <div className="grid grid-cols-2 gap-2 md:flex md:flex-wrap">
+        {/* A phone's one *Filter* button (UI-217): the sheet below; a count of what is on, said in its name. */}
+        <button
+          type="button"
+          aria-haspopup="dialog"
+          aria-label={on > 0 ? t.filterOn({ n: on }) : t.filter}
+          onClick={() => setSheetOpen(true)}
+          data-audit-filter-button=""
+          className={cn(
+            'flex min-h-11 shrink-0 items-center gap-1.5 rounded-pill px-3.5 text-base font-semibold md:hidden',
+            on > 0 ? 'bg-secondary text-secondary-contrast' : 'bg-card text-ink',
+          )}
+        >
+          <LineIcon name="adjust" className="h-[18px] w-[18px] shrink-0" />
+          <span aria-hidden="true">{t.filter}</span>
+          {on > 0 && <span aria-hidden="true" className="tabular-nums">{on}</span>}
+        </button>
+        </div>
+        {/* From 768px the five filters in a row, and the chip after them; on a phone they are the sheet's (UI-217). */}
+        <div className="flex flex-wrap gap-2 max-md:hidden">
           <ChoicePill name={t.company} options={companyOptions} value={filters.companyId} onChange={set('companyId')}
             narrows={filters.companyId !== ANY} shows="value" className={pill} />
           <ChoicePill name={t.kpm} options={kpmOptions} value={filters.kpmId} onChange={set('kpmId')}
             narrows={filters.kpmId !== ANY} shows="value" className={pill} />
           <ChoicePill name={t.columns.action} options={actionOptions} value={filters.action} onChange={set('action')}
-            narrows={filters.action !== ANY} shows="value" className={cn(pill, 'max-md:col-span-2')} />
+            narrows={filters.action !== ANY} shows="value" className={pill} />
           <ChoicePill name={t.columns.actor} options={actorOptions} value={filters.actorUserId} onChange={set('actorUserId')}
             narrows={filters.actorUserId !== ANY} shows="value" className={pill} />
           <DatePill from={filters.from} to={filters.to} onChange={(from, to) => setFilters((f) => ({ ...f, from, to }))} />
+          <ViewedChip on={viewed} onChange={setViewed} />
         </div>
       </div>
+
+      <ResponsiveSheet
+        open={sheetOpen}
+        title={t.filter}
+        onClose={() => setSheetOpen(false)}
+        footer={(
+          <div className="flex gap-2.5 pb-1">
+            <Button
+              variant="secondary"
+              className="min-h-12 text-row font-bold"
+              onClick={() => { setFilters((f) => ({ ...NO_FILTERS, q: f.q })); setViewed(false); }}
+            >
+              {t.clearFilters}
+            </Button>
+            <Button className="min-h-12 flex-1 text-row font-bold" onClick={() => setSheetOpen(false)}>{t.done}</Button>
+          </div>
+        )}
+      >
+        <div data-audit-filter-sheet="" className="flex flex-col gap-2.5 pb-2 [&>*]:w-full [&>*]:justify-between">
+          <ChoicePill name={t.company} options={companyOptions} value={filters.companyId} onChange={set('companyId')}
+            narrows={filters.companyId !== ANY} shows="value" className={pill} />
+          <ChoicePill name={t.kpm} options={kpmOptions} value={filters.kpmId} onChange={set('kpmId')}
+            narrows={filters.kpmId !== ANY} shows="value" className={pill} />
+          <ChoicePill name={t.columns.action} options={actionOptions} value={filters.action} onChange={set('action')}
+            narrows={filters.action !== ANY} shows="value" className={pill} />
+          <ChoicePill name={t.columns.actor} options={actorOptions} value={filters.actorUserId} onChange={set('actorUserId')}
+            narrows={filters.actorUserId !== ANY} shows="value" className={pill} />
+          <DatePill from={filters.from} to={filters.to} onChange={(from, to) => setFilters((f) => ({ ...f, from, to }))} />
+          <ViewedChip on={viewed} onChange={setViewed} />
+        </div>
+      </ResponsiveSheet>
 
       {error && <ErrorBanner {...error} />}
 
@@ -234,7 +296,7 @@ export function AuditLogSection() {
               title={t.emptyFiltered}
               variant="filtered"
               action={(
-                <Button variant="secondary" onClick={() => { setTyped(ANY); setFilters(NO_FILTERS); }}>
+                <Button variant="secondary" onClick={() => { setTyped(ANY); setFilters(NO_FILTERS); setViewed(false); }}>
                   {t.clearFilters}
                 </Button>
               )}
@@ -265,8 +327,35 @@ export function AuditLogSection() {
         </div>
       )}
 
-      <p className="mt-2 text-sm text-muted">{filters.kpmId ? t.officeNote : t.note}</p>
+      {/* No grey sentence on a phone (UI-213 (21 Nov)): the note stays from 768px. */}
+      <p className="mt-2 text-sm text-muted max-md:hidden">{filters.kpmId ? t.officeNote : t.note}</p>
     </>
+  );
+}
+
+/**
+ * ***Termasuk dilihat*** (P19.26-T3 AC-1; UI-217): a chip that lists the looks too. Off by default: changes only. A
+ * toggle, said by `aria-pressed`; navy while on, as a filter that narrows is.
+ */
+function ViewedChip({ on, onChange }: { on: boolean; onChange: (on: boolean) => void }) {
+  const t = useMessages(adminAuditMessages);
+  return (
+    <button
+      type="button"
+      aria-pressed={on}
+      onClick={() => onChange(!on)}
+      data-include-viewed=""
+      className={cn(
+        'flex min-h-11 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-pill px-3.5 text-base font-semibold',
+        // On a phone, in the white filter sheet, the off chip wears the app's chips' hairline, so it reads as a control
+        // (the integration round's walk, 2026-11-22); from 768px, on the page's ground, as before.
+        on ? 'bg-secondary text-secondary-contrast max-md:border max-md:border-secondary'
+          : 'bg-card text-ink hover:bg-hover-row max-md:border max-md:border-hairline',
+      )}
+    >
+      {on && <LineIcon name="check" className="h-4 w-4 shrink-0" />}
+      {t.includeViewed}
+    </button>
   );
 }
 

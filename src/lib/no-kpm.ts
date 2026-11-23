@@ -11,6 +11,8 @@ export const NO_KPM_ROUTES: readonly string[] = [
   '/user-management', '/profile', '/notifications', '/join',
   // P19.23-T2 AC-3 (OD-420): a KPM's future Owner opens their claim link before they are in any office.
   '/owner-invite',
+  // P19.28-T1 AC-4 (ADR-0286 §2): *Tambah user*'s invitation link, opened before they are in any office.
+  '/user-invite',
 ];
 
 /**

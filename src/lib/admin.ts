@@ -181,6 +181,11 @@ export interface AuditQuery {
   from?: string;
   to?: string;
   cursor?: string;
+  /**
+   * ***Termasuk dilihat*** (P19.26-T3 AC-1; ADR-0284 §3): `'true'` lists the looks too. Absent, changes only — the server
+   * filters them before the page is cut.
+   */
+  includeViewed?: 'true';
 }
 
 export interface AttentionItem {
@@ -342,34 +347,6 @@ export const checkKpmCode = (companyId: string, code: string) =>
     `/admin/tenants/code-availability?companyId=${encodeURIComponent(companyId)}&code=${encodeURIComponent(code)}`,
   );
 
-/** An office an account owns or belongs to, as *Ganti Owner* shows it (P19-T3 AC-5). */
-export interface AccountOffice {
-  kpmId: string;
-  code: string;
-  branchName: string;
-  companyName: string;
-  isOwner: boolean;
-  membershipStatus: 'active' | 'pending' | null;
-}
-
-/** One account *Ganti Owner* may choose (`GET /admin/accounts`, P19-T3 AC-5). */
-export interface AccountChoice {
-  userId: string;
-  fullName: string;
-  email: string;
-  phone: string | null;
-  companyId: string | null;
-  companyName: string | null;
-  hasAgentCode: boolean;
-  emailVerified: boolean;
-  status: 'invited' | 'active' | 'deactivated';
-  offices: AccountOffice[];
-}
-
-/** By part of a name or an email address, two characters at least; twenty at most. */
-export const searchAccounts = (q: string) =>
-  api<AccountChoice[]>(`/admin/accounts?q=${encodeURIComponent(q)}`);
-
 export const declineKpmRequest = (requestId: string, reason?: string) =>
   api<KpmRequestRow[]>(`/admin/kpm-requests/${requestId}/decline`, {
     method: 'POST',
@@ -524,14 +501,8 @@ export interface CreateKpmInput {
 export const createTenant = (body: CreateKpmInput) =>
   api<Kpm & { invitationSent: boolean }>('/admin/tenants', { method: 'POST', body });
 
-/**
- * By email, which is what a Super Admin knows, or by id from the picker; or `owner`, somebody named with their email,
- * made the Owner and invited (ADR-0212 §3). Answers the office as the list reads it.
- */
-export const assignOwner = (
-  id: string,
-  who: { email?: string; userId?: string; owner?: OwnerInput; sendInvitation?: boolean },
-) => api<TenantRow>(`/admin/tenants/${id}/owner`, { method: 'PATCH', body: who });
+// `assignOwner` — `PATCH /admin/tenants/:id/owner`, *Ganti Owner* — and its account search are retired (P19.27; ADR-0285):
+// a KPM's owners are added and removed from inside it (`lib/kpm-owners.ts`).
 
 export const setTenantStatus = (id: string, status: TenantStatus, reason?: string) =>
   api<Kpm>(`/admin/tenants/${id}/status`, { method: 'PATCH', body: { status, reason } });

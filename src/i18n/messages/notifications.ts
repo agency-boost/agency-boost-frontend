@@ -37,6 +37,12 @@ const en = {
   repeated: ({ title, n, unread }: { title: string; n: number; unread: boolean }) =>
     `${unread ? 'Unread: ' : ''}${title}, ${n} notices`,
   markAllOf: ({ n, read }: { n: number; read: boolean }) => (read ? `Mark all ${n} as read` : `Mark all ${n} as unread`),
+  /*
+   * P19.26-T5 AC-5 (UI-213, UI-218 (21 Nov)): the Super Admin's page on a phone — the title in Bahasa, and an empty state
+   * that names no unit, which a Super Admin has none of. From 768px, and for every other role, as above.
+   */
+  superAdminTitle: 'Notifications',
+  superAdminEmpty: 'No notifications yet',
 };
 
 const id: MessagesOf<typeof en> = {
@@ -53,6 +59,8 @@ const id: MessagesOf<typeof en> = {
   close: 'Tutup',
   repeated: ({ title, n, unread }) => `${unread ? 'Belum dibaca: ' : ''}${title}, ${n} notifikasi`,
   markAllOf: ({ n, read }) => (read ? `Tandai ${n} notifikasi ini sudah dibaca` : `Tandai ${n} notifikasi ini belum dibaca`),
+  superAdminTitle: 'Notifikasi',
+  superAdminEmpty: 'Belum ada notifikasi',
 };
 
 export const notificationMessages = defineMessages({ en, id });

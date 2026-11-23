@@ -11,18 +11,21 @@ import { SkeletonText } from '@/components/ui/skeleton';
 import { useToast } from '@/components/ui/toast';
 import { useFigureLanguage, useMessages } from '@/i18n/language-provider';
 import { adminConsoleMessages } from '@/i18n/messages/admin-console';
+import { kpmOwnersMessages } from '@/i18n/messages/kpm-owners';
 import {
   deleteTenant, moveTenantCompany, readTenantContents, setTenantStatus, type TenantContents, type TenantStatus,
 } from '@/lib/admin';
 import type { ConsoleKpm } from '@/lib/admin-console';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { formatNumber } from '@/lib/format';
+import { enterKpm } from '@/lib/super-admin-kpm';
 
 type Open = null | 'move' | 'suspend' | 'archive' | 'reactivate' | 'delete';
 
 /**
- * **A KPM card's ⋯** (P19.23-T2 AC-2; the Super Admin spec §5; `superadmin-tablet` f08–f09): *Ganti owner · Pindah
- * perusahaan · Tangguhkan · Arsipkan · Hapus KPM* — the last red, last. A suspended KPM offers *Aktifkan lagi* where
+ * **A KPM card's ⋯** (P19.23-T2 AC-2; the Super Admin spec §5; `superadmin-tablet` f08–f09): *Kelola owner · Pindah
+ * perusahaan · Tangguhkan · Arsipkan · Hapus KPM* — the last red, last. *Kelola owner* opens the KPM page's *KPM Owner · n*
+ * (P19.27-T3 AC-4; ADR-0285), where *Ganti owner* opened a page of its own. A suspended KPM offers *Aktifkan lagi* where
  * *Tangguhkan* stood, an archived one where *Arsipkan* stood. Each is the console's existing route, and the server
  * refuses anything it would not do and says why — a KPM with members besides its Owner cannot move company, one that
  * holds members or records cannot be deleted (ADR-0191 §5, kept: OD-419) — and audits every change.
@@ -37,19 +40,21 @@ export function KpmActions({
   onChanged: () => void;
 }) {
   const t = useMessages(adminConsoleMessages);
+  const o = useMessages(kpmOwnersMessages);
   const router = useRouter();
   const [open, setOpen] = useState<Open>(null);
   const close = () => setOpen(null);
   const done = () => { setOpen(null); onChanged(); };
 
   const items: ActionMenuItem[] = [
-    { label: t.kpms.menu.changeOwner, onSelect: () => router.push(`/admin/tenants/${kpm.kpmId}/owner`) },
+    // *Kelola owner* (P19.27-T3 AC-4; ADR-0285; UI-212 (21 Nov)): the KPM page's *KPM Owner · n*, where *Ganti owner*'s page was.
+    { label: o.manage, onSelect: () => { enterKpm(kpm.kpmId); router.push(`/admin/tenants/${kpm.kpmId}#owners`); } },
     { label: t.kpms.menu.moveCompany, onSelect: () => setOpen('move') },
     kpm.status === 'active'
       ? { label: t.kpms.menu.suspend, onSelect: () => setOpen('suspend') }
       : { label: t.kpms.menu.reactivate, onSelect: () => setOpen('reactivate') },
     ...(kpm.status !== 'archived' ? [{ label: t.kpms.menu.archive, onSelect: () => setOpen('archive') }] : []),
-    { label: t.kpms.menu.delete, tone: 'alert', onSelect: () => setOpen('delete') },
+    { label: t.kpms.menu.delete, tone: 'alert', danger: true, onSelect: () => setOpen('delete') },
   ];
 
   return (

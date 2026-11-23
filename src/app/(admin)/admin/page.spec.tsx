@@ -5,7 +5,7 @@ import { axe } from 'vitest-axe';
 import { atWidth, renderInIndonesian, renderWithSession, stubFetch } from '@test/harness';
 import { englishOnly, englishShown } from '@test/english-left';
 import { adminConsoleMessages } from '@/i18n/messages/admin-console';
-import { CEMPAKA, CONSOLE_SUPER_ADMIN, DASHBOARD, GADING, MAGNI } from '@test/console-fixtures';
+import { CEMPAKA, CONSOLE_SUPER_ADMIN, DASHBOARD, GADING, HOLD, MAGNI } from '@test/console-fixtures';
 import { enteredKpmId, enterKpm, leaveKpm } from '@/lib/super-admin-kpm';
 import ConsoleDashboardPage from './page';
 
@@ -57,9 +57,10 @@ describe('/admin — the console’s Dashboard (P19.23-T1)', () => {
     expect(within(funnel as HTMLElement).getAllByText('▲ 3 dari bulan lalu').length).toBeGreaterThan(0);
   });
 
-  it('P19.23-T1 AC-3 Perlu tindakan: one row per issue, the KPM’s name and company, never a suspended KPM', async () => {
+  it('P19.23-T1 AC-3 P19.26-T1 AC-3 Perlu tindakan: counts KPMs, one row per issue, the KPM’s name and company, never a suspended KPM', async () => {
     renderInIndonesian(<ConsoleDashboardPage />, { me: CONSOLE_SUPER_ADMIN });
-    expect(await screen.findByRole('heading', { name: 'Perlu tindakan · 5' })).toBeInTheDocument();
+    // Three KPMs (the server's `needsAction`), the KPM list's tile's number — not the five rows (ADR-0284 §2).
+    expect(await screen.findByRole('heading', { name: 'Perlu tindakan · 3' })).toBeInTheDocument();
     const rows = Array.from(document.querySelectorAll('[data-attention-row]')).map((r) => r.textContent ?? '');
     expect(rows).toEqual([
       expect.stringContaining('Kelapa Gading Branch · Prudential: langganan berakhir'),
@@ -73,7 +74,7 @@ describe('/admin — the console’s Dashboard (P19.23-T1)', () => {
 
   it('P19.23-T1 AC-3 each row’s one button goes straight to the right page — inside the KPM for an owner page', async () => {
     renderInIndonesian(<ConsoleDashboardPage />, { me: CONSOLE_SUPER_ADMIN });
-    await screen.findByRole('heading', { name: 'Perlu tindakan · 5' });
+    await screen.findByRole('heading', { name: 'Perlu tindakan · 3' });
     const row = (key: string) => within(document.querySelector(`[data-attention-row="${key}"]`) as HTMLElement);
     expect(row(`${MAGNI}-no_members`).getByRole('link', { name: 'Buka People' })).toHaveAttribute('href', '/people/import');
     expect(row(`${CEMPAKA}-data_missing`).getByRole('link', { name: 'Buka' })).toHaveAttribute('href', '/kpm/data-upload');
@@ -86,14 +87,20 @@ describe('/admin — the console’s Dashboard (P19.23-T1)', () => {
     expect(enteredKpmId()).toBe(MAGNI);
   });
 
-  it('P19.23-T1 AC-4 Adopsi per KPM: companies with their totals, the active KPMs beneath with the code small', async () => {
+  it('P19.23-T1 AC-4 P19.26-T1 AC-4 Adopsi per KPM: companies with their totals, every KPM beneath with the code small', async () => {
     renderInIndonesian(<ConsoleDashboardPage />, { me: CONSOLE_SUPER_ADMIN });
     const table = await screen.findByRole('table');
     const prudential = table.querySelector('[data-adoption-company="Prudential"]') as HTMLElement;
-    // BSD and Magni: 31 members; the ended and the suspended KPM are not in the tree.
-    expect(within(prudential).getByText('2 KPM')).toBeInTheDocument();
-    expect(within(prudential).getAllByRole('link').map((a) => a.textContent)).toEqual(['BSD City BranchKPM 0417', 'MagniKPM 1234']);
+    // Every KPM of the company (UI-205): the ended subscription's and the suspended one's too; 31 members.
+    expect(within(prudential).getByText('4 KPM')).toBeInTheDocument();
+    expect(within(prudential).getAllByRole('link').map((a) => a.textContent)).toEqual([
+      'BSD City BranchKPM 0417', 'Kelapa Gading BranchKPM 0555', 'MagniKPM 1234', 'Suspended BranchKPM 0999',
+    ]);
     expect(prudential.textContent).toContain('27 dari 31');
+    // A suspended KPM says *Ditangguhkan* in place of its shares.
+    const held = table.querySelector(`[data-adoption-kpm="${HOLD}"]`) as HTMLElement;
+    expect(within(held).getByText('Ditangguhkan')).toBeInTheDocument();
+    expect(held.querySelectorAll('[data-pct]')).toHaveLength(0);
     // The Allianz row says it holds none.
     expect(within(table.querySelector('[data-adoption-company="Allianz Life"]') as HTMLElement).getByText('Belum ada KPM')).toBeInTheDocument();
     expect(within(table).getByRole('link', { name: 'Masuk ke BSD City Branch' })).toHaveAttribute('href', expect.stringContaining('/admin/tenants/'));
@@ -140,6 +147,42 @@ describe('/admin — the console’s Dashboard (P19.23-T1)', () => {
     const cards = document.querySelector('[data-console-adoption-cards]') as HTMLElement;
     expect(within(cards).getAllByText('Pakai 14 hari terakhir').length).toBeGreaterThan(0);
     expect(document.querySelector('[data-console-adoption]')!.closest('.max-md\\:hidden')).not.toBeNull();
+  });
+
+  /*
+   * **P19.26-T2 (UI-206 (21 Nov)): a tiny bit simpler on a phone, nothing else.** jsdom applies no media query, so the
+   * phone's two removals and the light orange are asserted as the `max-md:` classes that draw them; from 768px the page is
+   * as before (the tests above, at 1024px).
+   */
+  it('P19.26-T2 AC-1 on a phone: no Keseluruhan heading (a screen reader still names the card) and no Anggota 100% row', async () => {
+    atWidth(375);
+    renderInIndonesian(<ConsoleDashboardPage />, { me: CONSOLE_SUPER_ADMIN });
+    const summary = await screen.findByRole('region', { name: 'Keseluruhan' });
+    expect(within(summary).getByRole('heading', { name: 'Keseluruhan' })).toHaveClass('max-md:sr-only');
+    const rows = document.querySelectorAll('[data-console-funnel] li');
+    expect(rows[0]).toHaveAttribute('data-funnel-row', 'members');
+    expect(rows[0]).toHaveClass('max-md:hidden');
+    // The other three stay, and nothing else on the card is hidden.
+    expect(Array.from(rows).slice(1).some((li) => li.classList.contains('max-md:hidden'))).toBe(false);
+  });
+
+  it('P19.26-T2 AC-2 on a phone the navy card’s big numbers and its % are the light orange', async () => {
+    atWidth(375);
+    renderInIndonesian(<ConsoleDashboardPage />, { me: CONSOLE_SUPER_ADMIN });
+    const summary = await screen.findByRole('region', { name: 'Keseluruhan' });
+    const figures = Array.from(summary.querySelectorAll('dd > b'));
+    expect(figures.map((b) => b.textContent)).toEqual(['5', '3', '3', '33']);
+    for (const b of figures) expect(b).toHaveClass('max-md:text-on-navy-orange', 'max-md:text-figure', 'text-primary');
+    const pct = within(document.querySelector('[data-console-funnel]') as HTMLElement).getByText('82%');
+    expect(pct).toHaveClass('max-md:text-on-navy-orange', 'text-primary');
+  });
+
+  it('P19.26-T1 AC-2 Anggota is the counted members: the tile, the funnel and the sum of every KPM agree', async () => {
+    renderInIndonesian(<ConsoleDashboardPage />, { me: CONSOLE_SUPER_ADMIN });
+    const summary = await screen.findByRole('region', { name: 'Keseluruhan' });
+    const sum = DASHBOARD.kpms.reduce((n, k) => n + k.usage.leader.members + k.usage.agent.members, 0);
+    expect(Array.from(summary.querySelectorAll('dd > b')).map((b) => b.textContent)).toContain(String(sum));
+    expect(screen.getByText(`Pemakaian AgencyBoost · dari ${sum} anggota`)).toBeInTheDocument();
   });
 
   it('P19.23-T1 axe on the populated Dashboard', async () => {

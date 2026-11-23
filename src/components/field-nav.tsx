@@ -29,7 +29,7 @@ const MoreSheet = dynamic(() => import('@/components/field-more-sheet').then((m)
 export const MORE_SHEET_ID = 'field-more-sheet';
 
 /** One of the bar's four destinations: its icon over its label, a navy pill behind both when current (D-13). */
-function TabLink({ tab }: { tab: FieldDestination }) {
+function TabLink({ tab, even }: { tab: FieldDestination; even?: boolean }) {
   return (
     <Link
       href={tab.href}
@@ -37,23 +37,33 @@ function TabLink({ tab }: { tab: FieldDestination }) {
       data-tab={tab.id}
       className="flex h-full min-w-0 items-center justify-center"
     >
-      <TabFace icon={tab.icon} label={tab.short} current={tab.active} />
+      <TabFace icon={tab.icon} label={tab.short} current={tab.active} even={even} />
     </Link>
   );
 }
+
+/**
+ * **A tab as wide as its column, its label 11/400, on a phone** (P19.29-T3 AC-1; UI-202 (21 Nov): *"All membersData
+ * upload"*, the current pill over *Data upload*; the phone type scale's *Bottom tab labels 11/400*; ADR-0287 §4). The pill
+ * is the column, so it can cover no other tab's label, and the label sits inside it: at 360px a column is 67px and *All
+ * members*, the longest, is 64px at 11/400 (Inter). For the bar `FieldNav.evenTabs` marks — the Super Admin's inside a
+ * KPM. `max-md:` only: a tablet's bar is as it was. 11px has no type token (the scale's floor is 12px), hence the rem.
+ */
+export const EVEN_TAB_PHONE = 'max-md:w-full max-md:px-0 max-md:text-[0.6875rem] max-md:font-normal';
 
 /**
  * **A tab's face** (D-13): the line icon over its label, **never icon-only**; the current one on a navy pill. The label
  * is 12px — the report's *11px* meets UI-008's *nothing below 12px* (ADR-0180) — on one line that never wraps: at 360px
  * each tab is 67px wide, and the longest label, *Calendar*, is about 50px.
  */
-function TabFace({ icon, label, current }: { icon: FieldDestination['icon']; label: string; current: boolean }) {
+function TabFace({ icon, label, current, even = false }: { icon: FieldDestination['icon']; label: string; current: boolean; even?: boolean }) {
   return (
     <span
       data-tab-face=""
       className={cn(
         'flex flex-col items-center gap-px rounded-pill px-2 py-1 text-xs leading-tight whitespace-nowrap',
         current ? 'bg-secondary font-bold text-secondary-contrast' : 'font-medium text-muted',
+        even && EVEN_TAB_PHONE,
       )}
     >
       <NavIcon name={icon} className="h-[21px] w-[21px] shrink-0" />
@@ -101,10 +111,10 @@ export function TabBar({ chrome }: { chrome: FieldChrome }) {
           * landmark already says what these are.
           */}
         <div className="grid h-full grid-cols-5">
-          <TabLink tab={activity} />
-          <TabLink tab={calendar} />
-          <TabLink tab={home} />
-          <TabLink tab={fourth} />
+          <TabLink tab={activity} even={chrome.nav.evenTabs} />
+          <TabLink tab={calendar} even={chrome.nav.evenTabs} />
+          <TabLink tab={home} even={chrome.nav.evenTabs} />
+          <TabLink tab={fourth} even={chrome.nav.evenTabs} />
           <button
             ref={opener}
             type="button"
@@ -118,7 +128,7 @@ export function TabBar({ chrome }: { chrome: FieldChrome }) {
             className={cn('flex h-full w-full min-w-0 items-center justify-center', surveyDot && 'relative')}
           >
             {/* P19.17-T3 (part E; the phone mockups' bar: *Lainnya, layout-grid*): Tabler's, as the four tabs' are. */}
-            <TabFace icon="ti-layout-grid" label={t.more} current={open || chrome.nav.inSheet} />
+            <TabFace icon="ti-layout-grid" label={t.more} current={open || chrome.nav.inSheet} even={chrome.nav.evenTabs} />
             {/* P19.5-T4 (C-R2): the red dot while a survey the reader was invited to waits, open and not sent. */}
             {surveyDot && (
               <span

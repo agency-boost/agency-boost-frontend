@@ -27,17 +27,23 @@ export const ALZ = '66f0000000000000000002c3';
 const counts = (members: number, everUsed: number, used14: number, powerUsers: number): UsageCounts =>
   ({ members, everUsed, used14, powerUsers });
 
+/** The server's *Perlu tindakan* mark (ADR-0284 §2): one of the four action issues. */
+const ACTION = new Set(['subscription_ended', 'owner_not_invited', 'no_members', 'data_missing']);
+
 const kpm = (over: Partial<ConsoleKpm> & Pick<ConsoleKpm, 'kpmId' | 'name' | 'code'>): ConsoleKpm => ({
   companyId: PRU, companyName: 'Prudential', status: 'active', active: true, ownerName: 'WILSON TANOTO', ownerState: 'active',
   createdAt: '2026-01-05T00:00:00.000Z', usage: { leader: counts(0, 0, 0, 0), agent: counts(0, 0, 0, 0) }, issues: [],
-  missingMonth: null, ...over,
+  missingMonth: null, needsAction: (over.issues ?? []).some((i) => ACTION.has(i)),
+  // ADR-0285 §3: every owner's name, the first the one `ownerName` holds.
+  ownerNames: over.ownerName === null ? [] : [over.ownerName ?? 'WILSON TANOTO'], ...over,
 });
 
 export const DASHBOARD: ConsoleDashboard = {
   asOf: '2026-11-20',
   comparedWith: '2026-10-20',
   scale: { greenFromPct: 80, yellowFromPct: 50 },
-  overall: { kpms: 5, kpmsNewThisMonth: 1, companies: 3, activeKpms: 3, leaders: 11, agents: 22 },
+  // *Anggota* 33 is every card's sum (ADR-0284 §1); *Perlu tindakan* 3 KPMs — Gading, Magni and Cempaka (§2).
+  overall: { kpms: 5, kpmsNewThisMonth: 1, companies: 3, activeKpms: 3, leaders: 11, agents: 22, needsAction: 3 },
   funnel: {
     members: 33,
     everUsed: { count: 27, pct: 82, previousCount: 24, previousPct: 73 },
@@ -68,6 +74,14 @@ export const DASHBOARD: ConsoleDashboard = {
 export const PEOPLE: ConsoleKpmPeople = {
   kpm: { kpmId: BSD, name: 'BSD City Branch', code: '0417', companyId: PRU, companyName: 'Prudential', status: 'active' },
   owner: { state: 'active', person: { membershipId: 'm-wilson', userId: 'u-wilson', fullName: 'Wilson Tanoto', class: 'ab' }, pendingName: null },
+  // *KPM Owner · n* (P19.27; ADR-0285): Wilson, the KPM's one owner, managed by the Super Admin reading it.
+  owners: {
+    canManage: true,
+    owners: [{
+      userId: 'u-wilson', membershipId: 'm-wilson', fullName: 'Wilson Tanoto', agentCode: '86001', role: 'ab', photoUrl: null,
+      since: '2026-08-04T03:00:00.000Z', state: 'active',
+    }],
+  },
   admins: [{ membershipId: 'm-linda', userId: 'u-linda', fullName: 'Linda Kusuma', class: 'agent' }],
   coreLeaders: [
     { membershipId: 'm-agus', userId: 'u-agus', fullName: 'Agus Prasetyo', class: 'ab' },

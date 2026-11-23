@@ -5989,15 +5989,6 @@ describe('P18.10-T6 the Super Admin’s console in Indonesian', () => {
     return renderWithSession(<InLanguage language="id"><AdminLayout>{page}</AdminLayout></InLanguage>, { me: ADMIN });
   };
 
-  it('admin/tenants/[kpmId]/owner, transferring', async () => {
-    const { default: AssignOwnerPage } = await import('./(admin)/admin/tenants/[kpmId]/owner/page');
-    stubFetch({ ...INBOX, '/admin/tenants/kpm-1': { body: SUBSCRIBED } });
-    inIndonesian('/admin/tenants/kpm-1/owner', <AssignOwnerPage params={routeParams({ kpmId: 'kpm-1' })} />);
-    // P19-T3 (UI-168 point 4): *Ganti Owner*.
-    await screen.findByRole('heading', { level: 1, name: 'Ganti Owner' });
-    await expectClean('admin/tenants/[kpmId]/owner (id)');
-  });
-
   it('admin/tenant-admins', async () => {
     stubFetch({
       ...INBOX,
@@ -7244,7 +7235,7 @@ describe('P19.20 the People screens', () => {
     '/members/mem-budi': { body: peopleBudi() },
     '/members/tree': { body: PEOPLE_TREE },
     '/members/admins': { body: [{ membershipId: 'mem-maya', fullName: 'Maya Halim', initials: 'MH', agentCode: '80004', role: 'ab', grantedAt: '2026-03-02T02:00:00.000Z', grantedByName: 'Wilson Tanoto', canRevoke: true, photoUrl: null }] },
-    '/people/stewards': { body: { owner: { membershipId: 'mem-wilson', fullName: 'Wilson Tanoto', agentCode: '80003', role: 'ab', photoUrl: null }, admins: 1, coreLeaders: 4 } },
+    '/people/stewards': { body: { owner: { membershipId: 'mem-wilson', fullName: 'Wilson Tanoto', agentCode: '80003', role: 'ab', photoUrl: null }, owners: [{ userId: 'u-wilson', membershipId: 'mem-wilson', fullName: 'Wilson Tanoto', agentCode: '80003', role: 'ab', photoUrl: null, since: '2026-08-04T03:00:00.000Z', state: 'active' }], canManageOwners: true, admins: 1, coreLeaders: 4 } },
     '/people/imports': { body: [{ importId: 'imp-1', fileName: 'anggota_okt_2026.xlsx', importedAt: '2026-11-02T02:00:00.000Z', byName: 'Wilson Tanoto', created: 3, updated: 1, invited: 0, skipped: 0 }] },
     '/admin/tenants/kpm-1/roster/file/preview': { body: {
       issues: [], header: ['Kode agen', 'Nama', 'Peran', 'Kode upline', 'No. WhatsApp', 'Email', 'Tanggal bergabung', 'Waktu', 'Tanggal lahir', 'Jenis kelamin', 'Bulan bergabung di perusahaan'],

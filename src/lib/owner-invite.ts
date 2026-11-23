@@ -78,7 +78,7 @@ export class OwnerInviteNoNumber extends Error {
  * refused the window, `OwnerInviteNoNumber` when the number cannot be opened, the API's refusal otherwise. Answers the
  * invitation, so the caller can name the Owner.
  */
-export const openOwnerWhatsAppInvite = async (kpmId: string): Promise<OwnerWhatsAppInvitation> => {
+export const openOwnerWhatsAppInvite = async (kpmId: string, userId?: string): Promise<OwnerWhatsAppInvitation> => {
   const opened = window.open('about:blank', '_blank');
   if (!opened) throw new OwnerInviteBlocked();
   // The new window never reaches back into this one.
@@ -86,8 +86,10 @@ export const openOwnerWhatsAppInvite = async (kpmId: string): Promise<OwnerWhats
   try {
     // A fresh link for the KPM's Owner (the Super Admin's, `kpm:assign_owner`); a new one replaces the last. Called here,
     // inside the exported wrapper the button uses (an `export const`, which `check-api-consumers` reads as the caller).
+    // ADR-0285: `userId` names which of the KPM's owners (*Kirim ulang undangan* on their ⋯); absent, the first.
     const invitation = await api<OwnerWhatsAppInvitation>(
-      `/admin/tenants/${encodeURIComponent(kpmId)}/owner/whatsapp-invitation`, { method: 'POST' },
+      `/admin/tenants/${encodeURIComponent(kpmId)}/owner/whatsapp-invitation`,
+      { method: 'POST', ...(userId ? { body: { userId } } : {}) },
     );
     const href = whatsAppHref(invitation.ownerPhone, ownerInviteMessage(invitation));
     if (!href) throw new OwnerInviteNoNumber(invitation.ownerName);

@@ -1,4 +1,4 @@
-import { screen, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { axe } from 'vitest-axe';
@@ -62,6 +62,31 @@ describe('P19.23-T4 AC-1 the companies page', () => {
     expect(await within(prudential).findByText('2 perubahan belum diterbitkan')).toBeInTheDocument();
     expect(within(prudential).getByRole('link', { name: /Buka template/ })).toHaveAttribute('href', '/admin/companies/c1');
     expect(await within(await card('c2')).findByText('Template masih kosong')).toBeInTheDocument();
+  });
+
+  /*
+   * **P19.26-T5 AC-1, AC-2 (UI-213, UI-218 (21 Nov)).** On a phone no subtitle, and no *"Semua KPM memakai versi
+   * terbaru"* on a company with no KPM; at every size no *"Pembacaan file belum dinyalakan…"*, which Platform ›
+   * Pengaturan alone says (ADR-0283 §7). jsdom applies no media query: the phone is its classes.
+   */
+  it('P19.26-T5 AC-1 never says the AI reading is off here, at any size, and drops the subtitle on a phone', async () => {
+    atWidth(1024);
+    routes();
+    renderInIndonesian(<CompaniesPage />, { me: SUPER_ADMIN });
+    await screen.findAllByRole('article');
+    expect(await screen.findByRole('button', { name: /Unggah file/ })).toBeDisabled();
+    expect(screen.queryByText(/belum dinyalakan/)).toBeNull();
+    expect(screen.queryByText(/Anthropic/)).toBeNull();
+    const lead = document.querySelector('main p.text-muted, p.text-md.text-muted') as HTMLElement;
+    expect(lead).toHaveClass('max-md:hidden');
+  });
+
+  it('P19.26-T5 AC-2 hides Semua KPM memakai versi terbaru on a phone for a company with no KPM', async () => {
+    routes({ '/admin/companies/c2/publication?summary=true': { body: { companyId: 'c2', changes: 0, templateEmpty: false, kpms: 0 } } });
+    renderInIndonesian(<CompaniesPage />, { me: SUPER_ADMIN });
+    const allianz = await card('c2');
+    await waitFor(() => expect(allianz.querySelector('[data-template-line="current"]')).not.toBeNull());
+    expect(allianz.querySelector('[data-template-line="current"]')).toHaveClass('max-md:hidden');
   });
 
   it('P19.23-T4 AC-1 makes a company from the Default template, its slug from the name, and opens it', async () => {

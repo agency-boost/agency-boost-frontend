@@ -23,8 +23,18 @@ export interface KpmReportLink {
   kpmName: string;
   kpmCode: string;
   companyName: string;
+  /** The first owner (ADR-0285 §3), or the Owner named and waiting. */
   ownerName: string | null;
   ownerPhone: string | null;
+  /** **Every owner**, in order of `since` (P19.27-T5 AC-1): the pick-list, every one chosen by default. */
+  owners: KpmReportRecipient[];
+}
+
+/** One owner *Kirim ke owner* can send to: who, and the number WhatsApp opens to (`null`: none on file). */
+export interface KpmReportRecipient {
+  userId: string | null;
+  name: string;
+  phone: string | null;
 }
 
 /**
@@ -57,14 +67,20 @@ export const downloadKpmReport = async (kpmId: string, kpmName: string, month: s
 /** **`GET /kpm-report/shared/:token`** — the Owner (or a KPM Admin), signed in, opening the link. */
 export const fetchSharedKpmReport = (token: string) => apiBlob(`/kpm-report/shared/${encodeURIComponent(token)}`);
 
+/** **One owner's WhatsApp link** to the report (OD-359): their number, or nobody — WhatsApp then asks whom to send it to. */
+export function kpmReportHref(view: KpmReportLink, to: KpmReportRecipient): string {
+  const text = kpmReportMessage(view, to);
+  return whatsAppHref(to.phone, text) ?? `https://wa.me/?text=${encodeURIComponent(text)}`;
+}
+
 /**
  * **The words WhatsApp opens with**, to the Owner: their name, the KPM and its company, the month, the link and until when
  * — in the Owner's language (`INVITEE_LANGUAGE`), whatever language the Super Admin's screen is in.
  */
-export function kpmReportMessage(view: KpmReportLink): string {
+export function kpmReportMessage(view: KpmReportLink, to?: Pick<KpmReportRecipient, 'name'>): string {
   const say = messagesIn(kpmReportMessages, INVITEE_LANGUAGE);
   return say.message({
-    name: view.ownerName ?? say.ownerFallback,
+    name: to?.name ?? view.ownerName ?? say.ownerFallback,
     kpm: view.kpmName,
     company: view.companyName,
     month: `${formatMonthLong(view.month, INVITEE_LANGUAGE)} ${view.month.slice(0, 4)}`,
@@ -82,12 +98,29 @@ export class KpmReportBlocked extends Error {
 }
 
 /**
+ * **Whom the links go to**: every owner, or — a KPM with none yet — the Owner named and waiting, or nobody (WhatsApp then
+ * asks whom). Never empty, so a list drawn from it always has a link to tap.
+ */
+export function kpmReportRecipients(view: KpmReportLink): KpmReportRecipient[] {
+  const owners = view.owners ?? [];
+  return owners.length > 0 ? owners : [{ userId: null, name: view.ownerName ?? '', phone: view.ownerPhone }];
+}
+
+/**
  * ***Kirim ke owner***: AgencyBoost sends nothing (OD-359). A window opens **inside the click** — a browser only lets a
  * page open one while the press is handled, and the link is not known yet — then the link is asked for and the window
  * pointed at WhatsApp: to the Owner's number when one is on file, or to nobody, so WhatsApp asks whom to send it to. On a
  * failure the window is closed again and the error rethrown. Answers the link's view, so the caller can name the Owner.
+ *
+ * *Changed 2026-11-22 (the integration round's walk; OD-455):* **the window is opened only when exactly one link will open
+ * in it** — `openNow`, which the caller passes when it knows the KPM has one owner, or none. With several, or not known,
+ * nothing opens in the press: the dialog lists each owner's own link to tap, where a window opened first was a blank tab
+ * that opened and shut again.
  */
-export const sendKpmReportToOwner = async (kpmId: string, month: string): Promise<KpmReportLink> => {
+export const sendKpmReportToOwner = async (kpmId: string, month: string, openNow = true): Promise<KpmReportLink> => {
+  if (!openNow) {
+    return api<KpmReportLink>(`/admin/tenants/${encodeURIComponent(kpmId)}/report/link`, { method: 'POST', body: { month } });
+  }
   const opened = window.open('about:blank', '_blank');
   if (!opened) throw new KpmReportBlocked();
   // The new window never reaches back into this one.
@@ -95,6 +128,14 @@ export const sendKpmReportToOwner = async (kpmId: string, month: string): Promis
   try {
     // **`POST /admin/tenants/:id/report/link`**: a fresh link for the KPM's Owner.
     const view = await api<KpmReportLink>(`/admin/tenants/${encodeURIComponent(kpmId)}/report/link`, { method: 'POST', body: { month } });
+    /*
+     * **Several owners** (P19.27-T5 AC-1; ADR-0285 §5; OD-455): the window goes, and the dialog lists every owner, each
+     * chosen, each with their own WhatsApp link — a browser opens one window per tap, so one press cannot open several.
+     */
+    if ((view.owners ?? []).length > 1) {
+      opened.close();
+      return view;
+    }
     const text = kpmReportMessage(view);
     opened.location.href = whatsAppHref(view.ownerPhone, text) ?? `https://wa.me/?text=${encodeURIComponent(text)}`;
     return view;

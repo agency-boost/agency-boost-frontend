@@ -4,18 +4,21 @@ import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { use, useCallback, useEffect, useState } from 'react';
 import { KpmReportSlot } from '@/components/admin/kpm-report-slot';
+import { KpmMembersCard } from '@/components/admin/kpm-members-card';
+import { KpmOwnerAdminSection } from '@/components/admin/kpm-owner-admin-section';
+import { KpmPhoneHeader } from '@/components/admin/kpm-phone-header';
 import { InsideKpmBar, KpmSwitcher } from '@/components/admin/kpm-switcher';
-import { MemberName } from '@/components/admin/member-name';
-import { OwnerWhatsAppInviteButton } from '@/components/admin/owner-whatsapp-invite';
 import { ViewAsCards } from '@/components/admin/view-as-cards';
 import { Page } from '@/components/page';
 import { Button, ErrorBanner } from '@/components/ui/field';
+import { LineIcon } from '@/components/ui/line-icon';
 import { NavIcon, type NavIconName } from '@/components/ui/nav-icon';
+import { REMOVED_ON_PHONE } from '@/components/ui/phone';
 import { SkeletonCards } from '@/components/ui/skeleton';
 import { useToast } from '@/components/ui/toast';
 import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
 import { adminConsoleMessages, type AdminConsoleWords } from '@/i18n/messages/admin-console';
-import { readKpmPeople, type ConsoleKpmPeople, type ConsolePerson } from '@/lib/admin-console';
+import { readKpmPeople, type ConsoleKpmPeople } from '@/lib/admin-console';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
 import { formatMonthLong, formatNumber, formatRupiahCompact } from '@/lib/format';
@@ -23,6 +26,7 @@ import { readOverviewPerformance, type OverviewPerformanceView } from '@/lib/kpm
 import { useCan } from '@/lib/session';
 import { enterKpm } from '@/lib/super-admin-kpm';
 import { savedTemplateSentence } from '@/lib/templates';
+import { usePhone } from '@/lib/use-phone';
 
 /** *Simpan sebagai template*'s dialog, loaded the first time it opens. */
 const SaveAsTemplateDialog = dynamic(
@@ -55,9 +59,15 @@ const OWNER_PAGES: readonly { key: keyof Words['pages']; href: string; icon: Nav
  *   semua akses owner · tercatat di audit log"*.
  * - **The numbers** (navy tiles, orange numbers): *Anggota*, and the month's *Active Agent*, *Rekrut* and *APE* against
  *   their targets — the KPM Overview's own *Performa vs target* (`GET /kpm/overview/performance`), read as the Owner.
- * - ***Owner & admin*** (*KPM Owner*, *Admin*, *Core leader* with *Ganti* / *Atur*; *+ Tambah admin*) and ***Anggota***
+ * - ***Owner & admin*** (`KpmOwnerAdminSection`: *KPM Owner · n* with *＋ Tambah owner*, *Admin*, *Core leader*; P19.27,
+ *   ADR-0285) and ***Anggota***
  *   (the first five, *Import people*, *Lihat semua*) — the KPM's people (`GET /admin/tenants/:id/people`).
  * - **The eight owner pages**, and ***Lihat sebagai***.
+ *
+ * *Changed 2026-11-22 (P19.29-T1, T4; UI-200, UI-211, UI-213 (21 Nov); ADR-0287):* **below 768px only** — the title is the
+ * switcher, with one 44px row of the pill, *PDF* and ⋯ (`KpmPhoneHeader`), *Simpan sebagai template* in ⋯; the navy card
+ * names the month alone; the owner pages are 44px rows; *Lihat sebagai* is one card; the two notes are not drawn. From
+ * 768px the page is as it was.
  */
 export default function KpmPage({ params }: { params: Promise<{ kpmId: string }> }) {
   const { kpmId } = use(params);
@@ -65,6 +75,9 @@ export default function KpmPage({ params }: { params: Promise<{ kpmId: string }>
   const [people, setPeople] = useState<ConsoleKpmPeople | null>(null);
   const [performance, setPerformance] = useState<OverviewPerformanceView | null | 'unread'>(null);
   const [error, setError] = useState<ApiError | null>(null);
+  const phone = usePhone();
+  const canTemplate = useCan('company_template:write');
+  const [savingTemplate, setSavingTemplate] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -105,54 +118,105 @@ export default function KpmPage({ params }: { params: Promise<{ kpmId: string }>
 
   const kpm = people.kpm;
   const current = { kpmId, name: kpm.name, companyName: kpm.companyName };
+  const report = { kpmId, name: kpm.name, code: kpm.code, companyName: kpm.companyName, owners: people.owners.owners.length };
   return (
     <Page
-      title={kpm.name}
-      actions={(
+      // P19.29-T1 (UI-200 (21 Nov)): on a phone the title row is `KpmPhoneHeader`'s, whose title is the switcher.
+      title={phone ? undefined : kpm.name}
+      actions={phone ? undefined : (
         <div className="flex items-center gap-2">
-          <KpmReportSlot kpm={{ kpmId, name: kpm.name, code: kpm.code, companyName: kpm.companyName }} placement="header" />
+          <KpmReportSlot kpm={report} placement="header" />
           <KpmSwitcher current={current} className="w-80" />
         </div>
       )}
     >
+      {phone && (
+        <KpmPhoneHeader
+          kpm={report}
+          menu={canTemplate ? [{ label: t.saveAsTemplate, onSelect: () => setSavingTemplate(true) }] : []}
+        />
+      )}
       <div className="flex flex-col gap-5" data-kpm-page={kpmId}>
-        <div className="flex flex-col gap-2">
-          <KpmSwitcher current={current} className="lg:hidden" />
-          <InsideKpmBar />
+        {!phone && (
+          <div className="flex flex-col gap-2">
+            <KpmSwitcher current={current} className="lg:hidden" />
+            <InsideKpmBar />
+          </div>
+        )}
+        <Tiles people={people} performance={performance} t={t} phone={phone} />
+        {/*
+          * `grid-cols-1`, one `minmax(0, 1fr)` column, where the implicit column was `auto`: an auto track grows to its
+          * widest card's min-content, and an owner's unbroken *"Owner sejak … · Belum diundang"* made every card 379px
+          * at 360 — the page scrolled sideways (the integration round's walk, 2026-11-22). The cards' contents truncate
+          * within the column now. Two columns from 1024px as before.
+          */}
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2" data-kpm-people-grid="">
+          <KpmOwnerAdminSection people={people} onChanged={load} />
+          <KpmMembersCard people={people} onChanged={load} />
         </div>
-        <Tiles people={people} performance={performance} t={t} />
-        <div className="grid gap-4 lg:grid-cols-2">
-          <OwnersCard people={people} t={t} onChanged={load} />
-          <MembersCard people={people} t={t} />
-        </div>
-        <section aria-labelledby="owner-pages-heading">
-          <h2 id="owner-pages-heading" className="mb-2 text-md font-bold text-navy">{t.ownerPages}</h2>
-          <ul className="grid grid-cols-2 gap-3 lg:grid-cols-4" data-owner-pages="">
-            {OWNER_PAGES.map((page) => (
-              <li key={page.key}>
-                <Link href={page.href} className="flex min-h-16 items-center gap-3 rounded-xl bg-card px-3.5 py-3 hover:bg-hover-row">
-                  <span aria-hidden="true" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-pill-grey text-secondary-ink">
-                    <NavIcon name={page.icon} className="h-5 w-5" />
-                  </span>
-                  <b className="min-w-0 text-md leading-snug text-navy">{t.pages[page.key]}</b>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </section>
+        {phone ? (
+          /*
+           * P19.29-T4 AC-2 (UI-211 (21 Nov); the stop motion's *Halaman owner*, section D frames 4 and 12): one card of
+           * 44px rows — the icon in its 32px square, the page's name, › — where two columns of tiles wrapped to three lines.
+           */
+          <section aria-labelledby="owner-pages-heading" className="rounded-xl bg-card px-3.5 pb-1 pt-2.5">
+            <h2 id="owner-pages-heading" className="mb-1 text-row font-bold text-navy">{t.ownerPagesShort}</h2>
+            <ul data-owner-pages="" data-owner-page-rows="">
+              {OWNER_PAGES.map((page) => (
+                <li key={page.key} className="border-b border-divider last:border-b-0">
+                  <Link href={page.href} className="flex min-h-11 items-center gap-2.5 py-1">
+                    <span aria-hidden="true" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-pill-grey text-navy">
+                      <NavIcon name={page.icon} className="h-[18px] w-[18px]" />
+                    </span>
+                    <span className="min-w-0 flex-1 truncate text-row font-semibold text-navy">{t.pages[page.key]}</span>
+                    <LineIcon name="chevronRight" className="h-[18px] w-[18px] text-muted" />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : (
+          <section aria-labelledby="owner-pages-heading">
+            <h2 id="owner-pages-heading" className="mb-2 text-md font-bold text-navy">{t.ownerPages}</h2>
+            <ul className="grid grid-cols-2 gap-3 lg:grid-cols-4" data-owner-pages="">
+              {OWNER_PAGES.map((page) => (
+                <li key={page.key}>
+                  <Link href={page.href} className="flex min-h-16 items-center gap-3 rounded-xl bg-card px-3.5 py-3 hover:bg-hover-row">
+                    <span aria-hidden="true" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-pill-grey text-secondary-ink">
+                      <NavIcon name={page.icon} className="h-5 w-5" />
+                    </span>
+                    <b className="min-w-0 text-md leading-snug text-navy">{t.pages[page.key]}</b>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
         <ViewAsCards people={people.viewAs} kpmName={kpm.name} />
-        <ul className="flex flex-col gap-1 text-sm text-muted md:flex-row md:gap-x-5">
+        {/* P19.29-T4 AC-3 (UI-213 (21 Nov)): neither note is drawn on a phone; from 768px both read as before. */}
+        <ul className={cn('flex flex-col gap-1 text-sm text-muted md:flex-row md:gap-x-5', REMOVED_ON_PHONE)} data-kpm-notes="">
           <li>{t.notes.tap}</li>
           <li>{t.notes.change}</li>
         </ul>
-        <SaveAsTemplate kpm={{ _id: kpmId, code: kpm.code, companyId: kpm.companyId, companyName: kpm.companyName }} t={t} />
+        <SaveAsTemplate
+          kpm={{ _id: kpmId, code: kpm.code, companyId: kpm.companyId, companyName: kpm.companyName }}
+          t={t}
+          open={savingTemplate}
+          onOpen={() => setSavingTemplate(true)}
+          onClose={() => setSavingTemplate(false)}
+          button={!phone}
+        />
       </div>
     </Page>
   );
 }
 
 /** The navy tiles: *Anggota*, *Active Agent*, *Rekrut*, *APE bulan ini* — the last three the Overview's month. */
-function Tiles({ people, performance, t }: { people: ConsoleKpmPeople; performance: OverviewPerformanceView | null | 'unread'; t: Words }) {
+function Tiles({ people, performance, t, phone = false }: {
+  people: ConsoleKpmPeople; performance: OverviewPerformanceView | null | 'unread'; t: Words;
+  /** P19.29-T1 AC-3 (UI-200 (21 Nov)): on a phone the card's header is the month alone — the KPM is named in the title. */
+  phone?: boolean;
+}) {
   const fig = useFigureLanguage();
   const n = (v: number) => formatNumber(v, {}, fig);
   const view = performance && performance !== 'unread' ? performance : null;
@@ -160,7 +224,7 @@ function Tiles({ people, performance, t }: { people: ConsoleKpmPeople; performan
   const month = view ? `${formatMonthLong(view.month, fig)} ${view.month.slice(0, 4)}` : '';
   const dash = '–';
   const targetLine = (target: number | null | undefined) => (target ? t.tiles.ofTarget({ t: n(target) }) : t.tiles.noTarget);
-  const tiles: [string, string, string][] = [
+  const tiles: [string, React.ReactNode, string][] = [
     [t.tiles.members, n(people.members.total), `${n(people.members.leaders)} leader · ${n(people.members.agents)} agent`],
     [
       t.tiles.activeAgent,
@@ -170,19 +234,20 @@ function Tiles({ people, performance, t }: { people: ConsoleKpmPeople; performan
     [t.tiles.rekrut, actual ? n(actual.rekrut) : dash, targetLine(view?.total.rekrutTarget)],
     [
       t.tiles.ape,
-      actual?.apeMinor == null ? dash : formatRupiahCompact(actual.apeMinor, {}, fig),
+      actual?.apeMinor == null ? dash : <MoneyFigure text={formatRupiahCompact(actual.apeMinor, {}, fig)} />,
       view && !view.held ? t.tiles.notUploaded : actual?.apePct == null ? t.tiles.noTarget : t.tiles.pctOfTarget({ p: n(actual.apePct) }),
     ],
   ];
   return (
     <section aria-label={people.kpm.name} className="rounded-[20px] bg-secondary p-4 text-secondary-contrast" data-kpm-tiles="">
-      <p className="text-sm font-bold">{[people.kpm.name, people.kpm.companyName, month].filter(Boolean).join(' · ')}</p>
+      <p className="text-sm font-bold">{phone ? month : [people.kpm.name, people.kpm.companyName, month].filter(Boolean).join(' · ')}</p>
       <dl className="mt-3 grid grid-cols-2 gap-2 lg:grid-cols-4">
         {tiles.map(([label, value, sub]) => (
           <div key={label} className="min-w-0 rounded-xl bg-secondary-contrast/[0.08] px-3 py-2">
             <dt className="text-sm font-semibold">{label}</dt>
             <dd>
-              <b className="block text-[1.625rem] font-extrabold leading-tight text-primary">{performance === null && label !== t.tiles.members ? '…' : value}</b>
+              {/* P19.29-T1 (the phone type scale's *Big numbers 24/800*; stop motion D frame 2's light orange): below 768px. */}
+              <b className="block text-[1.625rem] font-extrabold leading-tight text-primary max-md:whitespace-nowrap max-md:text-figure max-md:text-on-navy-orange">{performance === null && label !== t.tiles.members ? '…' : value}</b>
               <span className="block truncate text-xs text-secondary-contrast/75">{sub}</span>
             </dd>
           </div>
@@ -192,120 +257,60 @@ function Tiles({ people, performance, t }: { people: ConsoleKpmPeople; performan
   );
 }
 
-const asRole = (p: ConsolePerson) => ({ code: p.class.toUpperCase(), label: p.class.toUpperCase(), class: p.class });
-
-/** ***Owner & admin*** (AC-4, AC-6): the Owner, the Admins and the core leaders, with *Ganti* / *Atur* and *+ Tambah admin*. */
-function OwnersCard({ people, t, onChanged }: { people: ConsoleKpmPeople; t: Words; onChanged: () => void }) {
-  const kpmId = people.kpm.kpmId;
-  const owner = people.owner;
-  const uninvited = owner.state === 'none' || owner.state === 'not_invited';
-  const names = (list: ConsolePerson[]) => (list.length === 0
-    ? <span className="text-sm text-muted">{t.noneYet}</span>
-    : list.map((p) => <MemberName key={p.membershipId} name={p.fullName} role={asRole(p)} className="flex" />));
-  const row = (role: string, who: React.ReactNode, action: { href: string; label: string }) => (
-    <div className="grid grid-cols-[6.5rem_minmax(0,1fr)_auto] items-start gap-2 border-b border-divider py-2.5 last:border-b-0">
-      <span className="text-sm text-muted">{role}</span>
-      <span className="flex min-w-0 flex-col gap-1 text-sm">{who}</span>
-      <Link href={action.href} className="inline-flex min-h-10 items-center text-sm font-bold text-primary-ink">{action.label}</Link>
-    </div>
-  );
+/**
+ * **A compact rupiah figure on one line on a phone** (the integration round's walk, 2026-11-22: BSD's *Rp 647,3 Jt* on two
+ * lines at 375). The digits keep the phone scale's *Big numbers 24/800*; below 768px the currency mark and the unit are
+ * 15px (`text-row`), so *Rp 888,8 Jt* — the widest a compact sum is — takes about 108px of a 360px tile's 120. From
+ * 768px every part is the figure's own size, as before. A figure the pattern does not read is drawn whole.
+ */
+function MoneyFigure({ text }: { text: string }) {
+  const parts = /^(-?)(\D+?)\s([\d.,]+)(\s?)(\D*)$/.exec(text);
+  if (!parts) return <>{text}</>;
+  const [, sign, mark, figure, gap, unit] = parts;
   return (
-    <section aria-labelledby="owners-heading" className="rounded-xl bg-card p-4" data-owners-card="">
-      <div className="mb-1 flex items-center justify-between gap-2">
-        <h2 id="owners-heading" className="text-md font-bold text-navy">{t.owners}</h2>
-        <Link href="/people/admins" className="inline-flex h-10 items-center gap-1.5 rounded-pill border border-hairline px-3.5 text-sm font-semibold text-navy">
-          <NavIcon name="ti-plus" className="h-4 w-4" />
-          {t.addAdmin}
-        </Link>
-      </div>
-      {row(
-        t.ownerRole,
-        owner.person ? (
-          <>
-            <MemberName name={owner.person.fullName} role={asRole(owner.person)} className="flex" />
-            {uninvited && <OwnerWhatsAppInviteButton kpmId={kpmId} ownerName={owner.person.fullName} variant="outline" onSent={onChanged} />}
-          </>
-        ) : owner.pendingName ? (
-          <>
-            <span className="font-bold uppercase text-ink">{t.pendingOwner({ name: owner.pendingName })}</span>
-            {uninvited && <OwnerWhatsAppInviteButton kpmId={kpmId} ownerName={owner.pendingName} variant="outline" onSent={onChanged} />}
-          </>
-        ) : <span className="text-sm text-muted">{t.noneYet}</span>,
-        { href: `/admin/tenants/${kpmId}/owner`, label: t.change },
-      )}
-      {row(t.adminRole, names(people.admins), { href: '/people/admins', label: t.change })}
-      {row(t.coreRole, names(people.coreLeaders), { href: '/people/admins', label: t.manage })}
-    </section>
-  );
-}
-
-/** ***Anggota · n*** (AC-4): the first five, their group and when they last used the app; *Import people*, *Lihat semua*. */
-function MembersCard({ people, t }: { people: ConsoleKpmPeople; t: Words }) {
-  const fig = useFigureLanguage();
-  const used = (p: ConsoleKpmPeople['members']['first'][number]) => {
-    const text = p.lastUsedDays === null ? t.never : p.lastUsedDays === 0 ? t.today : t.daysAgo({ n: formatNumber(p.lastUsedDays, {}, fig) });
-    return (
-      <span className={cn('shrink-0 rounded-pill px-2 py-0.5 text-xs font-bold', p.lastUsedStatus === 'recent' ? 'bg-pill-green text-pill-green-ink' : 'bg-pill-red text-pill-red-ink')}>
-        {text}
-      </span>
-    );
-  };
-  return (
-    <section aria-labelledby="members-heading" className="rounded-xl bg-card p-4" data-members-card="">
-      <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
-        <h2 id="members-heading" className="text-md font-bold text-navy">{t.membersCard({ n: formatNumber(people.members.total, {}, fig) })}</h2>
-        <span className="flex items-center gap-3">
-          <Link href="/people/import" className="inline-flex h-10 items-center gap-1.5 rounded-pill border border-hairline px-3.5 text-sm font-semibold text-navy">
-            <NavIcon name="ti-file-import" className="h-4 w-4" />
-            {t.importPeople}
-          </Link>
-          <Link href="/people/members" className="inline-flex min-h-10 items-center gap-1 text-sm font-bold text-primary-ink">
-            {t.seeAll}
-            <NavIcon name="ti-arrow-right" className="h-4 w-4" />
-          </Link>
-        </span>
-      </div>
-      {people.members.first.length === 0 ? (
-        <p className="py-2 text-sm text-muted">{t.noMembers}</p>
-      ) : (
-        <ul>
-          {people.members.first.map((p) => (
-            <li key={p.membershipId} className="flex items-center gap-2 border-b border-divider py-2 text-sm last:border-b-0">
-              <MemberName name={p.fullName} role={asRole(p)} className="min-w-0 flex-1" />
-              <span className="hidden min-w-0 truncate text-xs text-muted sm:block">{p.groupName ?? t.noGroup}</span>
-              {used(p)}
-            </li>
-          ))}
-        </ul>
-      )}
-    </section>
+    <>
+      <span className="max-md:text-row">{`${sign}${mark} `}</span>
+      {figure}
+      {unit && <span className="max-md:text-row">{`${gap}${unit}`}</span>}
+    </>
   );
 }
 
 /**
  * ***Simpan sebagai template*** (P13.2-T7, ADR-0115 §5 — kept from the KPM page it was on; parity I-1183): this KPM's
  * published settings as one of its company's templates. The Super Admin's alone (`company_template:write`).
+ *
+ * *Changed 2026-11-22 (P19.29-T1 AC-2; UI-200, UI-211 (21 Nov)):* the dialog is opened by the page — from this button at
+ * the foot from 768px (`button`), from the phone header's ⋯ below it.
  */
-function SaveAsTemplate({ kpm, t }: { kpm: { _id: string; code: string; companyId: string; companyName: string }; t: Words }) {
+function SaveAsTemplate({ kpm, t, open, onOpen, onClose, button }: {
+  kpm: { _id: string; code: string; companyId: string; companyName: string }; t: Words;
+  open: boolean; onOpen: () => void; onClose: () => void;
+  /** The inline button at the page's foot: from 768px; on a phone the header's ⋯ holds it. */
+  button: boolean;
+}) {
   const can = useCan('company_template:write');
   const language = useLanguage();
   const { show } = useToast();
-  const [open, setOpen] = useState(false);
   if (!can) return null;
   return (
-    <div className="flex justify-end">
-      <Button variant="inline" onClick={() => setOpen(true)}>{t.saveAsTemplate}</Button>
+    <>
+      {button && (
+        <div className="flex justify-end">
+          <Button variant="inline" onClick={onOpen}>{t.saveAsTemplate}</Button>
+        </div>
+      )}
       {open && (
         <SaveAsTemplateDialog
           open
           kpm={kpm}
-          onClose={() => setOpen(false)}
+          onClose={onClose}
           onSaved={(template, company) => {
-            setOpen(false);
+            onClose();
             show(savedTemplateSentence(template, company?.name ?? kpm.companyName, language));
           }}
         />
       )}
-    </div>
+    </>
   );
 }

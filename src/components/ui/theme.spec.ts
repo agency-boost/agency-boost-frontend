@@ -369,7 +369,12 @@ describe('on a phone', () => {
     // The scale's steps are raised in one place; an arbitrary `text-[10px]` would escape it. A glyph may
     // stay smaller (AC-10) — each such one is named here, with what it is.
     // *Changed 2026-10-30 (UI V1, Phase 18.11 T4):* the roster's ▸ disclosure went with its ⌄ (UI-011); none is left.
-    const GLYPHS: Record<string, string> = {};
+    const GLYPHS: Record<string, string> = {
+      // *Added 2026-11-22 (P19.29-T3; UI-202 (21 Nov), ADR-0287 §4, OD-470):* not a glyph — the one text a later client
+      // decision sets under 12px: the brief's phone type scale, *Bottom tab labels 11/400*, for the Super Admin's bar
+      // inside a KPM alone, below 768px alone (`EVEN_TAB_PHONE`). Every other bar keeps UI-008's 12px.
+      'components/field-nav.tsx text-[0.6875rem]': 'the inside-KPM bar’s tab labels, 11/400 (UI-202)',
+    };
     const src = join(__dirname, '../..');
     const found: string[] = [];
     const seen = new Set<string>();

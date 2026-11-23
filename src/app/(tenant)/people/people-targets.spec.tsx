@@ -152,7 +152,7 @@ describe('P19.20 no target under 44px on /people/* at 375 and 768 (UI-142)', () 
     atWidth(px);
     stubFetch({
       '/members/admins': { body: [{ membershipId: 'mem-maya', fullName: 'Maya Halim', initials: 'MH', agentCode: '80004', role: 'ab', grantedAt: null, grantedByName: null, canRevoke: true, photoUrl: null }] },
-      '/people/stewards': { body: { owner: null, admins: 1, coreLeaders: 0 } },
+      '/people/stewards': { body: { owner: null, owners: [], canManageOwners: false, admins: 1, coreLeaders: 0 } },
     });
     inShell(<AdminsPage />);
     await screen.findByText('Maya Halim');

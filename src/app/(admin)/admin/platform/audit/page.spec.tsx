@@ -144,6 +144,51 @@ describe('Platform › Audit log (P19.23-T6 AC-1)', () => {
     expect(await screen.findByText(/q must be at most 100 characters/)).toBeInTheDocument();
   });
 
+  /*
+   * **P19.26-T3 (UI-217 (21 Nov); ADR-0284 §3).** Changes only by default, at every width: the looks wait behind
+   * *Termasuk dilihat*, which the server filters. On a phone the search and one *Filter* button, whose sheet holds the
+   * five filters and the chip; the note goes. jsdom applies no media query, so the phone is asserted by its classes.
+   */
+  it('P19.26-T3 AC-1 asks for changes only by default, and the looks too once Termasuk dilihat is on', async () => {
+    const { calls } = show(page([TARGET]));
+    await screen.findByRole('list', { name: 'Audit entries, newest first' });
+    expect(auditCalls(calls)[0]).not.toContain('includeViewed');
+
+    const chip = screen.getByRole('button', { name: 'Including views' });
+    expect(chip).toHaveAttribute('aria-pressed', 'false');
+    await userEvent.click(chip);
+    expect(chip).toHaveAttribute('aria-pressed', 'true');
+    await vi.waitFor(() => expect(auditCalls(calls).at(-1)).toContain('includeViewed=true'));
+    await userEvent.click(chip);
+    await vi.waitFor(() => expect(auditCalls(calls).at(-1)).not.toContain('includeViewed'));
+  });
+
+  it('P19.26-T3 AC-2 AC-3 on a phone: the search and one Filter button, whose sheet holds the five filters; no note', async () => {
+    const { calls } = show(page([TARGET]));
+    await screen.findByRole('list', { name: 'Audit entries, newest first' });
+    // The row of five is the tablet's and the laptop's; the button the phone's.
+    const row = screen.getByRole('button', { name: 'Company: All companies' }).parentElement!;
+    expect(row).toHaveClass('max-md:hidden');
+    const button = screen.getByRole('button', { name: 'Filter' });
+    expect(button).toHaveClass('md:hidden', 'min-h-11');
+    expect(screen.getByText('Every Super Admin change: who, when, before → after')).toHaveClass('max-md:hidden');
+
+    await userEvent.click(button);
+    const sheet = within(screen.getByRole('dialog', { name: 'Filter' }));
+    for (const name of ['Company: All companies', 'KPM: Every KPM', 'Action: All actions', 'Actor: Everyone', /^Date/]) {
+      expect(sheet.getByRole('button', { name })).toBeInTheDocument();
+    }
+    // Off, the chip wears the app's chips' hairline on a phone — white on the white sheet it read as no control (the walk
+    // of 2026-11-22); on, the fill's own edge.
+    expect(sheet.getByRole('button', { name: 'Including views' })).toHaveClass('max-md:border', 'max-md:border-hairline');
+    await userEvent.click(sheet.getByRole('button', { name: 'Including views' }));
+    expect(sheet.getByRole('button', { name: 'Including views' })).toHaveClass('max-md:border-secondary');
+    await vi.waitFor(() => expect(auditCalls(calls).at(-1)).toContain('includeViewed=true'));
+    await userEvent.click(sheet.getByRole('button', { name: 'Done' }));
+    // What is on is counted in the button's name.
+    expect(screen.getByRole('button', { name: 'Filter, 1 on' })).toBeInTheDocument();
+  });
+
   it('refuses a reader without audit_log:read', async () => {
     stubFetch({ '/admin/audit': page([]), '/admin/tenants': TENANTS, '/admin/companies': COMPANIES });
     await act(async () => {
